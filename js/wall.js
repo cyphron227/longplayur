@@ -16,7 +16,9 @@ import { mountDomeGallery } from './dome-gallery.bundle.js';
  * @param {HTMLElement} viewportEl the clipping viewport
  * @param {HTMLElement} containerEl the element the DomeGallery mounts into
  * @param {Array} pool album pool entries
- * @param {{onSelect: (entry: object) => void, onZoomOut?: () => void}} handlers
+ * @param {{onSelect: (entry: object) => void, onZoomOut?: () => void,
+ *   onGalleryDragMove?: () => void, onLongPress?: (entry: object) => void,
+ *   onLongPressEnd?: () => void}} handlers
  */
 export function initWall(viewportEl, containerEl, pool, handlers) {
   const byId = new Map();
@@ -25,6 +27,8 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
   let currentId = null;
   const playedIds = new Set();
 
+  const bySrc = new Map(pool.filter((entry) => entry.image).map((entry) => [entry.image, entry]));
+
   const images = pool
     .filter((entry) => entry.image)
     .map((entry) => ({ src: entry.image, alt: `${entry.name} by ${entry.artist}` }));
@@ -32,12 +36,18 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
   const mount = mountDomeGallery(containerEl, {
     images,
     onImageClick: (src) => {
-      const entry = pool.find((e) => e.image === src);
+      const entry = bySrc.get(src);
       if (!entry) return;
       const tiles = getTileEls(entry.image);
       if (tiles.some((el) => el.classList.contains('is-spent') || el.classList.contains('is-unavailable'))) return;
       handlers.onSelect?.(entry);
-    }
+    },
+    onDragMove: () => handlers.onGalleryDragMove?.(),
+    onLongPress: (src) => {
+      const entry = bySrc.get(src);
+      if (entry) handlers.onLongPress?.(entry);
+    },
+    onLongPressEnd: () => handlers.onLongPressEnd?.()
   });
 
   /** All rendered tile elements for a given image src (the dome repeats images to fill its slots). */
@@ -106,13 +116,29 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     }
   }
 
-  function enterRestingState(albumId) {
+  /**
+   * @param {string} albumId
+   * @param {{keepHidden?: boolean}} [opts] keepHidden: leave albumId's own
+   *   tile as is-overlaid (opacity 0) instead of revealing it. Used while
+   *   the ceremony's enlarged cover is standing in for it on screen, so the
+   *   real tile does not flash into view somewhere else on the wall at the
+   *   same time; see revealTile() for the matching handoff.
+   */
+  function enterRestingState(albumId, { keepHidden = false } = {}) {
     for (const entry of byId.values()) {
+      if (keepHidden && entry.id === albumId) continue;
       getTileEls(entry.image).forEach((el) => {
         el.classList.remove('is-receded', 'is-overlaid', 'is-woken');
         if (entry.id !== albumId) el.classList.add('is-resting');
       });
     }
+  }
+
+  /** Reveals a tile previously kept hidden via enterRestingState's keepHidden. */
+  function revealTile(albumId) {
+    const entry = byId.get(albumId);
+    if (!entry) return;
+    getTileEls(entry.image).forEach((el) => el.classList.remove('is-overlaid'));
   }
 
   function clearResting() {
@@ -214,6 +240,7 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     markUnavailable,
     recedeAllExcept,
     enterRestingState,
+    revealTile,
     clearResting,
     getNeighbors,
     getCellRect,

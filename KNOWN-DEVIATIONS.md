@@ -5,6 +5,46 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## "Side" renamed to "Session"; the needle-drop cover now stays expanded
+
+Per explicit request: every user-facing occurrence of "side"/"Side" is now
+"session"/"Session" (wall prompts, record bag, share card, confirm
+dialogs, README). The stored journal data (`lp_journal` in localStorage,
+`js/journal.js`) deliberately keeps its old field/function names (`side`,
+`sides`, `startNewSide()`, etc.) unchanged, so nobody's already-saved
+journal breaks; only what renders to the screen changed.
+
+Also per explicit request, the needle-drop ceremony's enlarged cover no
+longer auto-shrinks back into its cell once the held breath ends. It now
+stays large on screen as the "now playing" hero until one of two things
+happens: the gallery is dragged, or the album finishes. Both are handled
+by `settleActiveOverlay()` in `js/ceremony.js`, which eases the cover back
+into its actual cell and hands its disc off to a persistent per-cell disc
+at the same progress (no jump). Starting a *different* needle drop while
+one is still expanded still fully retires the old one immediately (as
+before this change), rather than settling it, since two hero covers on
+screen at once would not make sense.
+
+Detecting "the gallery was dragged" needed a further small addition to the
+DomeGallery fork (`gallery/src/DomeGallery.tsx`): an `onDragMove` prop
+firing once a gesture actually crosses the movement threshold that
+distinguishes a drag from a tap (not on every pointer-down, which would
+also fire for plain taps). A long-press feature was added the same way
+(`onLongPress`/`onLongPressEnd`/`longPressMs` props): holding a tile shows
+a quick, lightweight preview of its cover, name, and artist via
+`showLongPressPreview()`/`hideLongPressPreview()` in `js/ceremony.js` (no
+disc, no crackle, no camera pan, no dimming the rest of the wall, unlike
+the full ceremony) -- distinct from the "now playing" hero cover, and the
+two can coexist on screen if you long-press something else while a
+session is playing. The component's own file header now documents seven
+deliberate changes from the upstream source in total.
+
+The now-removed zoom-out/"fullscreen" button also took its atEdge runout
+copy with it ("Zoom out and pick from the shelf" became "Pick from the
+shelf"): `wallApi.zoomToFitAll()` still exists and still fires
+automatically from `runoutGroove()`'s atEdge case, but there is no longer
+a manual trigger for it in the UI.
+
 ## The Wall is now the real react-bits DomeGallery, not the flat spiral grid in DESIGN-SPEC §2
 
 Superseded by explicit direction from Yaron after initial ship, in two

@@ -7,7 +7,10 @@ import { getAlbumPool, getCachedPool, isPoolFresh, buildAlbumPool, SparseHistory
 import { announce, show, hide, escapeHtml, formatDuration, formatDeadwaxDate } from './ui.js';
 import { initWall } from './wall.js';
 import * as playback from './playback.js';
-import { needleDrop, runoutGroove, runoutPrompt, updateTonearmProgress, retireDisc, isCrackleEnabled, toggleCrackle } from './ceremony.js';
+import {
+  needleDrop, runoutGroove, runoutPrompt, updateTonearmProgress, retireDisc,
+  isCrackleEnabled, toggleCrackle, settleActiveOverlay, showLongPressPreview, hideLongPressPreview
+} from './ceremony.js';
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './ending.js';
 import * as journal from './journal.js';
 import * as exporter from './exporter.js';
@@ -177,7 +180,6 @@ function describeSpotifyError(err) {
 const wallViewport = document.getElementById('wall-viewport');
 const wallContainer = document.getElementById('wall-container');
 const wallPrompt = document.getElementById('wall-prompt');
-const btnZoomOut = document.getElementById('btn-zoom-out');
 
 const playerBar = document.getElementById('player-bar');
 const playerArt = document.getElementById('player-art');
@@ -214,6 +216,13 @@ function renderWallDom(pool) {
   wallApi = initWall(wallViewport, wallContainer, pool, {
     onSelect: (entry) => handleNeedleDrop(entry),
     onZoomOut: () => renderJourneyThread(),
+    // Dragging the gallery is one of the two conditions that ends the "now
+    // playing" hero cover (the other is the album finishing, in
+    // handleRunout); settle it back into its cell so the gallery is free
+    // to explore.
+    onGalleryDragMove: () => settleActiveOverlay(wallApi, { animate: true }),
+    onLongPress: (entry) => showLongPressPreview(entry, { wallApi, wallViewportEl: wallViewport }),
+    onLongPressEnd: () => hideLongPressPreview(),
   });
   const everDropped = localStorage.getItem(LS_EVER_DROPPED) === 'true';
   wallPrompt.textContent = everDropped
@@ -245,7 +254,7 @@ async function handleNeedleDrop(entry) {
     localStorage.setItem(LS_EVER_DROPPED, 'true');
     const { side, sideOrdinal } = journal.recordNeedleDrop(entry);
     currentSideId = side.id;
-    wallPrompt.textContent = `Side ${sideOrdinal} · now playing`;
+    wallPrompt.textContent = `Session ${sideOrdinal} · now playing`;
   } catch (err) {
     if (err instanceof SpotifyApiError && err.status === 403) {
       wallApi.markUnavailable(entry.id);
@@ -309,8 +318,6 @@ playerPlayPause.addEventListener('click', async () => {
 playerPrev.addEventListener('click', () => playback.skipPrevious());
 playerNext.addEventListener('click', () => playback.skipNext());
 
-btnZoomOut.addEventListener('click', () => wallApi?.zoomToFitAll());
-
 function syncCrackleButton() {
   btnCrackle.setAttribute('aria-pressed', String(isCrackleEnabled()));
 }
@@ -347,8 +354,8 @@ btnNewSide.addEventListener('click', () => {
   journal.startNewSide();
   currentSideId = null;
   renderJourneyThread();
-  wallPrompt.textContent = 'New side. Drop the needle on something.';
-  announce('New side started.');
+  wallPrompt.textContent = 'New session. Drop the needle on something.';
+  announce('New session started.');
 });
 
 // ---------------------------------------------------------------------
@@ -377,7 +384,7 @@ function renderRecordBag() {
   if (sides.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty-record-bag';
-    empty.textContent = 'No sides yet. The first needle drop starts one.';
+    empty.textContent = 'No sessions yet. The first needle drop starts one.';
     recordBagList.appendChild(empty);
     return;
   }
@@ -398,7 +405,7 @@ function renderSideRow(side, ordinal) {
   const headLabel = document.createElement('span');
   headLabel.className = 'deadwax';
   const recordWord = side.entries.length === 1 ? 'RECORD' : 'RECORDS';
-  headLabel.textContent = `SIDE ${ordinal} · ${formatDeadwaxDate(side.startedAt)} · ${side.entries.length} ${recordWord}`;
+  headLabel.textContent = `SESSION ${ordinal} · ${formatDeadwaxDate(side.startedAt)} · ${side.entries.length} ${recordWord}`;
   head.append(headLabel, svgIcon('icon-chevron'));
   row.appendChild(head);
 
@@ -427,12 +434,12 @@ function renderSideRow(side, ordinal) {
   const exportBtn = document.createElement('button');
   exportBtn.type = 'button';
   exportBtn.className = 'icon-btn';
-  exportBtn.append(svgIcon('icon-export'), document.createTextNode('Export this side'));
+  exportBtn.append(svgIcon('icon-export'), document.createTextNode('Export this session'));
   exportBtn.addEventListener('click', () => handleExportSide(side, ordinal, exportBtn));
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'icon-btn';
-  deleteBtn.append(svgIcon('icon-bin'), document.createTextNode('Forget this side'));
+  deleteBtn.append(svgIcon('icon-bin'), document.createTextNode('Forget this session'));
   deleteBtn.addEventListener('click', () => handleDeleteSide(side, ordinal));
   actions.append(exportBtn, deleteBtn);
   entriesWrap.appendChild(actions);
@@ -484,14 +491,14 @@ async function handleExportSide(side, ordinal, triggerBtn) {
   triggerBtn.disabled = true;
   try {
     const { dataUrl } = await exporter.exportSideCard(side, ordinal);
-    exporter.downloadCard(dataUrl, `longplayur-side-${ordinal}.png`);
+    exporter.downloadCard(dataUrl, `longplayur-session-${ordinal}.png`);
   } finally {
     triggerBtn.disabled = false;
   }
 }
 
 function handleDeleteSide(side, ordinal) {
-  const confirmed = window.confirm(`Forget side ${ordinal}? The music stays; the record of it goes.`);
+  const confirmed = window.confirm(`Forget session ${ordinal}? The music stays; the record of it goes.`);
   if (!confirmed) return;
   journal.deleteSide(side.id);
   if (currentSideId === side.id) {

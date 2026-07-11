@@ -209,13 +209,30 @@ function buildDiscSvg() {
   return { svg, arc, circumference };
 }
 
-const discsByAlbum = new Map(); // albumId -> { svg, arc, circumference }
+const discsByAlbum = new Map(); // albumId -> { svg, arc, circumference } (settled, attached to a cell)
+
+// The currently enlarged "now playing" cover, if any: { albumId, cover,
+// text, disc: {svg, arc, circumference} }. Per explicit request, this stays
+// on screen after the needle-drop ceremony ends instead of auto-shrinking;
+// it only settles away via settleActiveOverlay() (gallery dragged, or the
+// album finishes) or gets fully retired if a different album starts.
+let activeOverlay = null;
+
+function getActiveDisc(albumId) {
+  if (activeOverlay?.albumId === albumId) return activeOverlay.disc;
+  return discsByAlbum.get(albumId) ?? null;
+}
 
 export function retireDisc(albumId) {
   const rec = discsByAlbum.get(albumId);
   if (rec) {
     rec.svg.remove();
     discsByAlbum.delete(albumId);
+  }
+  if (activeOverlay?.albumId === albumId) {
+    activeOverlay.cover.remove();
+    activeOverlay.text?.remove();
+    activeOverlay = null;
   }
 }
 
@@ -232,10 +249,49 @@ function attachPersistentDisc(wallApi, albumId) {
 
 /** Called on every player-bar update so the tonearm arc creeps continuously. */
 export function updateTonearmProgress(albumId, elapsedMs, totalMs) {
-  const rec = discsByAlbum.get(albumId);
+  const rec = getActiveDisc(albumId);
   if (!rec || !totalMs) return;
   const fraction = Math.max(0, Math.min(1, elapsedMs / totalMs));
   rec.arc.style.strokeDashoffset = String(rec.circumference * (1 - fraction));
+}
+
+/**
+ * Eases the currently active enlarged cover back into its actual cell,
+ * transferring its disc (at the same progress, no jump back to 0%) to a
+ * persistent per-cell disc. The two conditions that should call this: the
+ * gallery gets dragged, or the album finishes (runoutGroove below).
+ * @param {object} wallApi
+ * @param {{animate?: boolean}} [opts]
+ */
+export async function settleActiveOverlay(wallApi, { animate = true } = {}) {
+  if (!activeOverlay) return;
+  const { albumId, cover, text, disc } = activeOverlay;
+  activeOverlay = null; // clear immediately so a fast repeat call is a no-op.
+
+  const reduced = prefersReducedMotion();
+  const settleDur = reduced ? TIMINGS.reducedMs : TIMINGS.recedeMs;
+  const settledRect = wallApi.getCellRect(albumId);
+
+  if (settledRect) {
+    cover.style.transition = animate
+      ? `left ${settleDur}ms var(--ease), top ${settleDur}ms var(--ease), width ${settleDur}ms var(--ease), height ${settleDur}ms var(--ease)`
+      : 'none';
+    text?.classList.remove('is-visible');
+    Object.assign(cover.style, {
+      left: `${settledRect.x}px`, top: `${settledRect.y}px`,
+      width: `${settledRect.width}px`, height: `${settledRect.height}px`,
+    });
+    if (animate) await delay(settleDur);
+  }
+
+  cover.remove();
+  text?.remove();
+  wallApi.revealTile(albumId);
+
+  const persisted = attachPersistentDisc(wallApi, albumId);
+  if (persisted) {
+    persisted.arc.style.strokeDashoffset = disc.arc.style.strokeDashoffset;
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -274,8 +330,9 @@ function ensureLayer(viewportEl) {
 }
 
 /**
- * Runs the full needle-drop choreography and leaves a persistent disc
- * attached to the cell once settled. Resolves after the settle animation.
+ * Runs the full needle-drop choreography and leaves the enlarged cover on
+ * screen as the active overlay (does not auto-shrink; see
+ * settleActiveOverlay()). Resolves once that overlay is in place.
  * @param {object} entry pool entry being dropped
  * @param {{wallApi: object, wallViewportEl: HTMLElement, currentAlbumId: string|null, crackleHintEl: HTMLElement}} ctx
  */
@@ -388,23 +445,15 @@ export async function needleDrop(entry, ctx) {
     throw err;
   }
 
-  // Settle: cover eases back to 1.0 into its cell WITH the disc still out.
-  const settleDur = reduced ? TIMINGS.reducedMs : TIMINGS.recedeMs;
-  const settledRect = wallApi.getCellRect(entry.id) || cellRect;
-  cover.style.transition = `left ${settleDur}ms var(--ease), top ${settleDur}ms var(--ease), width ${settleDur}ms var(--ease), height ${settleDur}ms var(--ease)`;
+  // The cover stays large and expanded here, per explicit request: no
+  // auto-shrink. It only eases back into its actual cell via
+  // settleActiveOverlay(), triggered by dragging the gallery or the album
+  // finishing (see main.js's onGalleryDragStart wiring, and runoutGroove
+  // below). Title/deadwax still fade per the original choreography.
   text.classList.remove('is-visible');
-  Object.assign(cover.style, {
-    left: `${settledRect.x}px`, top: `${settledRect.y}px`,
-    width: `${settledRect.width}px`, height: `${settledRect.height}px`,
-  });
-
-  await delay(settleDur);
-
-  cover.remove();
-  text.remove();
-  wallApi.enterRestingState(entry.id);
+  wallApi.enterRestingState(entry.id, { keepHidden: true });
   wallApi.setCurrent(entry.id);
-  attachPersistentDisc(wallApi, entry.id);
+  activeOverlay = { albumId: entry.id, cover, text, disc };
   showCrackleHintOnce(crackleHintEl);
 }
 
@@ -422,7 +471,7 @@ export async function needleDrop(entry, ctx) {
 export async function runoutGroove(albumId, ctx) {
   const { wallApi } = ctx;
   const reduced = prefersReducedMotion();
-  const rec = discsByAlbum.get(albumId);
+  const rec = getActiveDisc(albumId);
 
   if (rec) rec.arc.style.strokeDashoffset = '0'; // arc reaches 360 degrees.
 
@@ -440,6 +489,14 @@ export async function runoutGroove(albumId, ctx) {
   }
 
   wallApi.markPlayed(albumId);
+
+  // The album finishing is one of the two conditions that ends the "now
+  // playing" hero view (the other is dragging the gallery, see main.js);
+  // settle the enlarged cover back into its cell now, keeping the
+  // completed disc/arc rather than discarding it.
+  if (activeOverlay?.albumId === albumId) {
+    await settleActiveOverlay(wallApi, { animate: !reduced });
+  }
 
   const neighbors = wallApi.getNeighbors(albumId);
   const unplayed = neighbors.filter((n) => !n.played);
@@ -463,6 +520,82 @@ export async function runoutGroove(albumId, ctx) {
 
 export function runoutPrompt(atEdge) {
   return atEdge
-    ? "You've reached the edge of the wall. Zoom out and pick from the shelf."
-    : "Side's not over. Choose the next record.";
+    ? "You've reached the edge of the wall. Pick from the shelf."
+    : "Session's not over. Choose the next record.";
+}
+
+// ---------------------------------------------------------------------
+// Long-press preview: a quick peek at an album's cover, name, and artist,
+// without triggering playback. Distinct from the needle-drop ceremony
+// (no disc, no crackle, no camera pan, no dimming the rest of the wall)
+// -- just a fast show on press, hide on release.
+// ---------------------------------------------------------------------
+
+let longPressPreview = null; // { albumId, cover, text }
+
+/**
+ * @param {object} entry pool entry being previewed
+ * @param {{wallApi: object, wallViewportEl: HTMLElement}} ctx
+ */
+export function showLongPressPreview(entry, ctx) {
+  const { wallApi, wallViewportEl } = ctx;
+  hideLongPressPreview();
+
+  const cellRect = wallApi.getCellRect(entry.id);
+  if (!cellRect) return;
+
+  const reduced = prefersReducedMotion();
+  const dur = reduced ? TIMINGS.reducedMs : 200;
+  const layer = ensureLayer(wallViewportEl);
+
+  const cover = document.createElement('div');
+  cover.className = 'ceremony-cover';
+  Object.assign(cover.style, {
+    left: `${cellRect.x}px`, top: `${cellRect.y}px`,
+    width: `${cellRect.width}px`, height: `${cellRect.height}px`,
+    opacity: '0',
+    transition: `left ${dur}ms var(--ease), top ${dur}ms var(--ease), width ${dur}ms var(--ease), height ${dur}ms var(--ease), opacity ${dur}ms var(--ease)`,
+  });
+  if (entry.image) {
+    const img = document.createElement('img');
+    img.src = entry.image;
+    img.alt = '';
+    cover.appendChild(img);
+  }
+  layer.appendChild(cover);
+
+  const text = document.createElement('div');
+  text.className = 'ceremony-text';
+  text.innerHTML = '<div class="ceremony-title"></div><div class="ceremony-deadwax"></div>';
+  text.querySelector('.ceremony-title').textContent = entry.name;
+  text.querySelector('.ceremony-deadwax').textContent = entry.artist;
+  layer.appendChild(text);
+
+  cover.getBoundingClientRect(); // force layout before animating.
+
+  const targetWidth = cellRect.width * 1.6;
+  const targetHeight = cellRect.height * 1.6;
+  const targetLeft = wallViewportEl.clientWidth / 2 - targetWidth / 2;
+  const targetTop = wallViewportEl.clientHeight / 2 - targetHeight / 2;
+  text.style.top = `${Math.max(8, targetTop - 56)}px`;
+
+  requestAnimationFrame(() => {
+    cover.style.opacity = '1';
+    Object.assign(cover.style, {
+      left: `${targetLeft}px`, top: `${targetTop}px`,
+      width: `${targetWidth}px`, height: `${targetHeight}px`,
+    });
+    text.classList.add('is-visible');
+  });
+
+  longPressPreview = { albumId: entry.id, cover, text };
+}
+
+export function hideLongPressPreview() {
+  if (!longPressPreview) return;
+  const { cover, text } = longPressPreview;
+  longPressPreview = null;
+  cover.style.opacity = '0';
+  text.classList.remove('is-visible');
+  setTimeout(() => { cover.remove(); text.remove(); }, 220);
 }

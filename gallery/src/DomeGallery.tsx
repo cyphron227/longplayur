@@ -1,5 +1,5 @@
 // Forked from react-bits' DomeGallery-TS-TW (fetched from the shadcn
-// registry at reactbits.dev) with three deliberate, minimal changes from
+// registry at reactbits.dev) with several deliberate, minimal changes from
 // the original, everything else left verbatim:
 //   1. An `onImageClick` prop that, when provided, replaces the built-in
 //      tap-to-enlarge lightbox with a plain callback (Longplayur needs
@@ -22,6 +22,15 @@
 //      the CSSOM property setter, which style-src does not restrict; only
 //      literal <style> elements and style="..." attributes are). Moved
 //      verbatim into DomeGallery.css and imported normally instead.
+//   6. An `onDragMove` prop firing once per gesture, right when a
+//      pointer-down actually crosses the movement threshold that becomes a
+//      drag (the same threshold the component's own tap/drag
+//      disambiguation already uses). Longplayur uses this to dismiss its
+//      "now playing" enlarged cover the moment the gallery is actually
+//      moved, not on every tap.
+//   7. `onLongPress`/`onLongPressEnd`/`longPressMs` props: holding a tile
+//      fires onLongPress instead of the normal tap-select, and suppresses
+//      that tap so a long-press does not also select the tile on release.
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useCallback } from 'react';
 import { useGesture } from '@use-gesture/react';
 import './DomeGallery.css';
@@ -47,6 +56,18 @@ type DomeGalleryProps = {
   openedImageBorderRadius?: string;
   grayscale?: boolean;
   onImageClick?: (src: string) => void;
+  /** Fires once per gesture, the moment a pointer-down actually becomes a
+   * drag (crosses the same movement threshold the component's own tap/drag
+   * disambiguation uses) -- not on every pointer-down, which would also
+   * fire for plain taps before they are known to be taps. */
+  onDragMove?: () => void;
+  /** Fires after holding a tile for longPressMs without enough movement to
+   * count as a drag. Suppresses the normal click/tap selection for that
+   * same press so long-pressing does not also select the tile. */
+  onLongPress?: (src: string) => void;
+  /** Fires on release (or cancel) of a press that triggered onLongPress. */
+  onLongPressEnd?: () => void;
+  longPressMs?: number;
 };
 
 export type DomeGalleryHandle = {
@@ -190,7 +211,11 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
     imageBorderRadius = '30px',
     openedImageBorderRadius = '30px',
     grayscale = true,
-    onImageClick
+    onImageClick,
+    onDragMove,
+    onLongPress,
+    onLongPressEnd,
+    longPressMs = 500
   },
   ref
 ) {
@@ -220,6 +245,26 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
   const openingRef = useRef(false);
   const openStartedAtRef = useRef(0);
   const lastDragEndAt = useRef(0);
+
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
+  const longPressStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const LONG_PRESS_MOVE_THRESH_PX = 10;
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const endLongPressIfActive = useCallback(() => {
+    clearLongPressTimer();
+    if (longPressFiredRef.current) {
+      longPressFiredRef.current = false;
+      onLongPressEnd?.();
+    }
+  }, [clearLongPressTimer, onLongPressEnd]);
 
   const scrollLockedRef = useRef(false);
   const lockScroll = useCallback(() => {
@@ -443,7 +488,10 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
 
         if (!movedRef.current) {
           const dist2 = dxTotal * dxTotal + dyTotal * dyTotal;
-          if (dist2 > 16) movedRef.current = true;
+          if (dist2 > 16) {
+            movedRef.current = true;
+            onDragMove?.();
+          }
         }
 
         const nextX = clamp(
@@ -761,8 +809,9 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
   useEffect(() => {
     return () => {
       document.body.classList.remove('dg-scroll-lock');
+      clearLongPressTimer();
     };
-  }, []);
+  }, [clearLongPressTimer]);
 
   return (
     <>
@@ -819,6 +868,10 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
                     tabIndex={0}
                     aria-label={it.alt || 'Open image'}
                     onClick={e => {
+                      if (longPressFiredRef.current) {
+                        longPressFiredRef.current = false;
+                        return; // this press was a long-press, not a tap.
+                      }
                       if (draggingRef.current) return;
                       if (movedRef.current) return;
                       if (performance.now() - lastDragEndAt.current < 80) return;
@@ -829,7 +882,32 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
                       if (openingRef.current) return;
                       openItemFromElement(e.currentTarget as HTMLElement);
                     }}
+                    onPointerDown={e => {
+                      if (!onLongPress) return;
+                      longPressFiredRef.current = false;
+                      longPressStartPosRef.current = { x: e.clientX, y: e.clientY };
+                      clearLongPressTimer();
+                      const src = it.src;
+                      longPressTimerRef.current = window.setTimeout(() => {
+                        longPressTimerRef.current = null;
+                        if (draggingRef.current || movedRef.current) return;
+                        longPressFiredRef.current = true;
+                        onLongPress(src);
+                      }, longPressMs);
+                    }}
+                    onPointerMove={e => {
+                      if (longPressTimerRef.current === null || !longPressStartPosRef.current) return;
+                      const dx = e.clientX - longPressStartPosRef.current.x;
+                      const dy = e.clientY - longPressStartPosRef.current.y;
+                      if (dx * dx + dy * dy > LONG_PRESS_MOVE_THRESH_PX * LONG_PRESS_MOVE_THRESH_PX) {
+                        clearLongPressTimer();
+                      }
+                    }}
                     onPointerUp={e => {
+                      const wasLongPress = longPressFiredRef.current;
+                      endLongPressIfActive();
+                      if (wasLongPress) return; // release after a long-press: do not also select.
+
                       if ((e.nativeEvent as PointerEvent).pointerType !== 'touch') return;
                       if (draggingRef.current) return;
                       if (movedRef.current) return;
@@ -838,6 +916,8 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
                       if (openingRef.current) return;
                       openItemFromElement(e.currentTarget as HTMLElement);
                     }}
+                    onPointerLeave={endLongPressIfActive}
+                    onPointerCancel={endLongPressIfActive}
                     onKeyDown={e => {
                       if (e.key !== 'Enter' && e.key !== ' ') return;
                       e.preventDefault();

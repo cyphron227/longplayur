@@ -15,6 +15,9 @@ export interface GalleryImage {
 export interface MountOptions {
   images: GalleryImage[];
   onImageClick: (src: string) => void;
+  onDragMove?: () => void;
+  onLongPress?: (src: string) => void;
+  onLongPressEnd?: () => void;
   fit?: number;
   minRadius?: number;
   maxVerticalRotationDeg?: number;
@@ -40,6 +43,9 @@ export function mountDomeGallery(container: HTMLElement, options: MountOptions):
       },
       images: options.images,
       onImageClick: options.onImageClick,
+      onDragMove: options.onDragMove,
+      onLongPress: options.onLongPress,
+      onLongPressEnd: options.onLongPressEnd,
       fit: options.fit ?? 0.8,
       minRadius: options.minRadius ?? 900,
       // Locked back to 0 (no vertical tilt) per explicit request, reverting

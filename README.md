@@ -60,11 +60,11 @@ Longplayur uses vinyl language throughout the interface:
 | Needle drop | Choosing and starting an album |
 | Tonearm arc | The album-wide progress indicator on the disc |
 | Runout groove | The end of an album |
-| A side | A listening session |
+| A session | A listening session |
 | Liner notes | A short note against a played album |
-| The record bag | Your journal of past sides |
+| The record bag | Your journal of past sessions |
 | The Wall | The full zoomed-out view of your album history |
-| New side | Starting a fresh listening session |
+| New session | Starting a fresh listening session |
 
 ## Privacy
 
