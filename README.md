@@ -83,29 +83,42 @@ Longplayur uses vinyl language throughout the interface:
 
 ## Development
 
-No build step, no bundler, no framework, no TypeScript. Plain ES modules.
+The deployed site itself has no build step: it is served directly with
+`npx serve .` and deploys to GitHub Pages or Vercel as-is. The one
+exception is the Wall's dome gallery, which is a real React component
+(forked from react-bits) compiled ahead of time into a plain static file:
 
 ```bash
-npx serve .          # serve locally
+npx serve .          # serve the site locally, no build needed
+
+cd gallery && npm install && npm run build   # only needed after editing gallery/src/*
 ```
 
-Open `tests.html` in a browser (or via the local server above) to run the pure-function test suite: `spherePosition` (the Wall's 3D sphere layout) and both end-of-album detection functions in `js/ending.js`, covering skips, pauses, scrubs, repeat, device switches, and context changes.
+`gallery/` builds `gallery/src/DomeGallery.tsx` + `gallery/src/mount.tsx`
+into `js/dome-gallery.bundle.js` (React, ReactDOM, and `@use-gesture/react`
+inlined), which `js/wall.js` imports like any other static module. The
+built bundle is committed, so cloning the repo and running `npx serve .` is
+enough unless you're changing the gallery itself.
+
+Open `tests.html` in a browser (or via the local server above) to run the pure-function test suite: both end-of-album detection functions in `js/ending.js`, covering skips, pauses, scrubs, repeat, device switches, and context changes.
 
 ```
 index.html      screens, SVG icon sprite, the groove brand mark
 styles.css      design tokens, layout, ceremony choreography CSS
+gallery/        isolated Vite build for the Wall's dome gallery (see above)
 js/
-  main.js       boot, screen routing, event wiring
-  auth.js       OAuth 2.0 PKCE, token refresh
-  spotify.js    API client, 429 handling
-  albums.js     pool building, scoring, caching
-  wall.js       the Wall: 3D sphere layout, drag rotation, keyboard nav, journey thread
-  playback.js   Web Playback SDK + Spotify Connect fallback
-  ending.js     end-of-album detection (pure functions)
-  ceremony.js   needle drop, crackle (Web Audio), tonearm arc, runout groove
-  journal.js    sides, liner notes, record bag storage
-  exporter.js   the share card (canvas)
-  ui.js         DOM helpers, escaping, aria-live announcer
+  main.js                 boot, screen routing, event wiring
+  auth.js                 OAuth 2.0 PKCE, token refresh
+  spotify.js              API client, 429 handling
+  albums.js               pool building, scoring, caching
+  wall.js                 bridges the dome gallery to the app's needle-drop/journal API
+  dome-gallery.bundle.js  build output of gallery/ (React dome gallery), do not hand-edit
+  playback.js             Web Playback SDK + Spotify Connect fallback
+  ending.js               end-of-album detection (pure functions)
+  ceremony.js             needle drop, crackle (Web Audio), tonearm arc, runout groove
+  journal.js              sides, liner notes, record bag storage
+  exporter.js             the share card (canvas)
+  ui.js                   DOM helpers, escaping, aria-live announcer
 ```
 
 ## License

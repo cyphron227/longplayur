@@ -5,34 +5,69 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
-## The Wall is now a 3D sphere, not the flat spiral grid in DESIGN-SPEC §2
+## The Wall is now the real react-bits DomeGallery, not the flat spiral grid in DESIGN-SPEC §2
 
-Superseded by explicit direction from Yaron after initial ship: the Wall is
-now a full 3D sphere ("infinity ball") built with CSS 3D transforms, dragged
-and flicked freely on both axes (no pitch clamp), instead of DESIGN-SPEC §2's
-square-spiral flat grid with a 2D pan/zoom camera. This was a deliberate
-choice to stay framework-free (a pasted React/`shadcn` dome-gallery component
-was considered and rejected, since it would have required a build step,
-breaking `Docs/CLAUDE.md`'s "no build step, deploy to GitHub Pages as-is"
-constraint).
+Superseded by explicit direction from Yaron after initial ship, in two
+steps. First pass: a hand-written CSS 3D sphere (framework-free, to avoid a
+build step). Yaron tried it and said it didn't work well, and asked for the
+actual pasted React/`shadcn` component instead. Second pass (current state):
+the real `DomeGallery-TS-TW` component, fetched from the shadcn registry
+(`reactbits.dev/r/DomeGallery-TS-TW.json`) and forked into
+`gallery/src/DomeGallery.tsx` with four deliberate, minimal changes
+documented at the top of that file (an `onImageClick` callback replacing
+the built-in lightbox, a `focusOn`/`resetRotation` imperative handle, hand
+CSS in place of the Tailwind classNames the original used, and a keyboard
+Enter/Space handler the upstream component itself was missing despite
+declaring `role="button"`). This required accepting a build step for this
+one component: it compiles via an isolated Vite project in `gallery/` into
+`js/dome-gallery.bundle.js` (React/ReactDOM/`@use-gesture/react` inlined, ~
+196KB gzipped), which is committed to the repo and imported like any other
+static file, so the deployed site itself still has no build step and
+`Docs/CLAUDE.md`'s "deploy to GitHub Pages as-is" holds. Re-run
+`npm run build` inside `gallery/` after editing anything in `gallery/src/`.
 
-What changed: `spiralPosition(rank)` (square-spiral flat layout) is removed
-from `js/albums.js`; `spherePosition(rank, total)` (golden-angle sphere
-layout) replaces it in `js/wall.js`, tested the same way in `tests.html`.
-The "physical neighbours" concept for runout choices now uses great-circle
-angular distance instead of grid adjacency. The journey thread is a
-screen-space SVG overlay tracking each played tile's live projected position
-(redrawn during drag/inertia) rather than a flat polyline inside the camera's
-own transform, since a great-circle path has no native flat representation.
-Everything downstream of the Wall (ceremony, playback, journal, export) is
-unchanged; `wall.js`'s public API kept the same shape specifically so nothing
-else needed to change.
+**Two structural constraints inherited from the upstream component, not
+introduced by this integration:**
 
-Not yet seen in a real browser: sphere radius/tile-size tuning
-(`computeRadius()` in `js/wall.js`), drag sensitivity, and inertia decay are
-reasonable starting constants, not validated against how they actually feel
-to drag. Tune `DRAG_SENSITIVITY` and `INERTIA_DECAY` first if it feels too
-twitchy or too sluggish.
+1. It is a hemispheric dome with clamped vertical tilt, not a true full
+   sphere: horizontal drag (yaw) spins freely, but vertical drag (pitch) is
+   always clamped to `maxVerticalRotationDeg`. The pasted example set this
+   to `0` (no vertical movement at all); `gallery/src/mount.tsx` defaults it
+   to `45` instead so vertical drag actually does something, but it will
+   never fully wrap top-to-bottom like a true globe with this component.
+2. It tiles a fixed grid of slots (`segments` columns x 5 rows) by
+   cyclically repeating the provided `images` array. A pool smaller than
+   the slot count (the common case: 9 to 120 albums against `segments=34`'s
+   170 slots) shows each album more than once around the dome, and a pool
+   larger than the slot count would silently drop albums (not currently
+   possible at PRD's ~120-album pool cap, but would need a larger
+   `segments` value if that cap ever changes).
+
+**What changed in the surrounding app:** `js/wall.js` is now a bridge that
+mounts the component and adapts its DOM to the same public API the rest of
+the app already expected (`panToAlbum`, `markPlayed`, `getCellRect`, etc.),
+so `ceremony.js`, `playback.js`, and `journal.js` needed no changes.
+Consequences of the bridge:
+- `getNeighbors()` (runout choices) can no longer mean "physical neighbours
+  on a grid/sphere" since tiles repeat and have no stable adjacency; it now
+  returns the 4 albums before and 4 after in the score-sorted pool instead.
+- The per-cover hover caption (album/artist name) is gone; the component
+  has no equivalent, though each tile still has an accessible name via
+  `alt`/`aria-label`.
+- `prefers-reduced-motion` does not reach the component's own drag/focus/
+  inertia animations (they are fixed-duration, defined in its own injected
+  `<style>` tag, not this app's `--dur-*` tokens); it still applies to
+  everything this app draws on top (the ceremony overlay, the journey
+  thread).
+- `spiralPosition`/`spherePosition` (this app's own pure layout function
+  from the two earlier iterations) is gone; tile placement math now lives
+  entirely inside the forked component, which was deliberately kept close
+  to the vetted upstream source rather than re-exposed for unit testing.
+
+Not yet seen in a real browser: none of this (drag feel, tile repetition at
+various pool sizes, the `maxVerticalRotationDeg=45` compromise) has been
+seen rendered. If 45 degrees of tilt reads as too little, it is a single
+number in `gallery/src/mount.tsx` (rebuild after changing it).
 
 ## Not yet verified against a live Spotify account (read this first)
 

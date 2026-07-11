@@ -1,0 +1,5 @@
+# Only the gallery/ subfolder has any tooling (an isolated Vite build for
+# the Wall's dome gallery component). The deployed site itself is a plain
+# static build with nothing to ignore.
+gallery/node_modules/
+gallery/dist/

@@ -49,6 +49,14 @@ parts of the build and the easiest to get subtly wrong:
 - **Two tabs open at once.** Confirm the journal doesn't corrupt.
 - **Reduced motion.** Toggle it in devtools/OS settings and confirm the
   choreography collapses to short crossfades instead of erroring out.
+- **The dome gallery's drag feel.** This is the one piece that has never
+  been seen in an actual browser. Check whether `maxVerticalRotationDeg`
+  (45 in `gallery/src/mount.tsx`) gives enough vertical tilt for your
+  taste, and whether `dragDampening`/drag sensitivity feel right. It's a
+  hemispheric dome, not a true full sphere (vertical drag is always
+  clamped; horizontal spins freely) — see `KNOWN-DEVIATIONS.md` for why.
+  After changing anything in `gallery/src/`, run `cd gallery && npm run
+  build` to recompile `js/dome-gallery.bundle.js` before it'll show up.
 
 ## 2. Push to a real GitHub repository
 

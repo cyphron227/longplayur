@@ -408,86 +408,35 @@ button { cursor: pointer; }
   flex: 1 1 auto;
   overflow: hidden;
   background: var(--obsidian);
-  perspective: 1400px;
+  cursor: grab;
 }
-/* The Wall is a full 3D sphere ("infinity ball"): .wall-container is a
-   zero-size pivot centred in the viewport; each .wall-cell is placed by
-   its own fixed rotateY/rotateX/translateZ (set inline, per spherePosition
-   in wall.js), and the container's own transform (scale + rotateX + rotateY,
-   applied in wall.js) is the only thing that changes during drag/zoom. */
-.wall-container {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  transform-style: preserve-3d;
-  will-change: transform;
-}
-.wall-cell {
-  position: absolute;
-  top: calc(var(--cell-size, 150px) / -2);
-  left: calc(var(--cell-size, 150px) / -2);
-  width: var(--cell-size, 150px);
-  height: var(--cell-size, 150px);
-  padding: 4px;
-}
-.wall-cover {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: var(--obsidian-2);
-  border-radius: 2px;
-  padding: 0;
-  overflow: visible;
-  opacity: 0.7;
-  backface-visibility: hidden;
-  transition: opacity var(--dur-breath) var(--ease), filter var(--dur-touch) var(--ease);
-}
-.wall-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 2px;
-  display: block;
-}
-.wall-cover:hover:not(.is-spent), .wall-cover:focus-visible { filter: brightness(1.08); opacity: 1; }
-.wall-cover.is-current { opacity: 1; }
-.wall-cover.is-played { opacity: 1; box-shadow: 0 0 0 2px var(--amber); border-radius: 2px; }
-.wall-cover.is-spent, .wall-cover.is-unavailable { opacity: 0.35; cursor: default; }
-.wall-cover.is-receded { opacity: 0.2; }
-.wall-cover.is-overlaid { opacity: 0; }
-.wall-cover.is-resting { opacity: 0.45; }
-.wall-cover .label {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  padding: 6px 8px 4px;
-  font-size: 11px;
-  color: var(--bone);
-  background: linear-gradient(to top, rgba(0,0,0,0.75), transparent);
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity var(--dur-touch) var(--ease), transform var(--dur-touch) var(--ease);
-  border-radius: 0 0 2px 2px;
-  pointer-events: none;
-}
-.wall-cover:hover .label, .wall-cover:focus-visible .label { opacity: 1; transform: translateY(0); }
-
-/* Screen-space overlay (sibling of .wall-container, not inside its 3D
-   transform): great-circle paths have no flat representation, so the
-   thread is redrawn from each played tile's live projected position
-   instead (see updateThreadPositions() in wall.js). */
-.wall-thread { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.wall-thread path { fill: none; stroke: var(--amber); stroke-width: 3; opacity: 0.6; }
-
-.wall-viewport { cursor: grab; }
 .wall-viewport:active { cursor: grabbing; }
 
-body.wall-zoomed-out .wall-cover { opacity: 0.7; }
-body.wall-zoomed-out .wall-cover.is-played { opacity: 1; }
-body.wall-zoomed-out .wall-cover:hover:not(.is-spent),
-body.wall-zoomed-out .wall-cover:focus-visible { opacity: 1; }
+/* #wall-container is the mount point for the DomeGallery React component
+   (gallery/src/DomeGallery.tsx, compiled to js/dome-gallery.bundle.js);
+   the gallery lays itself out and injects its own <style> tag, so this
+   just needs to fill the viewport. State classes below (is-played etc.)
+   are applied by wall.js onto the gallery's own .item__image tiles. */
+#wall-container { position: absolute; inset: 0; }
+
+.item__image.is-current { opacity: 1; }
+.item__image.is-played { box-shadow: 0 0 0 2px var(--amber); }
+.item__image.is-spent, .item__image.is-unavailable { opacity: 0.35; cursor: default; pointer-events: none; }
+.item__image.is-receded { opacity: 0.2; }
+.item__image.is-overlaid { opacity: 0; }
+.item__image.is-resting { opacity: 0.45; }
+.item__image.is-woken { opacity: 1; transition: opacity 300ms var(--ease); }
+
+body.wall-zoomed-out .item__image:not(.is-played):not(.is-current) { opacity: 0.7; }
+body.wall-zoomed-out .item__image.is-played { opacity: 1; }
+
+/* Screen-space overlay (sibling of #wall-container): a great-circle path
+   has no flat representation, so the thread is redrawn from each played
+   tile's live projected position instead (updateThreadPositions() in
+   wall.js), polled while active since the gallery exposes no drag/inertia
+   lifecycle events to hook a per-frame update into. */
+.wall-thread { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.wall-thread path { fill: none; stroke: var(--amber); stroke-width: 3; opacity: 0.6; }
 
 .fab {
   position: absolute;
@@ -551,8 +500,6 @@ body.wall-zoomed-out .wall-cover:focus-visible { opacity: 1; }
 .ceremony-disc .tonearm-arc { fill: none; stroke: var(--amber); stroke-width: 2; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
 .ceremony-disc .disc-label { fill: var(--obsidian-2); }
 
-.wall-cover.is-woken { opacity: 1; transition: opacity 300ms var(--ease); }
-
 .ceremony-text {
   position: absolute;
   text-align: center;
@@ -567,7 +514,12 @@ body.wall-zoomed-out .wall-cover:focus-visible { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   .mark--loading { animation: none; }
-  .wall-cover, .wall-container, .ceremony-cover, .ceremony-disc, .ceremony-text, .wall-thread path { transition-duration: 150ms !important; animation-duration: 1ms !important; }
+  .item__image, .ceremony-cover, .ceremony-disc, .ceremony-text, .wall-thread path { transition-duration: 150ms !important; animation-duration: 1ms !important; }
+  /* The DomeGallery component's own drag/focus/inertia animations are
+     defined inside its injected <style> tag (gallery/src/DomeGallery.tsx)
+     with fixed durations, not this app's --dur-* tokens, so they do not
+     collapse under reduced motion. Accepted trade-off of using the
+     upstream component largely as-is; see KNOWN-DEVIATIONS.md. */
 }
 
 /* -------------------- Player bar -------------------- */
