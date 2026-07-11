@@ -5,6 +5,35 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## The Wall is now a 3D sphere, not the flat spiral grid in DESIGN-SPEC §2
+
+Superseded by explicit direction from Yaron after initial ship: the Wall is
+now a full 3D sphere ("infinity ball") built with CSS 3D transforms, dragged
+and flicked freely on both axes (no pitch clamp), instead of DESIGN-SPEC §2's
+square-spiral flat grid with a 2D pan/zoom camera. This was a deliberate
+choice to stay framework-free (a pasted React/`shadcn` dome-gallery component
+was considered and rejected, since it would have required a build step,
+breaking `Docs/CLAUDE.md`'s "no build step, deploy to GitHub Pages as-is"
+constraint).
+
+What changed: `spiralPosition(rank)` (square-spiral flat layout) is removed
+from `js/albums.js`; `spherePosition(rank, total)` (golden-angle sphere
+layout) replaces it in `js/wall.js`, tested the same way in `tests.html`.
+The "physical neighbours" concept for runout choices now uses great-circle
+angular distance instead of grid adjacency. The journey thread is a
+screen-space SVG overlay tracking each played tile's live projected position
+(redrawn during drag/inertia) rather than a flat polyline inside the camera's
+own transform, since a great-circle path has no native flat representation.
+Everything downstream of the Wall (ceremony, playback, journal, export) is
+unchanged; `wall.js`'s public API kept the same shape specifically so nothing
+else needed to change.
+
+Not yet seen in a real browser: sphere radius/tile-size tuning
+(`computeRadius()` in `js/wall.js`), drag sensitivity, and inertia decay are
+reasonable starting constants, not validated against how they actually feel
+to drag. Tune `DRAG_SENSITIVITY` and `INERTIA_DECAY` first if it feels too
+twitchy or too sluggish.
+
 ## Not yet verified against a live Spotify account (read this first)
 
 Claude Code cannot complete Spotify's OAuth flow (per `Docs/SHOTS.md`: "Claude

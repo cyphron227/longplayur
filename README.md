@@ -89,7 +89,7 @@ No build step, no bundler, no framework, no TypeScript. Plain ES modules.
 npx serve .          # serve locally
 ```
 
-Open `tests.html` in a browser (or via the local server above) to run the pure-function test suite: `spiralPosition` (the Wall's square-spiral layout) and both end-of-album detection functions in `js/ending.js`, covering skips, pauses, scrubs, repeat, device switches, and context changes.
+Open `tests.html` in a browser (or via the local server above) to run the pure-function test suite: `spherePosition` (the Wall's 3D sphere layout) and both end-of-album detection functions in `js/ending.js`, covering skips, pauses, scrubs, repeat, device switches, and context changes.
 
 ```
 index.html      screens, SVG icon sprite, the groove brand mark
@@ -98,8 +98,8 @@ js/
   main.js       boot, screen routing, event wiring
   auth.js       OAuth 2.0 PKCE, token refresh
   spotify.js    API client, 429 handling
-  albums.js     pool building, spiralPosition
-  wall.js       the Wall: spiral layout, camera, keyboard nav, journey thread
+  albums.js     pool building, scoring, caching
+  wall.js       the Wall: 3D sphere layout, drag rotation, keyboard nav, journey thread
   playback.js   Web Playback SDK + Spotify Connect fallback
   ending.js     end-of-album detection (pure functions)
   ceremony.js   needle drop, crackle (Web Audio), tonearm arc, runout groove

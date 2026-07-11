@@ -105,8 +105,33 @@ button { cursor: pointer; }
 }
 :focus:not(:focus-visible) { outline: none; }
 
-.screen { min-height: 100vh; }
-.screen[hidden] { display: none; }
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+
+.screen { flex: 1 1 auto; min-height: 0; }
+/* !important: several screens (#screen-setup, #screen-loading, #screen-app)
+   set `display` on their bare ID selector, which otherwise outranks this
+   class+attribute rule by CSS specificity and defeats the `hidden` attribute. */
+.screen[hidden] { display: none !important; }
+
+.app-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 24px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--bone-dim);
+  font-size: 13px;
+  padding: 14px 2px;
+  min-height: 44px;
+  transition: color var(--dur-touch) var(--ease), border-color var(--dur-touch) var(--ease);
+}
+.tab-btn:hover { color: var(--bone); }
+.tab-btn[aria-current="page"] { color: var(--bone); border-bottom-color: var(--amber); }
 
 .offline-banner {
   position: fixed;
@@ -353,7 +378,7 @@ button { cursor: pointer; }
 
 /* -------------------- App header -------------------- */
 
-#screen-app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+#screen-app { display: flex; flex-direction: column; overflow: hidden; }
 
 .app-header {
   display: flex;
@@ -383,19 +408,29 @@ button { cursor: pointer; }
   flex: 1 1 auto;
   overflow: hidden;
   background: var(--obsidian);
+  perspective: 1400px;
 }
+/* The Wall is a full 3D sphere ("infinity ball"): .wall-container is a
+   zero-size pivot centred in the viewport; each .wall-cell is placed by
+   its own fixed rotateY/rotateX/translateZ (set inline, per spherePosition
+   in wall.js), and the container's own transform (scale + rotateX + rotateY,
+   applied in wall.js) is the only thing that changes during drag/zoom. */
 .wall-container {
   position: absolute;
-  top: 0;
-  left: 0;
-  transform-origin: 0 0;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
   will-change: transform;
 }
 .wall-cell {
   position: absolute;
-  width: var(--cell-size, 180px);
-  height: var(--cell-size, 180px);
-  padding: 6px;
+  top: calc(var(--cell-size, 150px) / -2);
+  left: calc(var(--cell-size, 150px) / -2);
+  width: var(--cell-size, 150px);
+  height: var(--cell-size, 150px);
+  padding: 4px;
 }
 .wall-cover {
   position: relative;
@@ -407,6 +442,7 @@ button { cursor: pointer; }
   padding: 0;
   overflow: visible;
   opacity: 0.7;
+  backface-visibility: hidden;
   transition: opacity var(--dur-breath) var(--ease), filter var(--dur-touch) var(--ease);
 }
 .wall-cover img {
@@ -438,7 +474,11 @@ button { cursor: pointer; }
 }
 .wall-cover:hover .label, .wall-cover:focus-visible .label { opacity: 1; transform: translateY(0); }
 
-.wall-thread { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+/* Screen-space overlay (sibling of .wall-container, not inside its 3D
+   transform): great-circle paths have no flat representation, so the
+   thread is redrawn from each played tile's live projected position
+   instead (see updateThreadPositions() in wall.js). */
+.wall-thread { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .wall-thread path { fill: none; stroke: var(--amber); stroke-width: 3; opacity: 0.6; }
 
 .wall-viewport { cursor: grab; }
@@ -527,7 +567,7 @@ body.wall-zoomed-out .wall-cover:focus-visible { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   .mark--loading { animation: none; }
-  .wall-cover, .ceremony-cover, .ceremony-disc, .ceremony-text, .wall-thread path { transition-duration: 150ms !important; animation-duration: 1ms !important; }
+  .wall-cover, .wall-container, .ceremony-cover, .ceremony-disc, .ceremony-text, .wall-thread path { transition-duration: 150ms !important; animation-duration: 1ms !important; }
 }
 
 /* -------------------- Player bar -------------------- */

@@ -1,69 +1,111 @@
-// The Wall: one grid, one camera. Spiral layout, CSS-transform pan/zoom,
-// keyboard grid navigation, and the journey thread (populated by journal.js).
+// The Wall: a full 3D sphere of covers ("infinity ball") rendered with CSS
+// 3D transforms, no framework. Drag rotates freely on both axes (no pitch
+// clamp, unlike a typical orbit camera) with inertia; wheel/pinch zooms.
+// The journey thread (populated by journal.js via main.js) is drawn as a
+// screen-space SVG overlay tracking each played tile's live projected
+// position, since a great-circle path has no native flat representation.
 
-import { spiralPosition } from './albums.js';
 import { el, escapeHtml } from './ui.js';
 
-export const CELL_SIZE = 180;
-const FRAME_CELLS = 3; // Default tapestry framing: a 3x3 region.
-const WALL_PADDING_CELLS = 1.5; // Extra breathing room when zoomed out to fit all.
-const MAX_SCALE = 1.4;
+export const CELL_SIZE = 150;
+const BASE_RADIUS = 620;
+const DEFAULT_ZOOM = 1;
+const FOCUS_ZOOM = 1.5;
+const FIT_ALL_ZOOM = 0.55;
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 2.2;
+const DRAG_SENSITIVITY = 0.25; // degrees per pixel
+const INERTIA_DECAY = 0.93; // per animation frame
+const INERTIA_STOP_THRESHOLD = 0.01; // degrees per frame
+
+const GOLDEN_ANGLE_RAD = Math.PI * (3 - Math.sqrt(5));
 
 /**
- * @param {HTMLElement} viewportEl the fixed-size clipping viewport
- * @param {HTMLElement} containerEl the transformed layer holding the cells
+ * Places `rank` (0-indexed of `total`) evenly across a full sphere using a
+ * golden-angle spiral: pole to pole in `phiDeg` (-90 to 90), wrapping
+ * `thetaDeg` (0 to 360) by the golden angle each step. Pure and
+ * deterministic, mirroring the old flat spiralPosition(rank).
+ * @param {number} rank
+ * @param {number} total
+ * @returns {{thetaDeg: number, phiDeg: number}}
+ */
+export function spherePosition(rank, total) {
+  if (!Number.isInteger(rank) || rank < 0) {
+    throw new RangeError('spherePosition expects a non-negative integer rank');
+  }
+  if (!Number.isInteger(total) || total < 1) {
+    throw new RangeError('spherePosition expects a positive integer total');
+  }
+  if (rank >= total) {
+    throw new RangeError('spherePosition rank must be less than total');
+  }
+
+  const y = total === 1 ? 0 : 1 - (rank / (total - 1)) * 2; // 1 .. -1
+  const phiRad = Math.acos(Math.max(-1, Math.min(1, y))); // 0 .. PI
+  const thetaRad = (GOLDEN_ANGLE_RAD * rank) % (2 * Math.PI);
+
+  return {
+    thetaDeg: thetaRad * (180 / Math.PI),
+    phiDeg: phiRad * (180 / Math.PI) - 90, // -90 (near pole) .. 90 (far pole)
+  };
+}
+
+function sphereUnitVector(thetaDeg, phiDeg) {
+  const thetaRad = thetaDeg * (Math.PI / 180);
+  const phiRad = (phiDeg + 90) * (Math.PI / 180); // back to 0..PI polar
+  return {
+    x: Math.sin(phiRad) * Math.sin(thetaRad),
+    y: Math.cos(phiRad),
+    z: Math.sin(phiRad) * Math.cos(thetaRad),
+  };
+}
+
+function angularDistanceDeg(a, b) {
+  const va = sphereUnitVector(a.thetaDeg, a.phiDeg);
+  const vb = sphereUnitVector(b.thetaDeg, b.phiDeg);
+  const dot = va.x * vb.x + va.y * vb.y + va.z * vb.z;
+  return Math.acos(Math.max(-1, Math.min(1, dot))) * (180 / Math.PI);
+}
+
+function computeRadius(count) {
+  return Math.max(420, Math.round(BASE_RADIUS * Math.sqrt(Math.max(1, count) / 40)));
+}
+
+/**
+ * @param {HTMLElement} viewportEl the fixed-size clipping/perspective viewport
+ * @param {HTMLElement} containerEl the 3D-transformed layer holding the cells
  * @param {Array} pool album pool entries, each with a numeric `rank`
  * @param {{onSelect: (entry: object) => void, onZoomOut?: () => void}} handlers
  */
 export function initWall(viewportEl, containerEl, pool, handlers) {
   containerEl.style.setProperty('--cell-size', `${CELL_SIZE}px`);
+  const radius = computeRadius(pool.length);
 
   const byId = new Map();
-  const byCoord = new Map();
-  let minCol = 0, maxCol = 0, minRow = 0, maxRow = 0;
 
   pool.forEach((entry) => {
-    const { col, row } = spiralPosition(entry.rank);
-    const cellEl = renderCell(entry, col, row);
+    const { thetaDeg, phiDeg } = spherePosition(entry.rank, pool.length);
+    const cellEl = renderCell(entry, thetaDeg, phiDeg, radius);
     containerEl.appendChild(cellEl);
-    const record = { entry, col, row, el: cellEl, played: false };
-    byId.set(entry.id, record);
-    byCoord.set(coordKey(col, row), record);
-    minCol = Math.min(minCol, col); maxCol = Math.max(maxCol, col);
-    minRow = Math.min(minRow, row); maxRow = Math.max(maxRow, row);
+    byId.set(entry.id, { entry, thetaDeg, phiDeg, el: cellEl, played: false });
   });
 
-  containerEl.style.width = `${(maxCol - minCol + 1) * CELL_SIZE}px`;
-  containerEl.style.height = `${(maxRow - minRow + 1) * CELL_SIZE}px`;
-
-  let camera = { scale: 1, tx: 0, ty: 0 };
+  let yaw = 0;
+  let pitch = 0;
+  let zoom = DEFAULT_ZOOM;
   let focusedId = pool[0]?.id ?? null;
   let currentId = null;
 
-  function coordKey(col, row) {
-    return `${col},${row}`;
-  }
-
-  function cellCentre(col, row) {
-    return { x: col * CELL_SIZE + CELL_SIZE / 2, y: row * CELL_SIZE + CELL_SIZE / 2 };
-  }
-
-  function renderCell(entry, col, row) {
+  function renderCell(entry, thetaDeg, phiDeg, r) {
     const button = el('button', {
       class: 'wall-cover',
       type: 'button',
       dataset: { albumId: entry.id },
       'aria-label': `${entry.name} by ${entry.artist}`,
       tabindex: '-1',
-      onClick: () => selectEntry(entry, { source: 'click' }),
+      onClick: () => selectEntry(entry),
       onKeydown: (e) => onCellKeydown(e, entry),
     });
-    button.style.position = 'absolute';
-    button.style.left = `${col * CELL_SIZE}px`;
-    button.style.top = `${row * CELL_SIZE}px`;
-    button.style.width = `${CELL_SIZE}px`;
-    button.style.height = `${CELL_SIZE}px`;
-
     if (entry.image) {
       const img = el('img', { src: entry.image, alt: '', loading: 'lazy', decoding: 'async' });
       button.appendChild(img);
@@ -73,21 +115,49 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     button.appendChild(label);
 
     const wrapper = el('div', { class: 'wall-cell' }, [button]);
+    wrapper.style.transform = `rotateY(${thetaDeg}deg) rotateX(${phiDeg}deg) translateZ(${r}px)`;
     return wrapper;
   }
 
   function onCellKeydown(e, entry) {
-    const dirs = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
-    if (e.key in dirs) {
+    const dirs = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+    if (dirs.includes(e.key)) {
       e.preventDefault();
-      const record = byId.get(entry.id);
-      const [dCol, dRow] = dirs[e.key];
-      const target = byCoord.get(coordKey(record.col + dCol, record.row + dRow));
-      if (target) moveFocus(target.entry.id);
+      const target = findNeighborInDirection(entry.id, e.key);
+      if (target) moveFocus(target);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       zoomToFitAll();
     }
+  }
+
+  /** Direction-aware nearest neighbour by current on-screen projected position. */
+  function findNeighborInDirection(albumId, key) {
+    const currentEl = getCellEl(albumId);
+    if (!currentEl) return null;
+    const currentRect = currentEl.getBoundingClientRect();
+    const cx = currentRect.left + currentRect.width / 2;
+    const cy = currentRect.top + currentRect.height / 2;
+
+    let best = null;
+    let bestScore = Infinity;
+    for (const record of byId.values()) {
+      if (record.entry.id === albumId) continue;
+      const rect = record.el.querySelector('.wall-cover').getBoundingClientRect();
+      if (rect.width === 0) continue;
+      const dx = rect.left + rect.width / 2 - cx;
+      const dy = rect.top + rect.height / 2 - cy;
+      let primary;
+      let cross;
+      if (key === 'ArrowRight' && dx > 4) { primary = dx; cross = dy; }
+      else if (key === 'ArrowLeft' && dx < -4) { primary = -dx; cross = dy; }
+      else if (key === 'ArrowDown' && dy > 4) { primary = dy; cross = dx; }
+      else if (key === 'ArrowUp' && dy < -4) { primary = -dy; cross = dx; }
+      else continue;
+      const score = primary + Math.abs(cross) * 1.5;
+      if (score < bestScore) { bestScore = score; best = record.entry.id; }
+    }
+    return best;
   }
 
   function moveFocus(albumId) {
@@ -100,46 +170,34 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     focusedId = albumId;
   }
 
-  function selectEntry(entry, { source } = {}) {
+  function selectEntry(entry) {
     const record = byId.get(entry.id);
     if (!record) return;
     const btn = record.el.querySelector('.wall-cover');
     if (btn.classList.contains('is-spent') || btn.classList.contains('is-unavailable')) return;
     moveFocus(entry.id);
     panToAlbum(entry.id, { animate: true });
-    handlers.onSelect?.(entry, { source });
+    handlers.onSelect?.(entry);
   }
 
-  function applyCamera(next, { animate }) {
-    camera = next;
-    containerEl.style.transition = animate ? `transform var(--dur-breath) var(--ease)` : 'none';
-    containerEl.style.transform = `translate(${camera.tx}px, ${camera.ty}px) scale(${camera.scale})`;
+  function applyWorld({ animate }) {
+    containerEl.style.transition = animate ? 'transform var(--dur-breath) var(--ease)' : 'none';
+    containerEl.style.transform = `scale(${zoom}) rotateX(${pitch}deg) rotateY(${yaw}deg)`;
+    updateThreadPositions();
   }
 
   function panToAlbum(albumId, { animate = true } = {}) {
     const record = byId.get(albumId);
     if (!record) return;
-    const centre = cellCentre(record.col, record.row);
-    const scale = Math.min(
-      MAX_SCALE,
-      Math.min(viewportEl.clientWidth, viewportEl.clientHeight) / (FRAME_CELLS * CELL_SIZE)
-    ) || 1;
-    const tx = viewportEl.clientWidth / 2 - centre.x * scale;
-    const ty = viewportEl.clientHeight / 2 - centre.y * scale;
-    applyCamera({ scale, tx, ty }, { animate });
+    yaw = -record.thetaDeg;
+    pitch = -record.phiDeg;
+    zoom = FOCUS_ZOOM;
+    applyWorld({ animate });
   }
 
   function zoomToFitAll({ animate = true } = {}) {
-    const w = (maxCol - minCol + WALL_PADDING_CELLS * 2 + 1) * CELL_SIZE;
-    const h = (maxRow - minRow + WALL_PADDING_CELLS * 2 + 1) * CELL_SIZE;
-    const scale = Math.min(viewportEl.clientWidth / w, viewportEl.clientHeight / h);
-    const centre = {
-      x: ((minCol + maxCol + 1) / 2) * CELL_SIZE,
-      y: ((minRow + maxRow + 1) / 2) * CELL_SIZE,
-    };
-    const tx = viewportEl.clientWidth / 2 - centre.x * scale;
-    const ty = viewportEl.clientHeight / 2 - centre.y * scale;
-    applyCamera({ scale, tx, ty }, { animate });
+    zoom = FIT_ALL_ZOOM;
+    applyWorld({ animate });
     document.body.classList.add('wall-zoomed-out');
     handlers.onZoomOut?.();
   }
@@ -149,40 +207,97 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     panToAlbum(albumId, { animate: true });
   }
 
-  // ---- Wheel zoom, anchored on the cursor ----
+  function isZoomedOut() {
+    return document.body.classList.contains('wall-zoomed-out');
+  }
+
+  // ---- Wheel zoom ----
   viewportEl.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const rect = viewportEl.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
     const factor = e.deltaY < 0 ? 1.08 : 0.92;
-    const fitScale = Math.min(
-      viewportEl.clientWidth / ((maxCol - minCol + 1) * CELL_SIZE),
-      viewportEl.clientHeight / ((maxRow - minRow + 1) * CELL_SIZE)
-    );
-    const minScale = Math.min(fitScale, 1);
-    const newScale = Math.min(MAX_SCALE, Math.max(minScale, camera.scale * factor));
-    const ratio = newScale / camera.scale;
-    const tx = px - (px - camera.tx) * ratio;
-    const ty = py - (py - camera.ty) * ratio;
-    applyCamera({ scale: newScale, tx, ty }, { animate: false });
-    if (newScale <= minScale + 0.001) document.body.classList.add('wall-zoomed-out');
-    else document.body.classList.remove('wall-zoomed-out');
+    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
+    applyWorld({ animate: false });
+    document.body.classList.toggle('wall-zoomed-out', zoom <= FIT_ALL_ZOOM + 0.05);
   }, { passive: false });
 
-  // ---- Pinch zoom + drag pan (touch) ----
+  // ---- Drag-to-rotate (both axes, unclamped) with inertia ----
+  let inertiaFrame = null;
+  function cancelInertia() {
+    if (inertiaFrame) cancelAnimationFrame(inertiaFrame);
+    inertiaFrame = null;
+  }
+  function startInertia(velYaw, velPitch) {
+    let vYaw = velYaw;
+    let vPitch = velPitch;
+    function step() {
+      vYaw *= INERTIA_DECAY;
+      vPitch *= INERTIA_DECAY;
+      if (Math.abs(vYaw) < INERTIA_STOP_THRESHOLD && Math.abs(vPitch) < INERTIA_STOP_THRESHOLD) {
+        inertiaFrame = null;
+        return;
+      }
+      yaw += vYaw;
+      pitch += vPitch;
+      applyWorld({ animate: false });
+      inertiaFrame = requestAnimationFrame(step);
+    }
+    inertiaFrame = requestAnimationFrame(step);
+  }
+
+  let mouseDragStart = null;
+  let mouseLastMove = null;
+  let mouseVelocity = { yaw: 0, pitch: 0 };
+
+  viewportEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || e.target.closest('.wall-cover')) return;
+    cancelInertia();
+    mouseDragStart = { x: e.clientX, y: e.clientY, yaw, pitch };
+    mouseLastMove = { x: e.clientX, y: e.clientY, t: performance.now() };
+    mouseVelocity = { yaw: 0, pitch: 0 };
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!mouseDragStart) return;
+    const dx = e.clientX - mouseDragStart.x;
+    const dy = e.clientY - mouseDragStart.y;
+    yaw = mouseDragStart.yaw + dx * DRAG_SENSITIVITY;
+    pitch = mouseDragStart.pitch - dy * DRAG_SENSITIVITY;
+    applyWorld({ animate: false });
+
+    const now = performance.now();
+    const dt = Math.max(1, now - mouseLastMove.t);
+    mouseVelocity = {
+      yaw: ((e.clientX - mouseLastMove.x) * DRAG_SENSITIVITY / dt) * 16,
+      pitch: (-(e.clientY - mouseLastMove.y) * DRAG_SENSITIVITY / dt) * 16,
+    };
+    mouseLastMove = { x: e.clientX, y: e.clientY, t: now };
+  });
+  window.addEventListener('mouseup', () => {
+    if (!mouseDragStart) return;
+    mouseDragStart = null;
+    startInertia(mouseVelocity.yaw, mouseVelocity.pitch);
+  });
+
+  // ---- Touch: one finger rotates, two fingers pinch-zoom ----
+  let touchDragStart = null;
+  let touchLastMove = null;
+  let touchVelocity = { yaw: 0, pitch: 0 };
   let pinchStartDist = null;
-  let pinchStartScale = 1;
-  let dragStart = null;
-  let dragCameraStart = null;
+  let pinchStartZoom = 1;
+
+  function touchDistance(touches) {
+    return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+  }
 
   viewportEl.addEventListener('touchstart', (e) => {
+    cancelInertia();
     if (e.touches.length === 2) {
       pinchStartDist = touchDistance(e.touches);
-      pinchStartScale = camera.scale;
+      pinchStartZoom = zoom;
+      touchDragStart = null;
     } else if (e.touches.length === 1 && !e.target.closest('.wall-cover')) {
-      dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      dragCameraStart = { ...camera };
+      touchDragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, yaw, pitch };
+      touchLastMove = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now() };
+      touchVelocity = { yaw: 0, pitch: 0 };
     }
   }, { passive: true });
 
@@ -190,52 +305,32 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     if (e.touches.length === 2 && pinchStartDist) {
       e.preventDefault();
       const dist = touchDistance(e.touches);
-      const scale = Math.min(MAX_SCALE, Math.max(0.3, pinchStartScale * (dist / pinchStartDist)));
-      const mid = touchMidpoint(e.touches, viewportEl);
-      const ratio = scale / camera.scale;
-      const tx = mid.x - (mid.x - camera.tx) * ratio;
-      const ty = mid.y - (mid.y - camera.ty) * ratio;
-      applyCamera({ scale, tx, ty }, { animate: false });
-    } else if (e.touches.length === 1 && dragStart) {
-      const dx = e.touches[0].clientX - dragStart.x;
-      const dy = e.touches[0].clientY - dragStart.y;
-      applyCamera({ scale: camera.scale, tx: dragCameraStart.tx + dx, ty: dragCameraStart.ty + dy }, { animate: false });
+      zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchStartZoom * (dist / pinchStartDist)));
+      applyWorld({ animate: false });
+    } else if (e.touches.length === 1 && touchDragStart) {
+      const dx = e.touches[0].clientX - touchDragStart.x;
+      const dy = e.touches[0].clientY - touchDragStart.y;
+      yaw = touchDragStart.yaw + dx * DRAG_SENSITIVITY;
+      pitch = touchDragStart.pitch - dy * DRAG_SENSITIVITY;
+      applyWorld({ animate: false });
+
+      const now = performance.now();
+      const dt = Math.max(1, now - touchLastMove.t);
+      touchVelocity = {
+        yaw: ((e.touches[0].clientX - touchLastMove.x) * DRAG_SENSITIVITY / dt) * 16,
+        pitch: (-(e.touches[0].clientY - touchLastMove.y) * DRAG_SENSITIVITY / dt) * 16,
+      };
+      touchLastMove = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: now };
     }
   }, { passive: false });
 
   viewportEl.addEventListener('touchend', () => {
     pinchStartDist = null;
-    dragStart = null;
+    if (touchDragStart) {
+      touchDragStart = null;
+      startInertia(touchVelocity.yaw, touchVelocity.pitch);
+    }
   });
-
-  function touchDistance(touches) {
-    const dx = touches[0].clientX - touches[1].clientX;
-    const dy = touches[0].clientY - touches[1].clientY;
-    return Math.hypot(dx, dy);
-  }
-  function touchMidpoint(touches, viewport) {
-    const rect = viewport.getBoundingClientRect();
-    return {
-      x: (touches[0].clientX + touches[1].clientX) / 2 - rect.left,
-      y: (touches[0].clientY + touches[1].clientY) / 2 - rect.top,
-    };
-  }
-
-  // ---- Mouse drag pan ----
-  let mouseDragStart = null;
-  let mouseDragCameraStart = null;
-  viewportEl.addEventListener('mousedown', (e) => {
-    if (e.button !== 0 || e.target.closest('.wall-cover')) return;
-    mouseDragStart = { x: e.clientX, y: e.clientY };
-    mouseDragCameraStart = { ...camera };
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (!mouseDragStart) return;
-    const dx = e.clientX - mouseDragStart.x;
-    const dy = e.clientY - mouseDragStart.y;
-    applyCamera({ scale: camera.scale, tx: mouseDragCameraStart.tx + dx, ty: mouseDragCameraStart.ty + dy }, { animate: false });
-  });
-  window.addEventListener('mouseup', () => { mouseDragStart = null; });
 
   // ---- Public API ----
 
@@ -263,7 +358,6 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     byId.get(albumId)?.el.querySelector('.wall-cover').classList.add('is-unavailable');
   }
 
-  /** Ceremony hook: dim every cover except the one being dropped (DESIGN-SPEC §3, t=0). */
   function recedeAllExcept(albumId) {
     for (const [id, record] of byId) {
       const btn = record.el.querySelector('.wall-cover');
@@ -273,7 +367,6 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     }
   }
 
-  /** Ceremony hook: settle into the post-drop resting state (current at 100%, rest at 45%). */
   function enterRestingState(albumId) {
     for (const [id, record] of byId) {
       const btn = record.el.querySelector('.wall-cover');
@@ -291,11 +384,9 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
   function getNeighbors(albumId) {
     const record = byId.get(albumId);
     if (!record) return [];
-    const deltas = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
-    return deltas
-      .map(([dCol, dRow]) => byCoord.get(coordKey(record.col + dCol, record.row + dRow)))
-      .filter(Boolean)
-      .map((n) => ({ entry: n.entry, played: n.played }));
+    const others = Array.from(byId.values()).filter((r) => r.entry.id !== albumId);
+    others.sort((a, b) => angularDistanceDeg(record, a) - angularDistanceDeg(record, b));
+    return others.slice(0, 8).map((r) => ({ entry: r.entry, played: r.played }));
   }
 
   function getCellRect(albumId) {
@@ -315,40 +406,46 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     return byId.get(albumId)?.el.querySelector('.wall-cover') ?? null;
   }
 
-  function isZoomedOut() {
-    return document.body.classList.contains('wall-zoomed-out');
+  // ---- Journey thread: screen-space SVG overlay, redrawn live while active ----
+  let activeThreadIds = [];
+  let threadSvg = null;
+  let threadPath = null;
+
+  function updateThreadPositions() {
+    if (!threadPath || activeThreadIds.length < 2) return;
+    const viewportRect = viewportEl.getBoundingClientRect();
+    const points = activeThreadIds
+      .map((id) => getCellEl(id)?.getBoundingClientRect())
+      .filter(Boolean)
+      .map((r) => ({ x: r.left + r.width / 2 - viewportRect.left, y: r.top + r.height / 2 - viewportRect.top }));
+    if (points.length < 2) return;
+    threadPath.setAttribute('d', points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' '));
   }
 
   function renderThread(orderedAlbumIds) {
-    let svg = containerEl.querySelector('.wall-thread');
-    if (svg) svg.remove();
-    const points = orderedAlbumIds
-      .map((id) => byId.get(id))
-      .filter(Boolean)
-      .map((r) => cellCentre(r.col, r.row));
-    if (points.length < 2) return;
+    activeThreadIds = orderedAlbumIds.filter((id) => byId.has(id));
+    if (threadSvg) { threadSvg.remove(); threadSvg = null; threadPath = null; }
+    if (activeThreadIds.length < 2) return;
 
     const ns = 'http://www.w3.org/2000/svg';
-    svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('class', 'wall-thread');
-    svg.setAttribute('width', containerEl.style.width);
-    svg.setAttribute('height', containerEl.style.height);
-    const path = document.createElementNS(ns, 'path');
-    const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-    path.setAttribute('d', d);
-    const length = points.reduce((sum, p, i) => (i === 0 ? 0 : sum + Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y)), 0);
-    path.style.strokeDasharray = String(length);
-    path.style.strokeDashoffset = String(length);
-    svg.appendChild(path);
-    containerEl.insertBefore(svg, containerEl.firstChild);
-    // Draw itself in on the next frame.
+    threadSvg = document.createElementNS(ns, 'svg');
+    threadSvg.setAttribute('class', 'wall-thread');
+    threadPath = document.createElementNS(ns, 'path');
+    threadSvg.appendChild(threadPath);
+    viewportEl.appendChild(threadSvg);
+
+    updateThreadPositions();
     requestAnimationFrame(() => {
-      path.style.transition = 'stroke-dashoffset 900ms var(--ease)';
-      path.style.strokeDashoffset = '0';
+      const length = threadPath.getTotalLength();
+      threadPath.style.strokeDasharray = String(length);
+      threadPath.style.strokeDashoffset = String(length);
+      threadPath.getBoundingClientRect(); // force reflow before transitioning.
+      threadPath.style.transition = 'stroke-dashoffset 900ms var(--ease)';
+      threadPath.style.strokeDashoffset = '0';
     });
   }
 
-  // Initial framing: centred on the Wall's centre (rank 0).
+  // Initial framing: centred on the highest-scored album (rank 0).
   if (pool.length > 0) {
     panToAlbum(pool[0].id, { animate: false });
     getCellEl(pool[0].id).tabIndex = 0;

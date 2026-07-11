@@ -17,7 +17,7 @@
 <div id="summary"></div>
 
 <script type="module">
-import { spiralPosition } from './js/albums.js';
+import { spherePosition } from './js/wall.js';
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './js/ending.js';
 
 const results = document.getElementById('results');
@@ -50,55 +50,45 @@ function eq(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-// ---------- spiralPosition ----------
+// ---------- spherePosition ----------
 
-group('spiralPosition: rank 0 is the wall centre');
-assert(eq(spiralPosition(0), { col: 0, row: 0 }), 'rank 0 -> {col:0,row:0}');
-
-group('spiralPosition: ring 1 (ranks 1-8) is the exact Moore neighbourhood, in order');
-const ring1Expected = [
-  { col: 1, row: 0 }, { col: 1, row: 1 }, { col: 0, row: 1 }, { col: -1, row: 1 },
-  { col: -1, row: 0 }, { col: -1, row: -1 }, { col: 0, row: -1 }, { col: 1, row: -1 },
-];
-ring1Expected.forEach((expected, i) => {
-  const rank = i + 1;
-  assert(eq(spiralPosition(rank), expected), `rank ${rank} -> ${JSON.stringify(expected)}`);
-});
-
-function expectedRing(rank) {
-  if (rank === 0) return 0;
-  return Math.ceil((Math.sqrt(rank + 1) - 1) / 2);
-}
-
-group('spiralPosition: ranks 0-24 sit on the correct ring (max(|col|,|row|))');
-for (let rank = 0; rank <= 24; rank += 1) {
-  const { col, row } = spiralPosition(rank);
-  const ring = Math.max(Math.abs(col), Math.abs(row));
-  assert(ring === expectedRing(rank), `rank ${rank} ring ${ring} === expected ${expectedRing(rank)}`);
-}
-
-group('spiralPosition: ranks 25-120 stay on the correct ring');
-for (let rank = 25; rank <= 120; rank += 1) {
-  const { col, row } = spiralPosition(rank);
-  const ring = Math.max(Math.abs(col), Math.abs(row));
-  assert(ring === expectedRing(rank), `rank ${rank} ring ${ring} === expected ${expectedRing(rank)}`);
-}
-
-group('spiralPosition: ranks 0-120 are all unique cells (no overlap)');
+group('spherePosition: rank 0 sits at one pole, last rank at the other');
+assert(eq(spherePosition(0, 40), { thetaDeg: 0, phiDeg: -90 }), 'rank 0 of 40 -> pole (theta 0, phi -90)');
 {
+  const last = spherePosition(39, 40);
+  assert(Math.abs(last.phiDeg - 90) < 1e-9, 'rank 39 of 40 -> phiDeg === 90 (opposite pole)');
+}
+
+group('spherePosition: phiDeg always within [-90, 90] and thetaDeg within [0, 360)');
+for (const total of [9, 34, 120]) {
+  for (let rank = 0; rank < total; rank += 1) {
+    const { thetaDeg, phiDeg } = spherePosition(rank, total);
+    assert(phiDeg >= -90 - 1e-9 && phiDeg <= 90 + 1e-9, `total ${total} rank ${rank} phiDeg ${phiDeg.toFixed(2)} in range`);
+    assert(thetaDeg >= 0 && thetaDeg < 360, `total ${total} rank ${rank} thetaDeg ${thetaDeg.toFixed(2)} in range`);
+  }
+}
+
+group('spherePosition: distinct ranks land on distinct points (no duplicate placements)');
+for (const total of [9, 34, 120]) {
   const seen = new Set();
   let allUnique = true;
-  for (let rank = 0; rank <= 120; rank += 1) {
-    const key = JSON.stringify(spiralPosition(rank));
+  for (let rank = 0; rank < total; rank += 1) {
+    const { thetaDeg, phiDeg } = spherePosition(rank, total);
+    const key = `${thetaDeg.toFixed(4)},${phiDeg.toFixed(4)}`;
     if (seen.has(key)) allUnique = false;
     seen.add(key);
   }
-  assert(allUnique, 'all 121 cells (ranks 0-120) are distinct');
+  assert(allUnique, `total ${total}: all ${total} placements are distinct`);
 }
 
-group('spiralPosition: throws on invalid input');
-assert((() => { try { spiralPosition(-1); return false; } catch { return true; } })(), 'rejects negative rank');
-assert((() => { try { spiralPosition(1.5); return false; } catch { return true; } })(), 'rejects non-integer rank');
+group('spherePosition: deterministic (same inputs, same outputs)');
+assert(eq(spherePosition(12, 60), spherePosition(12, 60)), 'calling twice with the same rank/total is stable');
+
+group('spherePosition: throws on invalid input');
+assert((() => { try { spherePosition(-1, 10); return false; } catch { return true; } })(), 'rejects negative rank');
+assert((() => { try { spherePosition(1.5, 10); return false; } catch { return true; } })(), 'rejects non-integer rank');
+assert((() => { try { spherePosition(10, 10); return false; } catch { return true; } })(), 'rejects rank >= total');
+assert((() => { try { spherePosition(0, 0); return false; } catch { return true; } })(), 'rejects non-positive total');
 
 // ---------- ending detection (SDK path) ----------
 // SDK state shape (subset used): { track_window: { current_track: { id, duration_ms }, next_tracks: [] },

@@ -65,6 +65,12 @@
 
   <div id="offline-banner" class="offline-banner" hidden role="status">You're offline. The music may continue; the room will catch up when you're back.</div>
 
+  <nav id="app-tabs" class="app-tabs" hidden aria-label="Longplayur sections">
+    <button id="tab-wall" class="tab-btn" type="button">Now playing</button>
+    <button id="tab-record-bag" class="tab-btn" type="button">Record bag</button>
+    <button id="tab-setup" class="tab-btn" type="button">Setup</button>
+  </nav>
+
   <!-- Setup: the sleeve back -->
   <section id="screen-setup" class="screen">
     <div class="sleeve">
@@ -114,8 +120,16 @@
 
       <p class="premium-note">Spotify requires a Premium account for this.</p>
 
-      <div class="setup-actions">
+      <div id="setup-connect-panel" class="setup-actions">
         <button id="connect-button" class="btn-primary" type="button" disabled>Connect Spotify</button>
+      </div>
+
+      <div id="setup-connected-panel" class="setup-actions" hidden>
+        <p class="deadwax">CONNECTED</p>
+        <button id="setup-sign-out" class="link-btn" type="button">Sign out</button>
+      </div>
+
+      <div class="setup-actions">
         <button id="test-connection-link" class="link-btn" type="button" hidden>Test connection</button>
       </div>
 

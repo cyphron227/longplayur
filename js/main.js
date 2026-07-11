@@ -34,10 +34,21 @@ const screens = {
   recordBag: document.getElementById('screen-record-bag'),
 };
 
+// Tabs only apply to the three screens reachable once connected; 'loading'
+// has no tab of its own and simply leaves the previous tab's state as-is.
+const tabsByScreen = { app: 'tab-wall', recordBag: 'tab-record-bag', setup: 'tab-setup' };
+
 function showScreen(name) {
   for (const [key, node] of Object.entries(screens)) {
     if (!node) continue;
     node.hidden = key !== name;
+  }
+  if (name === 'setup') syncSetupPanels();
+  for (const [key, tabId] of Object.entries(tabsByScreen)) {
+    const tabBtn = document.getElementById(tabId);
+    if (!tabBtn) continue;
+    if (key === name) tabBtn.setAttribute('aria-current', 'page');
+    else tabBtn.removeAttribute('aria-current');
   }
 }
 
@@ -45,9 +56,23 @@ const redirectUriEl = document.getElementById('redirect-uri');
 const clientIdInput = document.getElementById('client-id-input');
 const clientIdError = document.getElementById('client-id-error');
 const connectButton = document.getElementById('connect-button');
+const setupConnectPanel = document.getElementById('setup-connect-panel');
+const setupConnectedPanel = document.getElementById('setup-connected-panel');
+const setupSignOutBtn = document.getElementById('setup-sign-out');
 const testConnectionLink = document.getElementById('test-connection-link');
 const setupError = document.getElementById('setup-error');
 const diagnostics = document.getElementById('diagnostics');
+const appTabs = document.getElementById('app-tabs');
+const tabWall = document.getElementById('tab-wall');
+const tabRecordBagBtn = document.getElementById('tab-record-bag');
+const tabSetup = document.getElementById('tab-setup');
+
+/** Setup doubles as first-run onboarding and a "connection settings" tab. */
+function syncSetupPanels() {
+  const connected = auth.hasSession();
+  setupConnectPanel.hidden = connected;
+  setupConnectedPanel.hidden = !connected;
+}
 const copyRedirectBtn = document.getElementById('copy-redirect-uri');
 
 redirectUriEl.textContent = auth.getRedirectUri();
@@ -306,10 +331,12 @@ const btnNewSide = document.getElementById('btn-new-side');
 
 const noteDebounceTimers = new Map();
 
-btnRecordBag.addEventListener('click', () => {
+function openRecordBag() {
   renderRecordBag();
   showScreen('recordBag');
-});
+}
+
+btnRecordBag.addEventListener('click', openRecordBag);
 btnCloseRecordBag.addEventListener('click', () => showScreen('app'));
 
 btnNewSide.addEventListener('click', () => {
@@ -317,6 +344,14 @@ btnNewSide.addEventListener('click', () => {
   currentSideId = null;
   renderJourneyThread();
 });
+
+// ---------------------------------------------------------------------
+// Top tab navigation (Now playing / Record bag / Setup), shown once connected
+// ---------------------------------------------------------------------
+
+tabWall.addEventListener('click', () => showScreen('app'));
+tabRecordBagBtn.addEventListener('click', openRecordBag);
+tabSetup.addEventListener('click', () => showScreen('setup'));
 
 function svgIcon(iconId) {
   const ns = 'http://www.w3.org/2000/svg';
@@ -508,6 +543,7 @@ async function initPlaybackForApp() {
 // ---------------------------------------------------------------------
 
 async function enterApp({ forceRefresh = false } = {}) {
+  show(appTabs); // enterApp is only ever called once auth.hasSession() is true.
   showScreen('loading');
   try {
     let pool;
@@ -538,7 +574,7 @@ async function enterApp({ forceRefresh = false } = {}) {
   }
 }
 
-document.getElementById('btn-sign-out').addEventListener('click', () => {
+function performSignOut() {
   playback.teardown();
   if (currentAlbumId) {
     retireDisc(currentAlbumId);
@@ -546,11 +582,15 @@ document.getElementById('btn-sign-out').addEventListener('click', () => {
   }
   currentSideId = null;
   auth.signOut();
+  hide(appTabs);
   showScreen('setup');
   hide(setupError);
   hide(diagnostics);
   hide(testConnectionLink);
-});
+}
+
+document.getElementById('btn-sign-out').addEventListener('click', performSignOut);
+setupSignOutBtn.addEventListener('click', performSignOut);
 
 async function boot() {
   if (callbackParams.code || callbackParams.error) {
