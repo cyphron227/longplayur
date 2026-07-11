@@ -38,9 +38,9 @@ Longplayur has no build step and no absolute root paths, so it works from a proj
 
 ### Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YOUR_USERNAME/longplayur)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cyphron227/longplayur)
 
-Replace `YOUR_USERNAME` above once this is pushed to your own GitHub account. Vercel needs no build command and no environment variables; it is a static site.
+Vercel needs no build command and no environment variables; it is a static site.
 
 ## First-run setup
 
