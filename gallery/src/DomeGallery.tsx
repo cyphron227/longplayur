@@ -8,15 +8,23 @@
 //      host app can drive the camera programmatically, reusing the
 //      component's own computeItemBaseRotation() math.
 //   3. The handful of Tailwind utility classNames used in the original
-//      are replaced with a small hand-written CSS block appended to the
-//      component's own injected <style> tag, so this can compile without
-//      pulling in a Tailwind build step. No visual behaviour changes.
+//      are replaced with a small hand-written CSS block, so this can
+//      compile without pulling in a Tailwind build step. No visual
+//      behaviour changes.
 //   4. An onKeyDown handler on each tile firing the same activation as a
 //      click. The original gives tiles role="button" + tabIndex={0} but
 //      never wires Enter/Space, so keyboard activation silently did
 //      nothing even in the upstream component.
+//   5. The original injects its CSS at runtime via
+//      <style dangerouslySetInnerHTML>. Longplayur's CSP is `style-src
+//      'self'` with no 'unsafe-inline', which blocks that (React's
+//      style={{...}} props elsewhere are unaffected -- those go through
+//      the CSSOM property setter, which style-src does not restrict; only
+//      literal <style> elements and style="..." attributes are). Moved
+//      verbatim into DomeGallery.css and imported normally instead.
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useCallback } from 'react';
 import { useGesture } from '@use-gesture/react';
+import './DomeGallery.css';
 
 type ImageItem = string | { src: string; alt?: string };
 
@@ -756,112 +764,8 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
     };
   }, []);
 
-  const cssStyles = `
-    .sphere-root {
-      --radius: 520px;
-      --viewer-pad: 72px;
-      --circ: calc(var(--radius) * 3.14);
-      --rot-y: calc((360deg / var(--segments-x)) / 2);
-      --rot-x: calc((360deg / var(--segments-y)) / 2);
-      --item-width: calc(var(--circ) / var(--segments-x));
-      --item-height: calc(var(--circ) / var(--segments-y));
-      position: relative;
-      width: 100%;
-      height: 100%;
-    }
-
-    .sphere-root * { box-sizing: border-box; }
-    .sphere, .sphere-item, .item__image { transform-style: preserve-3d; }
-
-    .stage {
-      width: 100%;
-      height: 100%;
-      display: grid;
-      place-items: center;
-      position: absolute;
-      inset: 0;
-      margin: auto;
-      perspective: calc(var(--radius) * 2);
-      perspective-origin: 50% 50%;
-    }
-
-    .sphere {
-      transform: translateZ(calc(var(--radius) * -1));
-      will-change: transform;
-      position: absolute;
-    }
-
-    .sphere-item {
-      width: calc(var(--item-width) * var(--item-size-x));
-      height: calc(var(--item-height) * var(--item-size-y));
-      position: absolute;
-      top: -999px;
-      bottom: -999px;
-      left: -999px;
-      right: -999px;
-      margin: auto;
-      transform-origin: 50% 50%;
-      backface-visibility: hidden;
-      transition: transform 300ms;
-      transform: rotateY(calc(var(--rot-y) * (var(--offset-x) + ((var(--item-size-x) - 1) / 2)) + var(--rot-y-delta, 0deg)))
-                 rotateX(calc(var(--rot-x) * (var(--offset-y) - ((var(--item-size-y) - 1) / 2)) + var(--rot-x-delta, 0deg)))
-                 translateZ(var(--radius));
-    }
-
-    .sphere-root[data-enlarging="true"] .scrim {
-      opacity: 1 !important;
-      pointer-events: all !important;
-    }
-
-    @media (max-aspect-ratio: 1/1) {
-      .viewer-frame {
-        height: auto !important;
-        width: 100% !important;
-      }
-    }
-
-    .item__image {
-      position: absolute;
-      inset: 10px;
-      border-radius: var(--tile-radius, 12px);
-      overflow: hidden;
-      cursor: pointer;
-      backface-visibility: hidden;
-      -webkit-backface-visibility: hidden;
-      transition: transform 300ms;
-      pointer-events: auto;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
-      display: block;
-      background-color: #e5e7eb;
-    }
-    .item__image--reference {
-      position: absolute;
-      inset: 10px;
-      pointer-events: none;
-    }
-    .item__image:focus-visible {
-      outline: 2px solid #E8B45A;
-      outline-offset: 2px;
-    }
-
-    /* Hand-written equivalents of the handful of Tailwind utility classes
-       the original component uses, so this compiles without a Tailwind
-       build step. Purely mechanical; no visual change from the original. */
-    .dg-main { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; user-select: none; background: transparent; }
-    .dg-sphere-item-pos { position: absolute; margin: auto; }
-    .dg-tile-img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-    .dg-overlay-radial { position: absolute; inset: 0; margin: auto; z-index: 3; pointer-events: none; }
-    .dg-edge-top { position: absolute; left: 0; right: 0; top: 0; height: 120px; z-index: 5; pointer-events: none; transform: rotate(180deg); }
-    .dg-edge-bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; z-index: 5; pointer-events: none; }
-    .dg-viewer { position: absolute; inset: 0; z-index: 20; pointer-events: none; display: flex; align-items: center; justify-content: center; }
-    .dg-scrim { position: absolute; inset: 0; z-index: 10; pointer-events: none; opacity: 0; transition: opacity 500ms; }
-    .dg-viewer-frame { height: 100%; aspect-ratio: 1 / 1; display: flex; }
-  `;
-
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: cssStyles }} />
       <div
         ref={rootRef}
         className="sphere-root"

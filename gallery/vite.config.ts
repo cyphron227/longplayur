@@ -37,7 +37,15 @@ export default defineConfig({
       // import map. Force everything to be inlined.
       external: [],
       output: {
-        inlineDynamicImports: true
+        inlineDynamicImports: true,
+        // DomeGallery.css is imported normally (see DomeGallery.tsx) so
+        // Vite extracts it as a real, separate stylesheet rather than
+        // injecting it via a JS-created <style> tag at runtime -- the
+        // whole point, since the site's CSP (style-src 'self', no
+        // 'unsafe-inline') blocks inline <style> elements. Default
+        // asset naming would call this "longplayur-gallery-build.css"
+        // (after package.json's name); name it to match the JS bundle.
+        assetFileNames: 'dome-gallery.bundle.css'
       }
     }
   }
