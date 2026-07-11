@@ -340,9 +340,15 @@ btnRecordBag.addEventListener('click', openRecordBag);
 btnCloseRecordBag.addEventListener('click', () => showScreen('app'));
 
 btnNewSide.addEventListener('click', () => {
+  // Closes whatever side is currently open in the journal (PRD F8); the
+  // next needle drop opens a fresh one. Nothing about current playback
+  // changes, which is why this needs an explicit confirmation, otherwise
+  // it looks like the button does nothing at all.
   journal.startNewSide();
   currentSideId = null;
   renderJourneyThread();
+  wallPrompt.textContent = 'New side. Drop the needle on something.';
+  announce('New side started.');
 });
 
 // ---------------------------------------------------------------------

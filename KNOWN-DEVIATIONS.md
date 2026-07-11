@@ -31,10 +31,12 @@ introduced by this integration:**
 
 1. It is a hemispheric dome with clamped vertical tilt, not a true full
    sphere: horizontal drag (yaw) spins freely, but vertical drag (pitch) is
-   always clamped to `maxVerticalRotationDeg`. The pasted example set this
-   to `0` (no vertical movement at all); `gallery/src/mount.tsx` defaults it
-   to `45` instead so vertical drag actually does something, but it will
-   never fully wrap top-to-bottom like a true globe with this component.
+   always clamped to `maxVerticalRotationDeg`. `gallery/src/mount.tsx`
+   locks this to `0` (matching the originally pasted example) so dragging
+   vertically never reveals blank space above/below the tile band; an
+   earlier version of this file briefly defaulted it to `45` at Yaron's
+   request, then reverted to `0` at his follow-up request. It will never
+   wrap top-to-bottom like a true globe with this component regardless.
 2. It tiles a fixed grid of slots (`segments` columns x 5 rows) by
    cyclically repeating the provided `images` array. A pool smaller than
    the slot count (the common case: 9 to 120 albums against `segments=34`'s
@@ -55,19 +57,19 @@ Consequences of the bridge:
   has no equivalent, though each tile still has an accessible name via
   `alt`/`aria-label`.
 - `prefers-reduced-motion` does not reach the component's own drag/focus/
-  inertia animations (they are fixed-duration, defined in its own injected
-  `<style>` tag, not this app's `--dur-*` tokens); it still applies to
-  everything this app draws on top (the ceremony overlay, the journey
-  thread).
+  inertia animations (they are fixed-duration, defined in
+  `gallery/src/DomeGallery.css`, not this app's `--dur-*` tokens); it
+  still applies to everything this app draws on top (the ceremony
+  overlay, the journey thread).
 - `spiralPosition`/`spherePosition` (this app's own pure layout function
   from the two earlier iterations) is gone; tile placement math now lives
   entirely inside the forked component, which was deliberately kept close
   to the vetted upstream source rather than re-exposed for unit testing.
 
-Not yet seen in a real browser: none of this (drag feel, tile repetition at
-various pool sizes, the `maxVerticalRotationDeg=45` compromise) has been
-seen rendered. If 45 degrees of tilt reads as too little, it is a single
-number in `gallery/src/mount.tsx` (rebuild after changing it).
+Not yet seen in a real browser: drag feel and tile repetition at various
+pool sizes. `maxVerticalRotationDeg` is a single number in
+`gallery/src/mount.tsx` if it ever needs revisiting (rebuild after
+changing it).
 
 ## Not yet verified against a live Spotify account (read this first)
 

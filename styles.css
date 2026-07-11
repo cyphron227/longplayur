@@ -59,7 +59,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html, body { height: 100%; }
+html, body { height: 100%; overflow: hidden; }
 body {
   margin: 0;
   background: var(--obsidian);
@@ -105,7 +105,11 @@ button { cursor: pointer; }
 }
 :focus:not(:focus-visible) { outline: none; }
 
-#app { display: flex; flex-direction: column; min-height: 100vh; }
+/* Hard-capped (not min-height): the page itself never scrolls. The only
+   thing that should ever appear to move is the gallery's own drag-driven
+   rotation inside #wall-viewport; everything else (header, tabs, player
+   bar) stays put. 100dvh accounts for mobile browser chrome show/hide. */
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
 
 .screen { flex: 1 1 auto; min-height: 0; }
 /* !important: several screens (#screen-setup, #screen-loading, #screen-app)
@@ -231,10 +235,14 @@ button { cursor: pointer; }
 
 /* -------------------- Setup: the sleeve back -------------------- */
 
+/* Another deliberate exception to "the page never scrolls": onboarding
+   content easily exceeds a small phone's viewport height. */
 #screen-setup {
   display: flex;
   justify-content: flex-start;
   padding: 48px 24px 80px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .sleeve {
   width: 100%;
@@ -546,7 +554,9 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 
 /* -------------------- Record bag -------------------- */
 
-#screen-record-bag { padding: 24px; max-width: 720px; margin: 0 auto; }
+/* The one deliberate exception to "the page never scrolls": a journal of
+   sides can grow arbitrarily long and has to be able to scroll somewhere. */
+#screen-record-bag { padding: 24px; max-width: 720px; margin: 0 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .record-bag-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .record-bag-header h1 { font-family: var(--font-serif); font-size: 26px; }
 .record-bag-list { display: flex; flex-direction: column; gap: 0; }
@@ -619,4 +629,24 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   .tagline { font-size: 24px; }
   .header-actions .text-btn span:not(.icon) { display: none; }
   .player-meta { max-width: 140px; }
+
+  /* Fixed and permanent: the player bar must never scroll off screen, and
+     nothing outside the gallery itself should scroll at all on a phone. */
+  .player-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .crackle-hint {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    z-index: 40;
+    background: var(--obsidian);
+  }
+  .fab { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 }

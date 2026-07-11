@@ -42,11 +42,10 @@ export function mountDomeGallery(container: HTMLElement, options: MountOptions):
       onImageClick: options.onImageClick,
       fit: options.fit ?? 0.8,
       minRadius: options.minRadius ?? 900,
-      // The pasted reference used 0 (no vertical tilt at all); Longplayur
-      // wants real up/down drag too, so this defaults much higher. The
-      // component still clamps vertical rotation structurally (it is a
-      // hemispheric dome, not a full sphere) -- see KNOWN-DEVIATIONS.md.
-      maxVerticalRotationDeg: options.maxVerticalRotationDeg ?? 45,
+      // Locked back to 0 (no vertical tilt) per explicit request, reverting
+      // an earlier "unlock vertical drag" change: dragging vertically must
+      // not reveal blank space above/below the tile band.
+      maxVerticalRotationDeg: options.maxVerticalRotationDeg ?? 0,
       segments: options.segments ?? 34,
       dragDampening: options.dragDampening ?? 2,
       grayscale: options.grayscale ?? false
