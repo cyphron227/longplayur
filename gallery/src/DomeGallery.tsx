@@ -31,6 +31,10 @@
 //   7. `onLongPress`/`onLongPressEnd`/`longPressMs` props: holding a tile
 //      fires onLongPress instead of the normal tap-select, and suppresses
 //      that tap so a long-press does not also select the tile on release.
+//      Ships with onContextMenu prevention and -webkit-touch-callout:none
+//      (DomeGallery.css), since without them iOS/Android's own native
+//      long-press handling (save-image menu, haptics) races this and
+//      usually wins, so onLongPress never gets a clean signal.
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useCallback } from 'react';
 import { useGesture } from '@use-gesture/react';
 import './DomeGallery.css';
@@ -867,6 +871,13 @@ const DomeGallery = forwardRef<DomeGalleryHandle, DomeGalleryProps>(function Dom
                     role="button"
                     tabIndex={0}
                     aria-label={it.alt || 'Open image'}
+                    onContextMenu={e => {
+                      // Without this, iOS/Android's native long-press context
+                      // menu (save image, haptic feedback, etc.) races the
+                      // custom long-press timer above and usually wins,
+                      // showing the OS menu instead of onLongPress's preview.
+                      if (onLongPress) e.preventDefault();
+                    }}
                     onClick={e => {
                       if (longPressFiredRef.current) {
                         longPressFiredRef.current = false;

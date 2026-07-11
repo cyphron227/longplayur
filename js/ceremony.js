@@ -525,20 +525,22 @@ export function runoutPrompt(atEdge) {
 }
 
 // ---------------------------------------------------------------------
-// Long-press preview: a quick peek at an album's cover, name, and artist,
-// without triggering playback. Distinct from the needle-drop ceremony
-// (no disc, no crackle, no camera pan, no dimming the rest of the wall)
-// -- just a fast show on press, hide on release.
+// Long-press preview: a sticky peek at an album's cover with its name and
+// artist shown large above it, plus an overlaid Play button. Distinct from
+// the needle-drop ceremony (no disc, no crackle, no dimming the rest of
+// the wall) and, unlike a plain hover peek, stays open after release so
+// there is time to actually press Play -- dismissed via the Play button,
+// tapping the scrim behind it, or Escape.
 // ---------------------------------------------------------------------
 
-let longPressPreview = null; // { albumId, cover, text }
+let longPressPreview = null; // { albumId, cover, text, scrim, playBtn, onKey }
 
 /**
  * @param {object} entry pool entry being previewed
- * @param {{wallApi: object, wallViewportEl: HTMLElement}} ctx
+ * @param {{wallApi: object, wallViewportEl: HTMLElement, onPlay: () => void}} ctx
  */
 export function showLongPressPreview(entry, ctx) {
-  const { wallApi, wallViewportEl } = ctx;
+  const { wallApi, wallViewportEl, onPlay } = ctx;
   hideLongPressPreview();
 
   const cellRect = wallApi.getCellRect(entry.id);
@@ -547,6 +549,10 @@ export function showLongPressPreview(entry, ctx) {
   const reduced = prefersReducedMotion();
   const dur = reduced ? TIMINGS.reducedMs : 200;
   const layer = ensureLayer(wallViewportEl);
+
+  const scrim = document.createElement('div');
+  scrim.className = 'preview-scrim';
+  layer.appendChild(scrim);
 
   const cover = document.createElement('div');
   cover.className = 'ceremony-cover';
@@ -564,11 +570,18 @@ export function showLongPressPreview(entry, ctx) {
   }
   layer.appendChild(cover);
 
+  const playBtn = document.createElement('button');
+  playBtn.type = 'button';
+  playBtn.className = 'preview-play-btn';
+  playBtn.setAttribute('aria-label', `Play ${entry.name}`);
+  playBtn.innerHTML = '<svg class="icon"><use href="#icon-play"/></svg>';
+  layer.appendChild(playBtn);
+
   const text = document.createElement('div');
   text.className = 'ceremony-text';
-  text.innerHTML = '<div class="ceremony-title"></div><div class="ceremony-deadwax"></div>';
-  text.querySelector('.ceremony-title').textContent = entry.name;
-  text.querySelector('.ceremony-deadwax').textContent = entry.artist;
+  text.innerHTML = '<div class="preview-title"></div><div class="preview-artist"></div>';
+  text.querySelector('.preview-title').textContent = entry.name;
+  text.querySelector('.preview-artist').textContent = entry.artist;
   layer.appendChild(text);
 
   cover.getBoundingClientRect(); // force layout before animating.
@@ -577,7 +590,9 @@ export function showLongPressPreview(entry, ctx) {
   const targetHeight = cellRect.height * 1.6;
   const targetLeft = wallViewportEl.clientWidth / 2 - targetWidth / 2;
   const targetTop = wallViewportEl.clientHeight / 2 - targetHeight / 2;
-  text.style.top = `${Math.max(8, targetTop - 56)}px`;
+  text.style.top = `${Math.max(8, targetTop - 76)}px`;
+  playBtn.style.left = `${targetLeft + targetWidth / 2}px`;
+  playBtn.style.top = `${targetTop + targetHeight / 2}px`;
 
   requestAnimationFrame(() => {
     cover.style.opacity = '1';
@@ -586,16 +601,29 @@ export function showLongPressPreview(entry, ctx) {
       width: `${targetWidth}px`, height: `${targetHeight}px`,
     });
     text.classList.add('is-visible');
+    scrim.classList.add('is-visible');
+    playBtn.classList.add('is-visible');
   });
 
-  longPressPreview = { albumId: entry.id, cover, text };
+  scrim.addEventListener('click', hideLongPressPreview);
+  playBtn.addEventListener('click', () => {
+    onPlay?.();
+    hideLongPressPreview();
+  });
+  const onKey = (e) => { if (e.key === 'Escape') hideLongPressPreview(); };
+  window.addEventListener('keydown', onKey);
+
+  longPressPreview = { albumId: entry.id, cover, text, scrim, playBtn, onKey };
 }
 
 export function hideLongPressPreview() {
   if (!longPressPreview) return;
-  const { cover, text } = longPressPreview;
+  const { cover, text, scrim, playBtn, onKey } = longPressPreview;
   longPressPreview = null;
+  window.removeEventListener('keydown', onKey);
   cover.style.opacity = '0';
   text.classList.remove('is-visible');
-  setTimeout(() => { cover.remove(); text.remove(); }, 220);
+  scrim.classList.remove('is-visible');
+  playBtn.classList.remove('is-visible');
+  setTimeout(() => { cover.remove(); text.remove(); scrim.remove(); playBtn.remove(); }, 220);
 }

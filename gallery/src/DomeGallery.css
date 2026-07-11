@@ -75,7 +75,14 @@
   transform: translateZ(0);
   display: block;
   background-color: #e5e7eb;
+  /* Without these, iOS/Android's native long-press handling (save-image
+     callout, text-selection haptics) races the custom long-press timer
+     and usually wins, so onLongPress's preview never gets a clean signal. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
+.item__image img { -webkit-touch-callout: none; }
 .item__image--reference {
   position: absolute;
   inset: 10px;

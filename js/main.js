@@ -220,9 +220,18 @@ function renderWallDom(pool) {
     // playing" hero cover (the other is the album finishing, in
     // handleRunout); settle it back into its cell so the gallery is free
     // to explore.
-    onGalleryDragMove: () => settleActiveOverlay(wallApi, { animate: true }),
-    onLongPress: (entry) => showLongPressPreview(entry, { wallApi, wallViewportEl: wallViewport }),
-    onLongPressEnd: () => hideLongPressPreview(),
+    onGalleryDragMove: () => {
+      settleActiveOverlay(wallApi, { animate: true });
+      hideLongPressPreview();
+    },
+    // The preview stays open after release (not tied to onLongPressEnd) so
+    // there's time to actually press Play; see hideLongPressPreview's own
+    // dismiss triggers (the Play button, tapping the scrim, or Escape).
+    onLongPress: (entry) => showLongPressPreview(entry, {
+      wallApi,
+      wallViewportEl: wallViewport,
+      onPlay: () => handleNeedleDrop(entry),
+    }),
   });
   const everDropped = localStorage.getItem(LS_EVER_DROPPED) === 'true';
   wallPrompt.textContent = everDropped
