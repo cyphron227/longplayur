@@ -4,7 +4,7 @@
 import * as auth from './auth.js';
 import { getMe, getTopTracks, SpotifyApiError } from './spotify.js';
 import { getAlbumPool, getCachedPool, isPoolFresh, buildAlbumPool, SparseHistoryError } from './albums.js';
-import { announce, show, hide, escapeHtml, formatDuration, formatDeadwaxDate } from './ui.js';
+import { announce, show, hide, escapeHtml, formatDuration, formatRunningTime, formatDeadwaxDate } from './ui.js';
 import { initWall } from './wall.js';
 import * as playback from './playback.js';
 import {
@@ -184,6 +184,7 @@ const wallPrompt = document.getElementById('wall-prompt');
 const playerBar = document.getElementById('player-bar');
 const playerArt = document.getElementById('player-art');
 const playerTrack = document.getElementById('player-track');
+const playerArtist = document.getElementById('player-artist');
 const playerAlbum = document.getElementById('player-album');
 const playerPlayPause = document.getElementById('player-playpause');
 const playerPrev = document.getElementById('player-prev');
@@ -261,7 +262,10 @@ async function handleNeedleDrop(entry) {
     });
     currentAlbumId = entry.id;
     localStorage.setItem(LS_EVER_DROPPED, 'true');
-    const { side, sideOrdinal } = journal.recordNeedleDrop(entry);
+    // prepareAlbum() has run by now (needleDrop awaits commitPlayback), so
+    // the context carries the album's real tracklist duration.
+    const durationMs = playback.getCurrentContext()?.totalDurationMs ?? null;
+    const { side, sideOrdinal } = journal.recordNeedleDrop(entry, { durationMs });
     currentSideId = side.id;
     wallPrompt.textContent = `Session ${sideOrdinal} · now playing`;
   } catch (err) {
@@ -295,9 +299,8 @@ function updatePlayerBar(viewModel) {
   show(playerBar);
   if (viewModel.albumArt) playerArt.src = viewModel.albumArt;
   playerTrack.textContent = viewModel.trackName || '';
-  playerAlbum.textContent = viewModel.albumName && viewModel.artistName
-    ? `${viewModel.albumName} · ${viewModel.artistName}`
-    : (viewModel.albumName || viewModel.artistName || '');
+  playerArtist.textContent = viewModel.artistName || '';
+  playerAlbum.textContent = viewModel.albumName || '';
 
   const playIcon = playerPlayPause.querySelector('use');
   playIcon.setAttribute('href', viewModel.isPlaying ? '#icon-pause' : '#icon-play');
@@ -328,7 +331,9 @@ playerPrev.addEventListener('click', () => playback.skipPrevious());
 playerNext.addEventListener('click', () => playback.skipNext());
 
 function syncCrackleButton() {
-  btnCrackle.setAttribute('aria-pressed', String(isCrackleEnabled()));
+  const on = isCrackleEnabled();
+  btnCrackle.setAttribute('aria-pressed', String(on));
+  btnCrackle.querySelector('span').textContent = on ? 'On' : 'Off';
 }
 syncCrackleButton();
 btnCrackle.addEventListener('click', () => {
@@ -341,7 +346,6 @@ btnCrackle.addEventListener('click', () => {
 // ---------------------------------------------------------------------
 
 const recordBagList = document.getElementById('record-bag-list');
-const btnRecordBag = document.getElementById('btn-record-bag');
 const btnCloseRecordBag = document.getElementById('btn-close-record-bag');
 const btnNewSide = document.getElementById('btn-new-side');
 
@@ -352,7 +356,6 @@ function openRecordBag() {
   showScreen('recordBag');
 }
 
-btnRecordBag.addEventListener('click', openRecordBag);
 btnCloseRecordBag.addEventListener('click', () => showScreen('app'));
 
 btnNewSide.addEventListener('click', () => {
@@ -363,6 +366,7 @@ btnNewSide.addEventListener('click', () => {
   journal.startNewSide();
   currentSideId = null;
   renderJourneyThread();
+  renderRecordBag();
   wallPrompt.textContent = 'New session. Drop the needle on something.';
   announce('New session started.');
 });
@@ -414,7 +418,10 @@ function renderSideRow(side, ordinal) {
   const headLabel = document.createElement('span');
   headLabel.className = 'deadwax';
   const recordWord = side.entries.length === 1 ? 'RECORD' : 'RECORDS';
-  headLabel.textContent = `SESSION ${ordinal} · ${formatDeadwaxDate(side.startedAt)} · ${side.entries.length} ${recordWord}`;
+  const parts = [`SESSION ${ordinal}`, formatDeadwaxDate(side.startedAt), `${side.entries.length} ${recordWord}`];
+  const runningMs = journal.sideDurationMs(side);
+  if (runningMs > 0) parts.push(formatRunningTime(runningMs));
+  headLabel.textContent = parts.join(' · ');
   head.append(headLabel, svgIcon('icon-chevron'));
   row.appendChild(head);
 
@@ -442,8 +449,8 @@ function renderSideRow(side, ordinal) {
   actions.className = 'side-actions';
   const exportBtn = document.createElement('button');
   exportBtn.type = 'button';
-  exportBtn.className = 'icon-btn';
-  exportBtn.append(svgIcon('icon-export'), document.createTextNode('Export this session'));
+  exportBtn.className = 'btn-primary btn-share';
+  exportBtn.append(svgIcon('icon-export'), document.createTextNode('Share this session'));
   exportBtn.addEventListener('click', () => handleExportSide(side, ordinal, exportBtn));
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
@@ -611,7 +618,6 @@ function performSignOut() {
   hide(testConnectionLink);
 }
 
-document.getElementById('btn-sign-out').addEventListener('click', performSignOut);
 setupSignOutBtn.addEventListener('click', performSignOut);
 
 async function boot() {

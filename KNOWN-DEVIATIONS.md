@@ -45,6 +45,44 @@ shelf"): `wallApi.zoomToFitAll()` still exists and still fires
 automatically from `runoutGroove()`'s atEdge case, but there is no longer
 a manual trigger for it in the UI.
 
+## Now-playing layout rework: no in-app header, settings live on Setup, new share card
+
+Per explicit request, superseding PRD F9 ("Settings (header, minimal) ...
+No settings page") and DESIGN-SPEC's header layout:
+
+- The main screen's header row (wordmark + Record bag / New session /
+  Crackle / Sign out) is gone. The groove mark now sits at the left of the
+  top tab bar, with no site name next to it; the tab bar is the only
+  chrome above the wall.
+- "New session" moved to the record bag page's header.
+- The crackle toggle moved to the Setup tab (a "Vinyl crackle" preference
+  row with an On/Off button). The one-time hint copy changed accordingly:
+  `CRACKLE ON · TOGGLE IN SETUP`, not "IN THE HEADER" as DESIGN-SPEC §3
+  specifies.
+- Sign out now exists only on the Setup tab (it was already there;
+  the header duplicate was removed).
+- The player bar is two rows: track, artist, and album name each get a
+  full-width ellipsized line of their own above the controls/progress row,
+  so long song names are no longer squeezed beside the controls. The
+  "Playing on {device}" label is hidden at phone widths to keep the
+  progress bar usable.
+- Record bag rows: the cover strip clips at the page width (`overflow:
+  hidden`, no horizontal scrolling), and the session heading now includes
+  the total running time of the session's albums. Durations are captured
+  at needle-drop time (`journal.recordNeedleDrop()` stores `durationMs`
+  from the prepared album context); entries recorded before this change
+  have no duration and contribute 0, so old sessions may show a low total
+  or none at all.
+- "Export this session" became an amber primary "Share this session"
+  button.
+- The share card (DESIGN-SPEC §4, and "Deliberate simplifications" item 4
+  below, now superseded) was redrawn: the session's covers fill a square
+  grid of 1, 4, 9, or 16 cells (smallest that fits; sessions beyond 16
+  albums show the first 16; unused cells get a quiet vinyl placeholder),
+  with the album count and total running time overlaid on a bottom
+  gradient scrim so the text stays readable over any cover art. The
+  played-order thread is no longer drawn on the card.
+
 ## The Wall is now the real react-bits DomeGallery, not the flat spiral grid in DESIGN-SPEC §2
 
 Superseded by explicit direction from Yaron after initial ship, in two
@@ -182,12 +220,9 @@ not escalating rather than by an explicit stop/start of the interval timer.
    audio file asset" in PRD F6. Sounds close to brown noise but has not been
    critically listened to on real speakers/headphones.
 
-4. **Share-card grid rounding.** DESIGN-SPEC §4 specifies a 480px first
-   cover "spanning columns 1 to 2" inside a 4-column, 224px-cell grid across
-   a 952px content width; those two numbers do not divide evenly. This build
-   uses the literal 480px and 224px values and computes the grid gap to fill
-   the remaining width, rather than deriving cover 1's size from the column
-   math. The visual difference is a few pixels.
+4. **Share-card grid rounding.** Superseded by the layout rework above:
+   the card no longer uses DESIGN-SPEC §4's 480px-hero-plus-224px-grid
+   layout at all; it is now a uniform square grid of 1, 4, 9, or 16 cells.
 
 5. **Mobile/iOS detection.** `playback.js` skips straight to the Connect
    fallback on iOS (including iPadOS, detected via

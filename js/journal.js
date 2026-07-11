@@ -54,7 +54,7 @@ function isSideOpen(side, now) {
  * the last side was explicitly closed or has gone stale (PRD's 6h rule).
  * @returns {{journal: object, side: object, sideOrdinal: number}}
  */
-export function recordNeedleDrop(entry) {
+export function recordNeedleDrop(entry, { durationMs = null } = {}) {
   const journal = loadJournal();
   const now = Date.now();
   let side = journal.sides[journal.sides.length - 1];
@@ -70,6 +70,7 @@ export function recordNeedleDrop(entry) {
     artist: entry.artist,
     image: entry.image,
     startedAt: now,
+    durationMs,
     note: '',
   });
 
@@ -113,4 +114,10 @@ export function getSide(sideId) {
 
 export function getLifetimeSideCount() {
   return loadJournal().sides.length;
+}
+
+/** Sum of the known album durations in a side. Entries recorded before
+ * durations were stored contribute 0, so this can undercount old sides. */
+export function sideDurationMs(side) {
+  return side.entries.reduce((sum, e) => sum + (e.durationMs || 0), 0);
 }

@@ -1,20 +1,22 @@
-// The share card: a 1080x1350 canvas per DESIGN-SPEC §4. Album art needs
+// The share card: a 1080x1350 canvas. The session's covers sit in a square
+// grid of 1, 4, 9 or 16 cells (whichever fits the count), with the album
+// count and total running time overlaid on a dark scrim so the text stays
+// readable whatever colours the covers happen to be. Album art needs
 // crossOrigin="anonymous" (Spotify's CDN sends CORS headers); if the canvas
 // is tainted anyway, or an image simply fails to load, we fall back to a
 // typographic card rather than failing the export outright.
 
-import { formatDeadwaxDate } from './ui.js';
+import { formatDeadwaxDate, formatRunningTime } from './ui.js';
+import { sideDurationMs } from './journal.js';
 
 const CANVAS_W = 1080;
 const CANVAS_H = 1350;
 const MARGIN = 64;
-const COVER1_SIZE = 480;
-const GRID_COLS = 4;
-const GRID_CELL = 224;
-const GRID_GAP = (CANVAS_W - MARGIN * 2 - GRID_COLS * GRID_CELL) / (GRID_COLS - 1);
+const GRID_SIZE = CANVAS_W - MARGIN * 2; // square grid area
+const GRID_TOP = MARGIN + 56 + 40; // below the title baseline
+const GRID_GAP = 16;
+const MAX_COVERS = 16;
 const CORNER_RADIUS = 8;
-const THREAD_COLOR = 'rgba(232, 180, 90, 0.6)';
-const THREAD_WIDTH = 3;
 
 function roundedRectPath(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -36,40 +38,80 @@ function loadImage(url) {
   });
 }
 
-function computeLayout(count) {
-  const rects = [];
-  if (count === 0) return rects;
-  const cover1Y = MARGIN + 56 + 40;
-  rects.push({ x: MARGIN, y: cover1Y, w: COVER1_SIZE, h: COVER1_SIZE });
-
-  const gridStartY = cover1Y + COVER1_SIZE + 24;
-  for (let i = 1; i < count; i += 1) {
-    const idx = i - 1;
-    const col = idx % GRID_COLS;
-    const row = Math.floor(idx / GRID_COLS);
-    rects.push({
-      x: MARGIN + col * (GRID_CELL + GRID_GAP),
-      y: gridStartY + row * (GRID_CELL + GRID_GAP),
-      w: GRID_CELL,
-      h: GRID_CELL,
-    });
-  }
-  return rects;
+/** 1, 4, 9 or 16 cells: the smallest square grid that holds the covers. */
+function gridDimension(count) {
+  if (count <= 1) return 1;
+  if (count <= 4) return 2;
+  if (count <= 9) return 3;
+  return 4;
 }
 
-function drawThread(ctx, rects) {
-  if (rects.length < 2) return;
+function computeGridCells(count) {
+  const g = gridDimension(count);
+  const gap = g === 1 ? 0 : GRID_GAP;
+  const cell = (GRID_SIZE - gap * (g - 1)) / g;
+  const cells = [];
+  for (let i = 0; i < g * g; i += 1) {
+    const col = i % g;
+    const row = Math.floor(i / g);
+    cells.push({
+      x: MARGIN + col * (cell + gap),
+      y: GRID_TOP + row * (cell + gap),
+      w: cell,
+      h: cell,
+    });
+  }
+  return cells;
+}
+
+/** A quiet vinyl-dark placeholder for grid cells beyond the session's count. */
+function drawEmptyCell(ctx, r) {
   ctx.save();
-  ctx.strokeStyle = THREAD_COLOR;
-  ctx.lineWidth = THREAD_WIDTH;
-  ctx.beginPath();
-  rects.forEach((r, i) => {
-    const cx = r.x + r.w / 2;
-    const cy = r.y + r.h / 2;
-    if (i === 0) ctx.moveTo(cx, cy);
-    else ctx.lineTo(cx, cy);
+  roundedRectPath(ctx, r.x, r.y, r.w, r.h, CORNER_RADIUS);
+  ctx.fillStyle = '#1B1A18';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(220,215,203,0.08)';
+  ctx.lineWidth = 2;
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  [0.38, 0.28, 0.18].forEach((f) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r.w * f, 0, Math.PI * 2);
+    ctx.stroke();
   });
-  ctx.stroke();
+  ctx.restore();
+}
+
+/** Bottom-of-grid scrim + stats. The gradient guarantees contrast against
+ * any cover art; the text shadow covers the near-transparent top edge. */
+function drawStatsOverlay(ctx, count, runningMs) {
+  const gridBottom = GRID_TOP + GRID_SIZE;
+  const scrimH = 360;
+  const scrimTop = gridBottom - scrimH;
+
+  ctx.save();
+  roundedRectPath(ctx, MARGIN, GRID_TOP, GRID_SIZE, GRID_SIZE, CORNER_RADIUS);
+  ctx.clip();
+  const gradient = ctx.createLinearGradient(0, scrimTop, 0, gridBottom);
+  gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  gradient.addColorStop(0.4, 'rgba(0, 0, 0, 0.55)');
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0.92)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(MARGIN, scrimTop, GRID_SIZE, scrimH);
+
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = '#DCD7CB';
+  ctx.font = '400 60px "DM Serif Display"';
+  ctx.textBaseline = 'alphabetic';
+  const recordWord = count === 1 ? 'record' : 'records';
+  ctx.fillText(`${count} ${recordWord}`, MARGIN + 40, gridBottom - 96);
+
+  if (runningMs > 0) {
+    ctx.fillStyle = '#E8B45A';
+    ctx.font = '400 30px "IBM Plex Mono"';
+    ctx.fillText(formatRunningTime(runningMs).toUpperCase(), MARGIN + 40, gridBottom - 44);
+  }
   ctx.restore();
 }
 
@@ -123,10 +165,11 @@ function renderTypographicFallback(side, deadwaxText) {
  */
 export async function exportSideCard(side, sideOrdinal) {
   const deadwaxText = `SESSION ${sideOrdinal} · ${formatDeadwaxDate(side.startedAt)} · LONGPLAYUR`;
+  const shownEntries = side.entries.slice(0, MAX_COVERS);
 
   let images;
   try {
-    images = await Promise.all(side.entries.map((e) => loadImage(e.image)));
+    images = await Promise.all(shownEntries.map((e) => loadImage(e.image)));
   } catch {
     return renderTypographicFallback(side, deadwaxText);
   }
@@ -138,16 +181,21 @@ export async function exportSideCard(side, sideOrdinal) {
 
   drawFrame(ctx, deadwaxText);
 
-  const rects = computeLayout(side.entries.length);
-  drawThread(ctx, rects); // drawn UNDER the covers.
-  images.forEach((img, i) => {
-    const r = rects[i];
+  const cells = computeGridCells(shownEntries.length);
+  cells.forEach((r, i) => {
+    const img = images[i];
+    if (!img) {
+      drawEmptyCell(ctx, r);
+      return;
+    }
     ctx.save();
     roundedRectPath(ctx, r.x, r.y, r.w, r.h, CORNER_RADIUS);
     ctx.clip();
     ctx.drawImage(img, r.x, r.y, r.w, r.h);
     ctx.restore();
   });
+
+  drawStatsOverlay(ctx, side.entries.length, sideDurationMs(side));
 
   try {
     return { dataUrl: canvas.toDataURL('image/png'), typographicFallback: false };

@@ -120,10 +120,12 @@ button { cursor: pointer; }
 .app-tabs {
   flex: 0 0 auto;
   display: flex;
+  align-items: center;
   gap: 24px;
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
 }
+.mark--tabs { width: 22px; height: 22px; flex: 0 0 auto; }
 .tab-btn {
   background: none;
   border: none;
@@ -359,6 +361,18 @@ button { cursor: pointer; }
 .diagnostics .diag-ok { color: var(--moss); }
 .diagnostics .diag-fail { color: var(--ember); }
 
+/* Preferences that used to live in the app header (crackle toggle). */
+.pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 0 4px;
+}
+.pref-copy h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.pref-copy p { color: var(--bone-dim); font-size: 13px; }
+.pref-row .icon-btn[aria-pressed="false"] { opacity: 0.5; }
+
 .sleeve-footer { margin-top: 56px; }
 .sleeve-footer hr { border: none; border-top: 1px solid var(--line); margin-bottom: 20px; }
 .sleeve-footer p { color: var(--bone-dim); font-size: 13px; margin-bottom: 8px; }
@@ -384,21 +398,9 @@ button { cursor: pointer; }
   color: var(--bone-dim);
 }
 
-/* -------------------- App header -------------------- */
+/* -------------------- Main app screen -------------------- */
 
 #screen-app { display: flex; flex-direction: column; overflow: hidden; }
-
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--line);
-  flex: 0 0 auto;
-}
-.wordmark-small { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
-.mark--small { width: 20px; height: 20px; }
-.header-actions { display: flex; align-items: center; gap: 4px; }
 
 .wall-prompt {
   font-family: var(--font-serif);
@@ -555,24 +557,29 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 
 /* -------------------- Player bar -------------------- */
 
+/* Two rows: track/artist/album each get a full-width line of their own so
+   long song names stay readable; controls and progress sit below. */
 .player-bar {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  gap: 10px;
   padding: 12px 20px;
   border-top: 1px solid var(--line);
   background: var(--obsidian-2);
 }
-.player-art { width: 44px; height: 44px; border-radius: 2px; object-fit: cover; flex: 0 0 auto; }
-.player-meta { min-width: 0; flex: 0 0 auto; max-width: 240px; }
-.player-track { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-top { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.player-art { width: 52px; height: 52px; border-radius: 2px; object-fit: cover; flex: 0 0 auto; }
+.player-meta { min-width: 0; flex: 1 1 auto; }
+.player-track { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-artist { font-size: 12px; color: var(--bone-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-album { font-size: 12px; color: var(--bone-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-bottom { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .player-controls { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 .player-progress-wrap { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
-.player-progress { flex: 1 1 auto; height: 1px; background: var(--line); position: relative; }
+.player-progress { flex: 1 1 auto; min-width: 40px; height: 1px; background: var(--line); position: relative; }
 .player-progress-fill { position: absolute; top: 0; left: 0; height: 1px; background: var(--amber); }
-.player-time { font-family: var(--font-mono); font-size: 11px; color: var(--bone-dim); letter-spacing: 0.04em; }
+.player-time { flex: 0 0 auto; font-family: var(--font-mono); font-size: 11px; color: var(--bone-dim); letter-spacing: 0.04em; }
 .player-device { font-family: var(--font-mono); font-size: 11px; color: var(--moss); letter-spacing: 0.04em; white-space: nowrap; }
 
 /* -------------------- Record bag -------------------- */
@@ -580,13 +587,16 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 /* The one deliberate exception to "the page never scrolls": a journal of
    sides can grow arbitrarily long and has to be able to scroll somewhere. */
 #screen-record-bag { padding: 24px; max-width: 720px; margin: 0 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.record-bag-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.record-bag-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
 .record-bag-header h1 { font-family: var(--font-serif); font-size: 26px; }
+.record-bag-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .record-bag-list { display: flex; flex-direction: column; gap: 0; }
 .side-row { border-bottom: 1px solid var(--line); padding: 18px 0; }
 .side-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; background: none; border: none; width: 100%; text-align: left; color: inherit; padding: 0; min-height: 44px; }
-.side-strip { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
-.side-strip img { width: 36px; height: 36px; border-radius: 2px; object-fit: cover; }
+/* Truncates at the page width: covers that don't fit are simply clipped,
+   never a horizontal scrollbar. */
+.side-strip { display: flex; gap: 6px; margin-top: 10px; align-items: center; overflow: hidden; max-width: 100%; }
+.side-strip img { width: 36px; height: 36px; border-radius: 2px; object-fit: cover; flex: 0 0 auto; }
 .side-thread { flex: 1 1 auto; height: 1px; background: var(--amber); opacity: 0.5; }
 .side-entries { margin-top: 16px; display: none; flex-direction: column; gap: 16px; }
 .side-entries.is-open { display: flex; }
@@ -606,7 +616,15 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   resize: vertical;
   min-height: 44px;
 }
-.side-actions { display: flex; gap: 8px; margin-top: 12px; }
+.side-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+/* The share/export action is the headline act of a finished session. */
+.btn-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.btn-share .icon { width: 18px; height: 18px; }
 .empty-record-bag { font-family: var(--font-serif); font-size: 18px; color: var(--bone-dim); text-align: center; padding: 64px 24px; }
 
 /* -------------------- Modal -------------------- */
@@ -650,8 +668,8 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 
 @media (max-width: 480px) {
   .tagline { font-size: 24px; }
-  .header-actions .text-btn span:not(.icon) { display: none; }
-  .player-meta { max-width: 140px; }
+  /* No room next to the progress bar on a phone; the times matter more. */
+  .player-device { display: none; }
 
   /* Fixed and permanent: the player bar must never scroll off screen, and
      nothing outside the gallery itself should scroll at all on a phone. */
@@ -667,7 +685,8 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
     position: fixed;
     left: 0;
     right: 0;
-    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    /* Sits just above the two-row player bar (art row + controls row). */
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
     z-index: 40;
     background: var(--obsidian);
   }
