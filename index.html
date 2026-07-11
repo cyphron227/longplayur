@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://sdk.scdn.co; connect-src 'self' https://accounts.spotify.com https://api.spotify.com; img-src 'self' https://*.scdn.co data:; style-src 'self'; font-src 'self'; frame-src https://sdk.scdn.co">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Longplayur &middot; whole albums, in order, on purpose</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Shared SVG sprite: icons (1.5px stroke, round caps) and the groove brand mark -->
+<svg class="sprite" aria-hidden="true">
+  <defs>
+    <symbol id="mark-groove" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="50" cy="50" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="86.4" cy="29" r="4" fill="#E8B45A"/>
+    </symbol>
+
+    <symbol id="icon-play" viewBox="0 0 24 24">
+      <path d="M7 5l11 7-11 7V5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-pause" viewBox="0 0 24 24">
+      <path d="M8 5v14M16 5v14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-previous" viewBox="0 0 24 24">
+      <path d="M17 5l-9 7 9 7V5zM6 5v14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-next" viewBox="0 0 24 24">
+      <path d="M7 5l9 7-9 7V5zM18 5v14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-zoom-out" viewBox="0 0 24 24">
+      <path d="M4 9V4h5M15 4h5v5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24">
+      <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-crackle" viewBox="0 0 24 24">
+      <path d="M3 15a3 3 0 000-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M3 18a6 6 0 000-12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M3 21a9 9 0 000-18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24">
+      <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24">
+      <rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-export" viewBox="0 0 24 24">
+      <path d="M12 15V4M8 8l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M5 15v3a2 2 0 002 2h10a2 2 0 002-2v-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-bin" viewBox="0 0 24 24">
+      <path d="M5 7h14M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M7 7l1 13a1 1 0 001 1h6a1 1 0 001-1l1-13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="app">
+
+  <div id="offline-banner" class="offline-banner" hidden role="status">You're offline. The music may continue; the room will catch up when you're back.</div>
+
+  <!-- Setup: the sleeve back -->
+  <section id="screen-setup" class="screen">
+    <div class="sleeve">
+      <header class="sleeve-header">
+        <svg class="mark mark--wordmark" viewBox="0 0 100 100"><use href="#mark-groove"/></svg>
+        <span class="wordmark">Longplayur</span>
+      </header>
+
+      <p class="tagline">Whole albums, in order, on purpose.</p>
+
+      <p class="why-byo">Spotify no longer opens its API to independent apps, so Longplayur can't offer a normal log-in. Instead you create your own free Spotify app. Five minutes, once. This page then runs entirely in your browser using it, and nothing about your listening ever leaves your machine.</p>
+
+      <ol class="steps">
+        <li class="step">
+          <span class="step-num">01</span>
+          <div class="step-body">
+            <h2>Create a Spotify app</h2>
+            <p>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify developer dashboard</a> and create an app. Any name and description will do.</p>
+          </div>
+        </li>
+        <hr class="step-rule">
+        <li class="step">
+          <span class="step-num">02</span>
+          <div class="step-body">
+            <h2>Set the redirect URI</h2>
+            <p>In your app's settings, add this exact redirect URI:</p>
+            <div class="mono-well">
+              <code id="redirect-uri"></code>
+              <button id="copy-redirect-uri" class="icon-btn" type="button" aria-label="Copy redirect URI">
+                <svg class="icon"><use href="#icon-copy"/></svg>
+                <span>Copy</span>
+              </button>
+            </div>
+          </div>
+        </li>
+        <hr class="step-rule">
+        <li class="step">
+          <span class="step-num">03</span>
+          <div class="step-body">
+            <h2>Paste your client ID</h2>
+            <p>Find it on your app's dashboard page.</p>
+            <input id="client-id-input" class="text-input" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Client ID" aria-label="Spotify client ID">
+            <p id="client-id-error" class="field-error" hidden></p>
+          </div>
+        </li>
+      </ol>
+
+      <p class="premium-note">Spotify requires a Premium account for this.</p>
+
+      <div class="setup-actions">
+        <button id="connect-button" class="btn-primary" type="button" disabled>Connect Spotify</button>
+        <button id="test-connection-link" class="link-btn" type="button" hidden>Test connection</button>
+      </div>
+
+      <div id="setup-error" class="setup-error" hidden role="alert"></div>
+      <div id="diagnostics" class="diagnostics" hidden></div>
+
+      <footer class="sleeve-footer">
+        <hr>
+        <p>Nothing about your listening leaves your browser. No accounts, no analytics, no server.</p>
+        <p><a href="https://github.com/" id="repo-link" target="_blank" rel="noopener noreferrer">Source on GitHub</a></p>
+      </footer>
+    </div>
+  </section>
+
+  <!-- Loading -->
+  <section id="screen-loading" class="screen" hidden>
+    <div class="loading-body">
+      <svg class="mark mark--loading" viewBox="0 0 100 100"><use href="#mark-groove"/></svg>
+      <p class="loading-copy">Pulling records from the shelf.</p>
+    </div>
+  </section>
+
+  <!-- Main app: header, the Wall, player bar -->
+  <section id="screen-app" class="screen" hidden>
+    <header class="app-header">
+      <div class="wordmark-small">
+        <svg class="mark mark--small" viewBox="0 0 100 100"><use href="#mark-groove"/></svg>
+        <span>Longplayur</span>
+      </div>
+      <nav class="header-actions" aria-label="Longplayur">
+        <button id="btn-record-bag" class="text-btn" type="button">Record bag</button>
+        <button id="btn-new-side" class="text-btn" type="button">New side</button>
+        <button id="btn-crackle" class="text-btn" type="button" aria-pressed="true">
+          <svg class="icon"><use href="#icon-crackle"/></svg>
+          <span>Crackle</span>
+        </button>
+        <button id="btn-sign-out" class="text-btn" type="button">Sign out</button>
+      </nav>
+    </header>
+
+    <p id="wall-prompt" class="wall-prompt"></p>
+
+    <main id="wall-viewport" class="wall-viewport">
+      <div id="wall-container" class="wall-container"></div>
+      <button id="btn-zoom-out" class="fab" type="button" aria-label="Zoom out to the whole wall">
+        <svg class="icon"><use href="#icon-zoom-out"/></svg>
+      </button>
+    </main>
+
+    <div id="player-bar" class="player-bar" hidden>
+      <img id="player-art" class="player-art" alt="">
+      <div class="player-meta">
+        <div id="player-track" class="player-track"></div>
+        <div id="player-album" class="player-album"></div>
+      </div>
+      <div class="player-controls">
+        <button id="player-prev" class="icon-btn" type="button" aria-label="Previous album">
+          <svg class="icon"><use href="#icon-previous"/></svg>
+        </button>
+        <button id="player-playpause" class="icon-btn" type="button" aria-label="Play">
+          <svg class="icon"><use href="#icon-play"/></svg>
+        </button>
+        <button id="player-next" class="icon-btn" type="button" aria-label="Next album">
+          <svg class="icon"><use href="#icon-next"/></svg>
+        </button>
+      </div>
+      <div class="player-progress-wrap">
+        <span id="player-elapsed" class="player-time">0:00</span>
+        <div class="player-progress"><div id="player-progress-fill" class="player-progress-fill"></div></div>
+        <span id="player-total" class="player-time">0:00</span>
+      </div>
+      <span id="player-device" class="player-device" hidden></span>
+    </div>
+
+    <div id="crackle-hint" class="crackle-hint" hidden>CRACKLE ON &middot; TOGGLE IN THE HEADER</div>
+  </section>
+
+  <!-- Record bag -->
+  <section id="screen-record-bag" class="screen" hidden>
+    <header class="record-bag-header">
+      <h1>Record bag</h1>
+      <button id="btn-close-record-bag" class="icon-btn" type="button" aria-label="Close record bag">
+        <svg class="icon"><use href="#icon-close"/></svg>
+      </button>
+    </header>
+    <div id="record-bag-list" class="record-bag-list"></div>
+  </section>
+
+  <!-- Device picker modal (Spotify Connect fallback) -->
+  <div id="modal-device" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-device-title">
+    <div class="modal-body">
+      <h2 id="modal-device-title">Choose a device</h2>
+      <p id="modal-device-copy" class="modal-copy"></p>
+      <ul id="device-list" class="device-list"></ul>
+      <button id="modal-device-close" class="link-btn" type="button">Close</button>
+    </div>
+  </div>
+
+  <div id="live-region" class="visually-hidden" aria-live="polite"></div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

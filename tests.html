@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<title>Longplayur tests</title>
+<style>
+  body { background: #121212; color: #DCD7CB; font-family: ui-monospace, monospace; padding: 24px; font-size: 13px; }
+  h1 { font-size: 16px; }
+  .pass { color: #6B7C5E; }
+  .fail { color: #D98A7A; }
+  #summary { margin-top: 16px; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Longplayur &middot; pure function tests</h1>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script type="module">
+import { spiralPosition } from './js/albums.js';
+import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './js/ending.js';
+
+const results = document.getElementById('results');
+let passCount = 0;
+let failCount = 0;
+
+function assert(condition, description) {
+  const line = document.createElement('div');
+  if (condition) {
+    passCount += 1;
+    line.className = 'pass';
+    line.textContent = `PASS  ${description}`;
+  } else {
+    failCount += 1;
+    line.className = 'fail';
+    line.textContent = `FAIL  ${description}`;
+  }
+  results.appendChild(line);
+}
+
+function group(title) {
+  const h = document.createElement('div');
+  h.style.marginTop = '16px';
+  h.style.color = '#9D998F';
+  h.textContent = `-- ${title} --`;
+  results.appendChild(h);
+}
+
+function eq(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// ---------- spiralPosition ----------
+
+group('spiralPosition: rank 0 is the wall centre');
+assert(eq(spiralPosition(0), { col: 0, row: 0 }), 'rank 0 -> {col:0,row:0}');
+
+group('spiralPosition: ring 1 (ranks 1-8) is the exact Moore neighbourhood, in order');
+const ring1Expected = [
+  { col: 1, row: 0 }, { col: 1, row: 1 }, { col: 0, row: 1 }, { col: -1, row: 1 },
+  { col: -1, row: 0 }, { col: -1, row: -1 }, { col: 0, row: -1 }, { col: 1, row: -1 },
+];
+ring1Expected.forEach((expected, i) => {
+  const rank = i + 1;
+  assert(eq(spiralPosition(rank), expected), `rank ${rank} -> ${JSON.stringify(expected)}`);
+});
+
+function expectedRing(rank) {
+  if (rank === 0) return 0;
+  return Math.ceil((Math.sqrt(rank + 1) - 1) / 2);
+}
+
+group('spiralPosition: ranks 0-24 sit on the correct ring (max(|col|,|row|))');
+for (let rank = 0; rank <= 24; rank += 1) {
+  const { col, row } = spiralPosition(rank);
+  const ring = Math.max(Math.abs(col), Math.abs(row));
+  assert(ring === expectedRing(rank), `rank ${rank} ring ${ring} === expected ${expectedRing(rank)}`);
+}
+
+group('spiralPosition: ranks 25-120 stay on the correct ring');
+for (let rank = 25; rank <= 120; rank += 1) {
+  const { col, row } = spiralPosition(rank);
+  const ring = Math.max(Math.abs(col), Math.abs(row));
+  assert(ring === expectedRing(rank), `rank ${rank} ring ${ring} === expected ${expectedRing(rank)}`);
+}
+
+group('spiralPosition: ranks 0-120 are all unique cells (no overlap)');
+{
+  const seen = new Set();
+  let allUnique = true;
+  for (let rank = 0; rank <= 120; rank += 1) {
+    const key = JSON.stringify(spiralPosition(rank));
+    if (seen.has(key)) allUnique = false;
+    seen.add(key);
+  }
+  assert(allUnique, 'all 121 cells (ranks 0-120) are distinct');
+}
+
+group('spiralPosition: throws on invalid input');
+assert((() => { try { spiralPosition(-1); return false; } catch { return true; } })(), 'rejects negative rank');
+assert((() => { try { spiralPosition(1.5); return false; } catch { return true; } })(), 'rejects non-integer rank');
+
+// ---------- ending detection (SDK path) ----------
+// SDK state shape (subset used): { track_window: { current_track: { id, duration_ms }, next_tracks: [] },
+//   position, duration, paused }
+
+group('detectEndFromSdkStates: normal end of album');
+assert(
+  detectEndFromSdkStates(
+    { paused: false, position: 179000, duration: 180000, track_window: { current_track: { id: 't3' }, next_tracks: [] } },
+    { paused: true, position: 0, duration: 180000, track_window: { current_track: { id: 't3' }, next_tracks: [] } }
+  ) === true,
+  'last track pauses at position 0 with no next tracks -> end'
+);
+
+group('detectEndFromSdkStates: track skip near end does not false-trigger');
+assert(
+  detectEndFromSdkStates(
+    { paused: false, position: 179000, duration: 180000, track_window: { current_track: { id: 't2' }, next_tracks: [{ id: 't3' }] } },
+    { paused: false, position: 0, duration: 200000, track_window: { current_track: { id: 't3' }, next_tracks: [] } }
+  ) === false,
+  'advancing to a new track (even the last one) is not itself the end'
+);
+
+group('detectEndFromSdkStates: pause near end (user-paused) does not false-trigger');
+assert(
+  detectEndFromSdkStates(
+    { paused: false, position: 175000, duration: 180000, track_window: { current_track: { id: 't3' }, next_tracks: [] } },
+    { paused: true, position: 176000, duration: 180000, track_window: { current_track: { id: 't3' }, next_tracks: [] } }
+  ) === false,
+  'pausing mid-track (not at 0) is not the end'
+);
+
+group('detectEndFromSdkStates: scrub to 0 on last track does not false-trigger');
+assert(
+  detectEndFromSdkStates(
+    { paused: false, position: 175000, duration: 180000, track_window: { current_track: { id: 't3' }, next_tracks: [] } },
+    { paused: false, position: 0, duration: 180000, track_window: { current_track: { id: 't3' }, next_tracks: [] } }
+  ) === false,
+  'scrubbing to 0 while still playing is not the end'
+);
+
+group('detectEndFromSdkStates: single-track album ends correctly');
+assert(
+  detectEndFromSdkStates(
+    { paused: false, position: 179000, duration: 180000, track_window: { current_track: { id: 't1' }, next_tracks: [] } },
+    { paused: true, position: 0, duration: 180000, track_window: { current_track: { id: 't1' }, next_tracks: [] } }
+  ) === true,
+  'single-track album: pause at 0 with no next tracks -> end'
+);
+
+group('detectEndFromSdkStates: context change mid-album does not false-trigger');
+assert(
+  detectEndFromSdkStates(
+    { paused: false, position: 90000, duration: 180000, track_window: { current_track: { id: 't2' }, next_tracks: [{ id: 't3' }] } },
+    { paused: true, position: 0, duration: 210000, track_window: { current_track: { id: 'other-album-t1' }, next_tracks: [{ id: 'x' }] } }
+  ) === false,
+  'switching context (different album) is not the end of the previous album'
+);
+
+group('detectEndFromSdkStates: device switch (state briefly null) does not false-trigger');
+assert(
+  detectEndFromSdkStates(
+    { paused: false, position: 90000, duration: 180000, track_window: { current_track: { id: 't2' }, next_tracks: [{ id: 't3' }] } },
+    null
+  ) === false,
+  'a null next state (device switch) never signals end'
+);
+
+group('detectEndFromSdkStates: repeat-on (loops back to track 1) does not false-trigger');
+assert(
+  detectEndFromSdkStates(
+    { paused: false, position: 179000, duration: 180000, track_window: { current_track: { id: 't3' }, next_tracks: [] } },
+    { paused: false, position: 0, duration: 200000, track_window: { current_track: { id: 't1' }, next_tracks: [{ id: 't2' }, { id: 't3' }] } }
+  ) === false,
+  'repeat-on restarting the album is not the end'
+);
+
+// ---------- ending detection (Connect polling path) ----------
+// Snapshot shape: { isPlaying, progressMs, durationMs, trackNumber, totalTracksInAlbum, trackId }
+
+group('detectEndFromConnectSnapshots: normal end of album');
+assert(
+  detectEndFromConnectSnapshots(
+    { isPlaying: true, progressMs: 178000, durationMs: 180000, trackNumber: 10, totalTracksInAlbum: 10, trackId: 't10' },
+    { isPlaying: false, progressMs: 0, durationMs: 0, trackNumber: null, totalTracksInAlbum: null, trackId: null }
+  ) === true,
+  'last track nearly finished, then playback stops/resets -> end'
+);
+
+group('detectEndFromConnectSnapshots: skip to next album does not false-trigger');
+assert(
+  detectEndFromConnectSnapshots(
+    { isPlaying: true, progressMs: 178000, durationMs: 180000, trackNumber: 5, totalTracksInAlbum: 10, trackId: 't5' },
+    { isPlaying: true, progressMs: 1000, durationMs: 210000, trackNumber: 1, totalTracksInAlbum: 8, trackId: 'y1' }
+  ) === false,
+  'jumping to a different album mid-way is not the end'
+);
+
+group('detectEndFromConnectSnapshots: pause near end does not false-trigger');
+assert(
+  detectEndFromConnectSnapshots(
+    { isPlaying: true, progressMs: 175000, durationMs: 180000, trackNumber: 10, totalTracksInAlbum: 10, trackId: 't10' },
+    { isPlaying: false, progressMs: 176000, durationMs: 180000, trackNumber: 10, totalTracksInAlbum: 10, trackId: 't10' }
+  ) === false,
+  'user pausing near the end (not stopped/reset) is not the end'
+);
+
+group('detectEndFromConnectSnapshots: scrub to 0 does not false-trigger');
+assert(
+  detectEndFromConnectSnapshots(
+    { isPlaying: true, progressMs: 175000, durationMs: 180000, trackNumber: 10, totalTracksInAlbum: 10, trackId: 't10' },
+    { isPlaying: true, progressMs: 0, durationMs: 180000, trackNumber: 10, totalTracksInAlbum: 10, trackId: 't10' }
+  ) === false,
+  'scrubbing to 0 while still playing is not the end'
+);
+
+group('detectEndFromConnectSnapshots: single-track album ends correctly');
+assert(
+  detectEndFromConnectSnapshots(
+    { isPlaying: true, progressMs: 178000, durationMs: 180000, trackNumber: 1, totalTracksInAlbum: 1, trackId: 't1' },
+    { isPlaying: false, progressMs: 0, durationMs: 0, trackNumber: null, totalTracksInAlbum: null, trackId: null }
+  ) === true,
+  'single-track album: near-end then stop -> end'
+);
+
+group('detectEndFromConnectSnapshots: context change mid-album does not false-trigger');
+assert(
+  detectEndFromConnectSnapshots(
+    { isPlaying: true, progressMs: 90000, durationMs: 180000, trackNumber: 4, totalTracksInAlbum: 10, trackId: 't4' },
+    { isPlaying: false, progressMs: 0, durationMs: 0, trackNumber: null, totalTracksInAlbum: null, trackId: null }
+  ) === false,
+  'stopping well before the end of the last track is not the end'
+);
+
+group('detectEndFromConnectSnapshots: device switch does not false-trigger');
+assert(
+  detectEndFromConnectSnapshots(
+    { isPlaying: true, progressMs: 90000, durationMs: 180000, trackNumber: 4, totalTracksInAlbum: 10, trackId: 't4' },
+    null
+  ) === false,
+  'a null next snapshot (device switch) never signals end'
+);
+
+group('detectEndFromConnectSnapshots: repeat-on does not false-trigger');
+assert(
+  detectEndFromConnectSnapshots(
+    { isPlaying: true, progressMs: 178000, durationMs: 180000, trackNumber: 10, totalTracksInAlbum: 10, trackId: 't10' },
+    { isPlaying: true, progressMs: 1000, durationMs: 180000, trackNumber: 1, totalTracksInAlbum: 10, trackId: 't1' }
+  ) === false,
+  'repeat-on restarting at track 1 while still playing is not the end'
+);
+
+// ---------- summary ----------
+
+const summary = document.getElementById('summary');
+summary.textContent = `${passCount} passed, ${failCount} failed`;
+summary.className = failCount === 0 ? 'pass' : 'fail';
+window.__testResults = { passCount, failCount };
+</script>
+</body>
+</html>
