@@ -48,12 +48,19 @@ let playlistsPromise = null;
 
 /** Fetches the user's own playlists (owned and followed), skipping empty
  * ones. Cached in memory for the tab's lifetime, same pattern as bags.js's
- * loadBagManifest(). */
+ * loadBagManifest(). Logs the real error rather than swallowing it --
+ * silently catching to [] here made a genuine failure (most likely a 403
+ * from the token still lacking the playlist scopes, if reconnecting
+ * didn't actually re-run the OAuth consent) indistinguishable from an
+ * honest "you have no playlists", the same diagnosability bug search.js
+ * had earlier.
+ * @returns {Promise<{playlists: Array, failed: boolean}>}
+ */
 export function loadMyPlaylists() {
   if (!playlistsPromise) {
     playlistsPromise = getMyPlaylists()
-      .then((items) =>
-        items
+      .then((items) => ({
+        playlists: items
           .filter((p) => p && p.id && (p.tracks?.total ?? 0) > 0)
           .map((p) => ({
             id: p.id,
@@ -61,9 +68,14 @@ export function loadMyPlaylists() {
             image: pickImage(p.images),
             trackCount: p.tracks?.total ?? 0,
             snapshotId: p.snapshot_id,
-          }))
-      )
-      .catch(() => []);
+          })),
+        failed: false,
+      }))
+      .catch((err) => {
+        console.error('[playlists] GET /me/playlists failed:', err);
+        playlistsPromise = null; // don't memoize a failure: retry on the next call rather than needing a page reload (e.g. right after reconnecting to grant the scope).
+        return { playlists: [], failed: true };
+      });
   }
   return playlistsPromise;
 }

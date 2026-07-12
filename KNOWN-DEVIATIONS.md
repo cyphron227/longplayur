@@ -1042,3 +1042,27 @@ cover regardless of how much repetition the pool needs overall. Verified
 by simulation: zero adjacent-duplicate conflicts across 100 independent
 builds each for pools of 10, 18, and 25 images filling a 120-slot (24
 segment) dome.
+
+## Playlists not showing after reconnect: diagnosability, again (2026-07-12)
+
+Reported live: no Spotify playlists showing on the Record bags screen
+even after reconnecting to grant the new scopes. `js/playlists.js`'s
+`loadMyPlaylists()` wrapped `GET /me/playlists` in a bare
+`.catch(() => [])`, the exact same diagnosability bug `js/search.js` had
+earlier the same day: a genuinely failed request (most likely a 403 if
+reconnecting did not actually re-run the OAuth consent screen and grant
+the scopes) was indistinguishable from an honest "you have no
+playlists". Fixed the same way: the error is now logged
+(`console.error`), and `loadMyPlaylists()` returns `{ playlists, failed
+}` instead of a bare array so `main.js` can show "Could not load your
+playlists" instead of the misleading "No playlists found" when the
+request itself broke.
+
+A second, separate gap made this worse: `loadMyPlaylists()` memoized its
+own promise (`playlistsPromise`) regardless of outcome, so a failed
+result was cached for the rest of the tab session -- even a genuinely
+successful reconnect would not have triggered a retry without a full page
+reload, since the same rejected-then-caught promise kept being returned.
+`playlistsPromise` is now reset to `null` on failure so the next visit to
+the Record bags screen genuinely retries the request rather than
+repeating a stale failure.

@@ -471,11 +471,18 @@ async function renderCratesScreen() {
 
   if (!playlistManifestCache) {
     cratePlaylistsStatus.textContent = 'Loading your playlists.';
-    playlistManifestCache = await loadMyPlaylists();
+    const { playlists, failed } = await loadMyPlaylists();
+    if (failed) {
+      // Not cached (loadMyPlaylists() itself resets on failure too): the
+      // next visit to this screen retries rather than repeating a stale
+      // failure until the page is reloaded, e.g. right after reconnecting.
+      cratePlaylistsStatus.textContent = 'Could not load your playlists. Check your connection, or check the browser console for a specific error, and try again.';
+      renderPlaylistCards();
+      return;
+    }
+    playlistManifestCache = playlists;
   }
-  cratePlaylistsStatus.textContent = playlistManifestCache.length === 0
-    ? 'No playlists found. If you connected before this was added, try reconnecting on the Setup tab.'
-    : '';
+  cratePlaylistsStatus.textContent = playlistManifestCache.length === 0 ? 'No playlists found.' : '';
   renderPlaylistCards();
 }
 
