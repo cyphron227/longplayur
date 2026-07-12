@@ -43,21 +43,27 @@ function toEntry(album, rank) {
   };
 }
 
+/** @returns {Promise<{items: Array, failed: boolean}>} failed distinguishes
+ * "the request itself broke" from "it succeeded and legitimately found
+ * nothing" -- these used to look identical, with no way to tell a real bug
+ * apart from an honest empty result. */
 async function albumsForArtist(artistId) {
   try {
-    const data = await apiFetch(`/artists/${artistId}/albums?include_groups=album,single&limit=${MAX_ALBUMS_PER_ARTIST}`);
-    return data?.items || [];
-  } catch {
-    return [];
+    const data = await apiFetch(`/artists/${artistId}/albums?include_groups=album,single&limit=${MAX_ALBUMS_PER_ARTIST}&market=from_token`);
+    return { items: data?.items || [], failed: false };
+  } catch (err) {
+    console.error('[search] GET /artists/{id}/albums failed:', err);
+    return { items: [], failed: true };
   }
 }
 
 async function searchArtists(q, limit) {
   try {
-    const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=${limit}`);
-    return data?.artists?.items || [];
-  } catch {
-    return [];
+    const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=${limit}&market=from_token`);
+    return { items: data?.artists?.items || [], failed: false };
+  } catch (err) {
+    console.error('[search] GET /search (type=artist) failed:', err);
+    return { items: [], failed: true };
   }
 }
 
@@ -76,35 +82,43 @@ function poolFromAlbumLists(albumLists) {
 /** The single best-matching artist's own discography. */
 async function searchByArtist(query) {
   const artists = await searchArtists(query, 1);
-  if (artists.length === 0) return [];
-  const albums = await albumsForArtist(artists[0].id);
-  return poolFromAlbumLists([albums]);
+  if (artists.failed) return { pool: [], failed: true };
+  if (artists.items.length === 0) return { pool: [], failed: false };
+
+  const albums = await albumsForArtist(artists.items[0].id);
+  return { pool: poolFromAlbumLists([albums.items]), failed: albums.failed };
 }
 
 /** Several artists tagged with the genre, each contributing a few albums,
  * forming a wall for that genre rather than any one artist's catalogue. */
 async function searchByGenre(query) {
   const artists = await searchArtists(`genre:"${query}"`, MAX_ARTISTS_GENRE);
-  if (artists.length === 0) return [];
-  const albumLists = await Promise.all(artists.map((a) => albumsForArtist(a.id)));
-  return poolFromAlbumLists(albumLists);
+  if (artists.failed) return { pool: [], failed: true };
+  if (artists.items.length === 0) return { pool: [], failed: false };
+
+  const albumLists = await Promise.all(artists.items.map((a) => albumsForArtist(a.id)));
+  const anyFailed = albumLists.every((r) => r.failed); // every request failing, not just one artist coming up short.
+  return { pool: poolFromAlbumLists(albumLists.map((r) => r.items)), failed: anyFailed };
 }
 
 /**
  * @param {string} query free-text artist name or genre
- * @returns {Promise<{pool: Array, mode: 'artist'|'genre'|null}>} pool is
- *   pool-shaped entries (same shape as albums.js/bags.js produce); mode
- *   records which interpretation actually found something, so the caller
- *   can label the result. mode is null (and pool empty) if neither an
- *   artist nor a genre match turned up anything playable.
+ * @returns {Promise<{pool: Array, mode: 'artist'|'genre'|null, failed: boolean}>}
+ *   pool is pool-shaped entries (same shape as albums.js/bags.js produce);
+ *   mode records which interpretation actually found something, so the
+ *   caller can label the result. failed means the Spotify requests
+ *   themselves broke (check the browser console for the logged error) --
+ *   distinct from a genuine, successful zero-result search.
  */
 export async function searchAlbums(query) {
   const trimmed = query.trim();
-  if (!trimmed) return { pool: [], mode: null };
+  if (!trimmed) return { pool: [], mode: null, failed: false };
 
   const byArtist = await searchByArtist(trimmed);
-  if (byArtist.length > 0) return { pool: byArtist, mode: 'artist' };
+  if (byArtist.pool.length > 0) return { pool: byArtist.pool, mode: 'artist', failed: false };
 
   const byGenre = await searchByGenre(trimmed);
-  return { pool: byGenre, mode: byGenre.length > 0 ? 'genre' : null };
+  if (byGenre.pool.length > 0) return { pool: byGenre.pool, mode: 'genre', failed: false };
+
+  return { pool: [], mode: null, failed: byArtist.failed && byGenre.failed };
 }

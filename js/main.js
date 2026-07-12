@@ -416,9 +416,11 @@ async function performSearch(query) {
   if (!trimmed) return;
 
   wallPrompt.textContent = `Searching for "${trimmed}".`;
-  const { pool, mode } = await searchAlbums(trimmed);
+  const { pool, mode, failed } = await searchAlbums(trimmed);
   if (pool.length === 0) {
-    wallPrompt.textContent = `No albums found for "${trimmed}". Only full albums and EPs of 6 or more tracks are shown.`;
+    wallPrompt.textContent = failed
+      ? `Search failed. Check your connection and try again.`
+      : `No albums found for "${trimmed}". Only full albums and EPs of 6 or more tracks are shown.`;
     return;
   }
   activeBagId = null;
