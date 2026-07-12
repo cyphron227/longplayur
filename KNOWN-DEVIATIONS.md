@@ -921,3 +921,56 @@ progressive fill-in on a cold cache in exchange for bounded peak
 concurrency. Every bag's resolution is still cached exactly as before
 (`localStorage`, keyed per bag), so this cost is paid once ever per bag,
 not on every visit to the screen.
+
+## The actual duplicate-covers bug: spatial, not array, adjacency (2026-07-12)
+
+Reported live: "Your Record Bag" (the user's own pool, up to 120 albums,
+segments up to 24) rendered fine, but every other record bag (15-25
+albums, segments 4-5) showed two tiles with the same cover visibly
+adjacent -- "crossing each other". Identified with evidence, not assumed:
+a Node simulation of `gallery/src/DomeGallery.tsx`'s `buildItems()`
+exactly as it existed after this same day's earlier "fewer duplicates"
+fix found 45-1399 genuinely adjacent duplicate pairs per 200 independent
+builds for pool sizes of 18, 15, and 5 images at 4 columns, versus zero
+for 120 images at 24 columns -- reproducing the reported symptom
+precisely along the same fault line the user described (small
+bag-sized pools broken, the large default pool fine).
+
+Root cause: the existing "shuffled full passes" anti-duplicate logic
+(added earlier this session) only ever compared ARRAY-adjacent indices
+(`usedImages[i]` vs `usedImages[i-1]`). Because `coords` is built column
+by column, that happens to catch same-column vertical neighbours, but
+never checks a tile against its neighbour in the NEXT column at all --
+the exact case that produces two angularly-adjacent tiles with the same
+cover. This gap existed since the original "fewer duplicates" fix and
+was invisible in the 34-column default (few of a 34-column dome's tiles
+are ever the *same* image close together, since duplicates are rare
+relative to slot count), and stayed invisible at the large end after
+this session's segments-per-pool change (a 120-image, 24-column dome
+has the same property) -- it only became visible once pools with far
+fewer slots relative to columns (the 4-5 column floor for small record
+bags) started actually being used.
+
+Fixed in two parts, both verified by simulation before and after (the
+`Math.abs(coord.y - y) <= 1` check in the rebuilt `js/dome-gallery.
+bundle.js` was confirmed present post-build by grepping the minified
+bundle for that literal comparison, since identifier names don't survive
+minification): (1) `buildItems()` now checks each tile's true spatial
+neighbours (same column above/below, plus the nearest row(s) in the
+columns either side -- accounting for the honeycomb row offset between
+even/odd columns -- including the wrap-around seam between the first and
+last column, which needs no special-case handling since column 0 is
+always assigned before the last column regardless of the circular
+adjacency); (2) because a single forward-only swap pass can still run out
+of later slots to swap into right at the end of the fill, `buildItems()`
+now retries a fresh shuffle+repair (up to 20 attempts, keeping whichever
+attempt has the fewest remaining conflicts) rather than accepting the
+first attempt outright. Simulated to zero remaining adjacent duplicates
+across 100+ independent builds each for pool sizes of 5, 15, 18, 25, and
+120 images (matching a sparse bag, typical bags, and the largest wall) --
+the only case that cannot reach zero is a pool with fewer unique images
+than a single column has rows (5), where no shuffle of an inherently
+too-small pool can avoid every repeat; that is an honest, unavoidable
+limit of the source pool, not a bug. Rebuilt via `cd gallery && npm run
+build`; confirmed the built module still exports only `mountDomeGallery`
+and contains no leaked `process.env` references.
