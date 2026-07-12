@@ -1,21 +1,42 @@
-// Record bags: curated album collections shown as a rail above the Wall
-// (INCREMENT-01 Phase 2). Distinct from the journal ("Past sessions",
-// js/journal.js) -- a record bag is a list someone curated, not a log of
-// what was played.
+// Record bags: curated album collections chosen from the Record bags
+// screen. Distinct from the journal ("Past sessions", js/journal.js) --
+// a record bag is a list someone curated, not a log of what was played.
 //
 // Bag metadata (name, blurb, the {title, artist} pairs) is small and loads
-// eagerly so the rail can render immediately. Resolving those pairs to real
-// Spotify album pool entries is comparatively expensive (one search call
-// per album), so it only happens the first time a given bag is actually
-// selected, then the result is cached; unresolvable pairs are skipped
-// silently rather than shown broken.
+// eagerly so the screen can render immediately. Resolving those pairs to
+// real Spotify album pool entries is comparatively expensive (one search
+// call per album), so a bag's own resolution is cached the first time it
+// happens -- either when the Record bags screen builds that bag's card
+// preview, or when the bag is actually selected, whichever comes first;
+// unresolvable pairs are skipped silently rather than shown broken.
 
 import { apiFetch } from './spotify.js';
 
 const BAG_IDS = ['90s-us-rap', 'soul-essentials', 'motown', 'trip-hop', 'britpop', 'late-night-jazz'];
 const LS_RESOLVED_PREFIX = 'lp_bag_resolved_';
+// The Crates screen now resolves bags eagerly (for each card's album-grid
+// preview) rather than only on selection, so a cold cache can mean several
+// bags' worth of album searches firing close together. Bounding
+// per-bag concurrency here is the same lesson search.js's mapWithConcurrency
+// learned from a live 429: firing a whole bag's worth of searches (up to 25)
+// as one Promise.all is a bigger burst than it needs to be.
+const RESOLVE_CONCURRENCY = 4;
 
 let manifestPromise = null;
+
+/** Runs `fn` over `items` with at most `limit` calls in flight at once. */
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 function pickImage(images) {
   if (!Array.isArray(images) || images.length === 0) return null;
@@ -79,7 +100,7 @@ export async function resolveBag(bag) {
   const cached = getCachedResolution(bag.id);
   if (cached) return cached.pool;
 
-  const results = await Promise.all(bag.albums.map((a) => searchAlbum(a.title, a.artist)));
+  const results = await mapWithConcurrency(bag.albums, RESOLVE_CONCURRENCY, (a) => searchAlbum(a.title, a.artist));
   const seen = new Set();
   const pool = [];
   results.forEach((album, index) => {

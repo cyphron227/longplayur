@@ -898,3 +898,26 @@ one more adjustment to the two target pixel values.
   a copyable link on mobile. `Docs/PRD.md`'s F2 scope list was also found
   stale while making this pass (missing the `playlist-read-*` scopes
   added earlier the same day) and corrected.
+
+## Record bag cards show a 9-album preview grid (2026-07-12)
+
+Per explicit request: record bag cards on the Record bags screen, which
+previously showed a blank placeholder (unlike playlist cards, which
+already had Spotify's own playlist cover art to show), now show a 3x3
+grid of up to 9 of that bag's own resolved covers.
+
+Showing a preview means resolving a bag's albums (`bags.js`'s
+`resolveBag()`, one search call per album) is no longer purely deferred
+to selection -- it now also runs the first time that bag's card is shown.
+Doing this for all six seed bags at once risked exactly the request-volume
+mistake `js/search.js` already got burned by earlier the same day (a live
+429): `resolveBag()`'s own `Promise.all` over up to 25 albums was
+unthrottled, and firing that for six bags simultaneously would have
+stacked into a much larger burst. Fixed the same way search.js was: a
+`mapWithConcurrency()` throttle inside `resolveBag()` itself (4 concurrent
+searches per bag), and `main.js`'s new `loadBagPreviews()` resolves bags
+one at a time rather than all six in parallel, accepting a slower
+progressive fill-in on a cold cache in exchange for bounded peak
+concurrency. Every bag's resolution is still cached exactly as before
+(`localStorage`, keyed per bag), so this cost is paid once ever per bag,
+not on every visit to the screen.

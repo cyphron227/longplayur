@@ -329,21 +329,44 @@ async function switchWallPool(pool) {
 }
 
 const cratesStatus = document.getElementById('crates-status');
+const BAG_PREVIEW_COUNT = 9;
+// Populated the first time a bag's preview grid resolves, keyed by bagId,
+// so switching back to the Crates screen doesn't wait on resolveBag()'s
+// own cache-read again just to redraw a card already shown this tab
+// session.
+const bagPreviewCache = new Map();
 
-/** A single card in the Crates screen's bag/playlist grids. Built via
- * createElement rather than innerHTML since playlist names/images come
- * straight from Spotify and are untrusted. */
-function buildCrateCard({ label, sublabel, image, pressed, title, onClick }) {
+/** The single-image art area of a crate card, or (bag cards only) a 3x3
+ * grid of up to 9 mini covers as a preview of what's in the bag. Built via
+ * createElement rather than innerHTML since playlist/album art comes
+ * straight from Spotify and is untrusted. */
+function buildCrateCardArt({ image, images }) {
+  if (images && images.length > 0) {
+    const grid = document.createElement('div');
+    grid.className = 'crate-card-art-grid';
+    images.slice(0, BAG_PREVIEW_COUNT).forEach((src) => {
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = '';
+      grid.appendChild(img);
+    });
+    return grid;
+  }
+  const art = image ? document.createElement('img') : document.createElement('div');
+  art.className = 'crate-card-art';
+  if (image) { art.src = image; art.alt = ''; }
+  return art;
+}
+
+/** A single card in the Crates screen's bag/playlist grids. */
+function buildCrateCard({ label, sublabel, image, images, pressed, title, onClick }) {
   const card = document.createElement('button');
   card.type = 'button';
   card.className = 'crate-card';
   card.setAttribute('aria-pressed', String(pressed));
   if (title) card.title = title;
 
-  const art = image ? document.createElement('img') : document.createElement('div');
-  art.className = 'crate-card-art';
-  if (image) { art.src = image; art.alt = ''; }
-  card.appendChild(art);
+  card.appendChild(buildCrateCardArt({ image, images }));
 
   const name = document.createElement('span');
   name.className = 'crate-card-name';
@@ -361,15 +384,55 @@ function buildCrateCard({ label, sublabel, image, pressed, title, onClick }) {
   return card;
 }
 
+/** Replaces a card's art area in place once a bag's preview images are
+ * known, without rebuilding the whole card (and losing its aria-pressed
+ * state or requiring a fresh click listener). */
+function updateCrateCardArt(card, images) {
+  const oldArt = card.querySelector('.crate-card-art, .crate-card-art-grid');
+  const newArt = buildCrateCardArt({ images });
+  if (oldArt) card.replaceChild(newArt, oldArt);
+  else card.insertBefore(newArt, card.firstChild);
+}
+
 function renderBagCards() {
   crateBagsGrid.innerHTML = '';
+  const cards = new Map();
   for (const bag of bagManifestCache || []) {
-    crateBagsGrid.appendChild(buildCrateCard({
+    const cached = bagPreviewCache.get(bag.id);
+    const card = buildCrateCard({
       label: bag.name,
       title: bag.blurb,
+      images: cached,
       pressed: !activeSearchQuery && !activePlaylistId && activeBagId === bag.id,
       onClick: () => selectBag(bag.id),
-    }));
+    });
+    crateBagsGrid.appendChild(card);
+    if (!cached) cards.set(bag.id, card);
+  }
+  return cards;
+}
+
+/** Resolves each bag not already previewed, one at a time rather than all
+ * at once -- each bag's own resolution is already throttled internally
+ * (bags.js's mapWithConcurrency), but firing all six bags' resolutions in
+ * parallel on top of that would still stack into a much larger concurrent
+ * burst than a single bag search ever needed, the same class of mistake
+ * that caused a live Spotify 429 earlier. Bags already selected once (or
+ * previewed in an earlier visit this tab session) resolve instantly from
+ * cache, so this only actually waits on genuinely new bags. */
+async function loadBagPreviews(bagsToLoad, cardsById) {
+  for (const bag of bagsToLoad) {
+    const card = cardsById.get(bag.id);
+    if (!card) continue;
+    let pool;
+    try {
+      pool = await resolveBag(bag);
+    } catch {
+      continue; // leave this card's blank placeholder; resolveBag() already handles per-album failures silently.
+    }
+    const images = pool.map((entry) => entry.image).filter(Boolean).slice(0, BAG_PREVIEW_COUNT);
+    bagPreviewCache.set(bag.id, images);
+    if (images.length > 0) updateCrateCardArt(card, images);
   }
 }
 
@@ -400,7 +463,11 @@ async function renderCratesScreen() {
       bagManifestCache = [];
     }
   }
-  renderBagCards();
+  const cardsNeedingPreview = renderBagCards();
+  if (cardsNeedingPreview.size > 0) {
+    const bagsToLoad = (bagManifestCache || []).filter((bag) => cardsNeedingPreview.has(bag.id));
+    loadBagPreviews(bagsToLoad, cardsNeedingPreview); // not awaited: the screen shouldn't block on a cold cache resolving several bags.
+  }
 
   if (!playlistManifestCache) {
     cratePlaylistsStatus.textContent = 'Loading your playlists.';
