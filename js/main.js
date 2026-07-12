@@ -16,6 +16,7 @@ import * as journal from './journal.js';
 import * as exporter from './exporter.js';
 import { loadBagManifest, resolveBag } from './bags.js';
 import { getRecordsNearby } from './nearby.js';
+import { searchAlbums } from './search.js';
 
 // Strip the OAuth `code`/`state`/`error` from the address bar before anything else runs.
 const callbackParams = auth.consumeCallbackParams();
@@ -254,6 +255,7 @@ let runoutBusy = false;
 // lazily, the first time each is actually selected.
 let userWallPool = null;
 let activeBagId = null;
+let activeSearchQuery = null; // { query, mode: 'artist'|'genre' } | null, mutually exclusive with activeBagId
 let bagSwitchBusy = false;
 let bagManifestCache = null;
 
@@ -284,7 +286,10 @@ function renderWallDom(pool) {
 
 function setWallPrompt(pool) {
   const everDropped = localStorage.getItem(LS_EVER_DROPPED) === 'true';
-  if (activeBagId) {
+  if (activeSearchQuery) {
+    const label = activeSearchQuery.mode === 'artist' ? 'Artist' : 'Genre';
+    wallPrompt.textContent = `${label}: ${activeSearchQuery.query}. ${pool.length} records. Tap one to drop the needle.`;
+  } else if (activeBagId) {
     wallPrompt.textContent = `${pool.length} records. Tap one to drop the needle.`;
   } else {
     wallPrompt.textContent = everDropped
@@ -326,9 +331,21 @@ function renderBagChips(bags) {
   wallChip.type = 'button';
   wallChip.className = 'bag-chip deadwax';
   wallChip.textContent = 'YOUR WALL';
-  wallChip.setAttribute('aria-pressed', String(!activeBagId));
+  wallChip.setAttribute('aria-pressed', String(!activeBagId && !activeSearchQuery));
   wallChip.addEventListener('click', () => selectBag(null));
   bagRail.appendChild(wallChip);
+
+  if (activeSearchQuery) {
+    const searchChip = document.createElement('button');
+    searchChip.type = 'button';
+    searchChip.className = 'bag-chip deadwax is-search';
+    const label = activeSearchQuery.mode === 'artist' ? 'ARTIST' : 'GENRE';
+    searchChip.textContent = `${label}: ${activeSearchQuery.query.toUpperCase()}`;
+    searchChip.setAttribute('aria-pressed', 'true');
+    searchChip.title = 'Back to your wall';
+    searchChip.addEventListener('click', () => selectBag(null));
+    bagRail.appendChild(searchChip);
+  }
 
   for (const bag of bags) {
     const chip = document.createElement('button');
@@ -336,17 +353,21 @@ function renderBagChips(bags) {
     chip.className = 'bag-chip deadwax';
     chip.textContent = bag.name.toUpperCase();
     chip.title = bag.blurb;
-    chip.setAttribute('aria-pressed', String(activeBagId === bag.id));
+    chip.setAttribute('aria-pressed', String(!activeSearchQuery && activeBagId === bag.id));
     chip.addEventListener('click', () => selectBag(bag.id));
     bagRail.appendChild(chip);
   }
+
+  show(bagRail);
 }
 
 async function selectBag(bagId) {
-  if (bagId === activeBagId || bagSwitchBusy) return;
+  if (bagId === activeBagId && !activeSearchQuery) return;
+  if (bagSwitchBusy) return;
 
   if (bagId === null) {
     activeBagId = null;
+    activeSearchQuery = null;
     renderBagChips(bagManifestCache || []);
     if (userWallPool) await switchWallPool(userWallPool);
     return;
@@ -362,6 +383,7 @@ async function selectBag(bagId) {
     return;
   }
   activeBagId = bagId;
+  activeSearchQuery = null;
   renderBagChips(bagManifestCache || []);
   await switchWallPool(pool);
 }
@@ -372,13 +394,44 @@ async function renderBagRail() {
   } catch {
     bagManifestCache = [];
   }
-  if (bagManifestCache.length === 0) {
+  if (bagManifestCache.length === 0 && !activeSearchQuery) {
     hide(bagRail);
     return;
   }
   renderBagChips(bagManifestCache);
-  show(bagRail);
 }
+
+// ---------------------------------------------------------------------
+// Search: by artist or genre. Shares the bag-rail chip (a dismissible
+// "ARTIST: X" / "GENRE: X" chip appears alongside YOUR WALL) and the same
+// switchWallPool() crossfade the bags use.
+// ---------------------------------------------------------------------
+
+const searchForm = document.getElementById('search-form');
+const searchInput = document.getElementById('search-input');
+
+async function performSearch(query) {
+  if (bagSwitchBusy) return;
+  const trimmed = query.trim();
+  if (!trimmed) return;
+
+  wallPrompt.textContent = `Searching for "${trimmed}".`;
+  const { pool, mode } = await searchAlbums(trimmed);
+  if (pool.length === 0) {
+    wallPrompt.textContent = `No albums found for "${trimmed}". Only full albums and EPs of 6 or more tracks are shown.`;
+    return;
+  }
+  activeBagId = null;
+  activeSearchQuery = { query: trimmed, mode };
+  renderBagChips(bagManifestCache || []);
+  await switchWallPool(pool);
+}
+
+searchForm?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  performSearch(searchInput.value);
+  searchInput.blur(); // dismiss the on-screen keyboard on mobile once submitted.
+});
 
 function renderJourneyThread() {
   if (!wallApi) return;
@@ -468,6 +521,11 @@ async function handleRunout() {
   const finishedId = currentAlbumId;
   currentAlbumId = null;
   try {
+    // Explicitly pause: Spotify's own account-level Autoplay setting (if
+    // the listener has it on) would otherwise start playing something
+    // unrelated the moment the album's context runs out, which defeats
+    // the "you must choose the next record" experience this app is for.
+    await playback.togglePlayPause(true).catch(() => {});
     const { atEdge } = await runoutGroove(finishedId, { wallApi });
     wallPrompt.textContent = runoutPrompt(atEdge);
     announce(runoutPrompt(atEdge));
@@ -487,6 +545,7 @@ function updatePlayerBar(viewModel) {
   const playIcon = playerPlayPause.querySelector('use');
   playIcon.setAttribute('href', viewModel.isPlaying ? '#icon-pause' : '#icon-play');
   playerPlayPause.setAttribute('aria-label', viewModel.isPlaying ? 'Pause' : 'Play');
+  playerPlayPause.setAttribute('title', viewModel.isPlaying ? 'Pause' : 'Play');
 
   playerElapsed.textContent = formatDuration(viewModel.elapsedMs || 0);
   playerTotal.textContent = formatDuration(viewModel.totalMs || 0);
@@ -601,7 +660,7 @@ function renderSessionRow(session, ordinal) {
   head.type = 'button';
   head.className = 'session-row-head';
   const headLabel = document.createElement('span');
-  headLabel.className = 'deadwax';
+  headLabel.className = 'deadwax session-row-label';
   const parts = [`SESSION ${ordinal}`, formatDeadwaxDate(session.startedAt)];
   const runningMs = journal.sessionDurationMs(session);
   if (runningMs > 0) parts.push(formatRunningTime(runningMs));
@@ -614,6 +673,7 @@ function renderSessionRow(session, ordinal) {
   shareBtn.type = 'button';
   shareBtn.className = 'icon-btn session-share-btn';
   shareBtn.setAttribute('aria-label', `Share session ${ordinal}`);
+  shareBtn.title = `Share session ${ordinal}`;
   shareBtn.appendChild(svgIcon('icon-export'));
   shareBtn.addEventListener('click', () => handleShareSession(session, ordinal, shareBtn));
 
@@ -743,13 +803,47 @@ function isAndroidDevice() {
   return /Android/i.test(navigator.userAgent);
 }
 
+// Spotify's own device list already includes any Chromecast-paired speaker
+// that supports Spotify Connect (as type CastAudio/CastVideo) -- that is
+// the only way to actually get Spotify audio playing on a cast device, so
+// rather than a separate, incompatible Google Cast picker, each entry is
+// labelled with Spotify's own device type.
+const DEVICE_TYPE_LABELS = {
+  Computer: 'Computer',
+  Smartphone: 'Phone',
+  Tablet: 'Tablet',
+  Speaker: 'Speaker',
+  TV: 'TV',
+  AVR: 'Receiver',
+  STB: 'Set-top box',
+  AudioDongle: 'Audio dongle',
+  GameConsole: 'Game console',
+  CastVideo: 'Cast',
+  CastAudio: 'Cast',
+  Automobile: 'Car',
+};
+
+function deviceTypeLabel(type) {
+  return DEVICE_TYPE_LABELS[type] || 'Device';
+}
+
 function renderDeviceListItems(devices, { isSwitch }) {
   deviceList.innerHTML = '';
   for (const device of devices) {
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = device.is_active ? `${device.name} (current)` : device.name;
+    btn.className = 'device-item';
+
+    const name = document.createElement('span');
+    name.className = 'device-item-name';
+    name.textContent = device.is_active ? `${device.name} (current)` : device.name;
+
+    const type = document.createElement('span');
+    type.className = 'device-item-type deadwax';
+    type.textContent = deviceTypeLabel(device.type);
+
+    btn.append(name, type);
     btn.addEventListener('click', async () => {
       await playback.selectDevice(device.id, device.name);
       hide(modalDevice);

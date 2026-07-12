@@ -61,9 +61,14 @@ removed entirely in the same increment (see F8).
 
 ### F6. The ceremony (signature — do not cut corners here)
 Selecting a cover (tap or long press) does not play it: it brings the
-cover to the foreground with its name, artist, and a one-line description
-(artist, year, track count, duration — Spotify has no free-text album
-description), and waits for Play or "Find something else." Nothing plays,
+cover to the foreground — always at the same fixed size, not scaled off
+the tapped tile's own live position on the rotating dome, which varies
+with perspective and made the layout inconsistent from album to album —
+with its name, artist, and a one-line description on its own opaque
+panel (legible against any album art or background): the artist's
+primary genre where Spotify has one for them, else the release year,
+plus track count and duration (Spotify has no free-text album
+description). Waits for Play or "Find something else." Nothing plays,
 and nothing is recorded in Past sessions, unless Play is pressed.
 
 Needle drop sequence, once Play is pressed (see DESIGN-SPEC for exact timing):
@@ -79,7 +84,14 @@ picker, and Records nearby's shelf.
 
 Tonearm arc: an amber stroke on the disc's exposed edge representing progress through the WHOLE ALBUM (sum of track durations; position = elapsed across tracklist), not the current track. Requires fetching the album's tracklist durations (`GET /albums/{id}`) at needle drop.
 
-Runout groove: when the last track ends, the arc completes, pulses twice like a locked groove, prompt reads from the copy deck, and the wall wakes for the next choice.
+Runout groove: when the last track ends, playback is explicitly paused
+(`PUT /me/player/pause`) before anything else, so Spotify's own
+account-level Autoplay setting (if the listener has it on) cannot start
+something unrelated the moment the album's context runs out — choosing
+the next record is meant to require an actual choice, not a race against
+Spotify's own autoplay. The arc completes, pulses twice like a locked
+groove, prompt reads from the copy deck, and the wall wakes for the next
+choice.
 
 ### F7. Playback
 - Primary: Web Playback SDK ("Longplayur" device). Premium required; works on desktop Chrome/Edge/Firefox.
@@ -88,7 +100,7 @@ Runout groove: when the last track ends, the arc completes, pulses twice like a 
 - Player bar: track, album–artist, play/pause, prev/next, album-level progress (the tonearm arc mirrors it), device note when on Connect.
 - Silent desktop reconnect: on load with a valid session, initialise the SDK player and transfer playback to it (`PUT /me/player`, `play: false`) before the user does anything. The user must never see Spotify's no-device state on a desktop that already has a valid session.
 - Android wake flow: when no Connect devices are found on a phone, a single "Wake Spotify" button deep-links into the Spotify app; on returning to Longplayur (`visibilitychange`), re-poll devices for up to 15s, auto-select this phone once it appears, and show a brief confirmation ("Found this phone. Carrying on.") before resuming the action that triggered the wake.
-- Output switcher: a persistent device icon on the player bar shows the current device and lists others; choosing one transfers playback mid-session via `PUT /me/player` with `device_ids`, without resetting the tonearm arc's progress.
+- Output switcher: a persistent device icon on the player bar shows the current device and lists others, each labelled with its Spotify-reported type (Computer, Phone, Speaker, TV, Cast, etc.); choosing one transfers playback mid-session via `PUT /me/player` with `device_ids`, without resetting the tonearm arc's progress. Any Chromecast-paired speaker that supports Spotify Connect already appears here (as "Cast") — that is the only way to get Spotify audio actually playing on a cast device from a webpage, so there is no separate Google Cast picker; one would only be able to cast the page itself, not control Spotify playback through it.
 
 ### F8. Past sessions (the journal)
 - Data model (localStorage, versioned):
@@ -122,6 +134,12 @@ Crackle on/off · New session · Past sessions · Sign out. No settings page.
 - "Record bag" now means a curated album collection, never the journal (see F8). A rail of bag chips sits above the Wall (DESIGN-SPEC §2): half-tile chips in deadwax mono, "YOUR WALL" always first (the user's own pool), followed by the seed bags. Selecting a bag crossfades the Wall to that bag's own spiral; the camera always snaps to whole rows and columns on any transition so no cover is ever cropped, at any viewport.
 - Six seed bags ship as `/bags/*.json` (name, blurb, 15 to 25 original `{title, artist}` pairs each, not reproduced from any published list): 90s US rap, soul essentials, Motown, trip hop, Britpop, late-night jazz.
 - Albums in a bag are resolved to Spotify album IDs lazily (on first view of that bag) via search, then cached; unresolvable entries are skipped silently rather than shown broken.
+- Within any pool smaller than the Wall's slot count, slots are filled with independently shuffled full passes of the pool rather than a straight repeat, so an album cannot reappear until every other album has had a turn (and even then in a different order), avoiding visible near-duplicates.
+
+### F12. Search
+- A search field above the bag rail takes free text and resolves it as either an artist name or a genre. Artist search finds the single best-matching artist and pulls their own discography; genre search uses Spotify's `genre:` search filter (which only works against artists, not albums directly) to find several artists tagged with that genre, each contributing a few albums.
+- Only real albums, and EPs of 6 or more tracks, are shown — singles shorter than that and compilations are filtered out (Spotify's `album_type` field, plus `total_tracks` for the EP exception).
+- A result replaces the Wall exactly like selecting a record bag does (same crossfade), and adds a dismissible "ARTIST: X" / "GENRE: X" chip to the bag rail; needle-dropping from a search result records normally into Past sessions.
 
 ## Edge cases (must handle, with specific copy — see copy deck)
 1. 403 on `/me/top/tracks`: user not allowlisted on their own app, or app misconfigured. Explain the fix.
@@ -134,6 +152,7 @@ Crackle on/off · New session · Past sessions · Sign out. No settings page.
 8. Offline: detect, pause polling, banner, resume gracefully.
 9. Two tabs open: last writer wins on the journal; no corruption (read-modify-write on each mutation).
 10. Deezer unreachable: Records nearby hides itself cleanly (F10); nothing else in the app depends on it.
+11. Search matches nothing playable (no artist/genre match, or everything found is a filtered-out single/compilation): explain in the wall prompt, leave the current Wall/bag showing rather than switching to an empty one.
 
 ## Non-goals (v1)
 No accounts, no server, no analytics, no payments (development-mode terms forbid commercial use), no social features, no playlist support, no free-tier Spotify support, no mobile app.

@@ -103,6 +103,12 @@ export function getAlbum(albumId) {
   return apiFetch(`/albums/${albumId}`);
 }
 
+/** Genres live on the artist, not the album -- Spotify's album response
+ * never populates a genre list of its own. */
+export function getArtist(artistId) {
+  return apiFetch(`/artists/${artistId}`);
+}
+
 export function getPlaybackState() {
   return apiFetch('/me/player');
 }

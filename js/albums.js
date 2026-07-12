@@ -39,6 +39,7 @@ function toPoolEntry(album) {
     uri: album.uri,
     name: album.name,
     artist: (album.artists || []).map((a) => a.name).join(', '),
+    artistId: album.artists?.[0]?.id ?? null,
     image: pickImage(album.images),
     totalTracks: album.total_tracks ?? null,
     releaseDate: album.release_date || null,

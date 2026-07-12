@@ -35,6 +35,12 @@
 //      (DomeGallery.css), since without them iOS/Android's own native
 //      long-press handling (save-image menu, haptics) races this and
 //      usually wins, so onLongPress never gets a clean signal.
+//   8. buildItems() fills a pool smaller than the slot count with
+//      independently shuffled full passes instead of a straight modulo
+//      repeat, so a given image only reappears after a full lap through the
+//      whole pool (and in a different order each time) rather than at a
+//      fixed, small stride that could put two instances of the same album
+//      close enough to both be visible on screen at once.
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useCallback } from 'react';
 import { useGesture } from '@use-gesture/react';
 import './DomeGallery.css';
@@ -140,6 +146,15 @@ const getDataNumber = (el: HTMLElement, name: string, fallback: number) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+function shuffled<T>(arr: T[]): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function buildItems(pool: ImageItem[], seg: number): ItemDef[] {
   const xCols = Array.from({ length: seg }, (_, i) => -37 + i * 2);
   const evenYs = [-4, -2, 0, 2, 4];
@@ -167,7 +182,19 @@ function buildItems(pool: ImageItem[], seg: number): ItemDef[] {
     return { src: image.src || '', alt: image.alt || '' };
   });
 
-  const usedImages = Array.from({ length: totalSlots }, (_, i) => normalizedImages[i % normalizedImages.length]);
+  // A pool smaller than the slot count has to repeat, but repeating it in
+  // the same order every lap (image[0] always at slot 0, slot N, slot 2N...)
+  // meant near-duplicates could land close enough together to both be
+  // visible on screen at once. Filling with independently shuffled full
+  // passes instead means every image appears exactly once per pass -- so a
+  // repeat is only ever possible after a full lap through the whole pool,
+  // and even then in a freshly shuffled order rather than the same relative
+  // positions as the lap before.
+  const usedImages: { src: string; alt: string }[] = [];
+  while (usedImages.length < totalSlots) {
+    usedImages.push(...shuffled(normalizedImages));
+  }
+  usedImages.length = totalSlots;
 
   for (let i = 1; i < usedImages.length; i++) {
     if (usedImages[i].src === usedImages[i - 1].src) {

@@ -57,14 +57,18 @@
       <path d="M5 7h14M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M7 7l1 13a1 1 0 001 1h6a1 1 0 001-1l1-13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
     <symbol id="icon-device" viewBox="0 0 24 24">
-      <rect x="9" y="3" width="12" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M3 16v3a1 1 0 001 1h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M3 12a9 9 0 019 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <path d="M3 8a13 13 0 0113 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M2 8V6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M2 12a6 6 0 016 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M2 16a2 2 0 012 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="2.5" cy="20.5" r="1.25" fill="currentColor" stroke="none"/>
     </symbol>
     <symbol id="icon-nearby" viewBox="0 0 24 24">
       <circle cx="9" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
       <circle cx="15" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    </symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M20 20l-4.8-4.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
     </symbol>
   </defs>
 </svg>
@@ -100,7 +104,7 @@
             <p>You will paste this into your Spotify app's settings in step 03.</p>
             <div class="mono-well">
               <code id="redirect-uri"></code>
-              <button id="copy-redirect-uri" class="icon-btn" type="button" aria-label="Copy redirect URI">
+              <button id="copy-redirect-uri" class="icon-btn" type="button" aria-label="Copy redirect URI" title="Copy redirect URI">
                 <svg class="icon"><use href="#icon-copy"/></svg>
                 <span>Copy</span>
               </button>
@@ -116,7 +120,7 @@
             <p id="send-to-computer-label" class="field-hint" hidden>Send this page to your computer:</p>
             <div id="send-to-computer" class="mono-well" hidden>
               <code id="send-to-computer-url"></code>
-              <button id="copy-page-url" class="icon-btn" type="button" aria-label="Copy this page's link">
+              <button id="copy-page-url" class="icon-btn" type="button" aria-label="Copy this page's link" title="Copy this page's link">
                 <svg class="icon"><use href="#icon-copy"/></svg>
                 <span>Copy</span>
               </button>
@@ -168,7 +172,7 @@
           <h2>Vinyl crackle</h2>
           <p>A little surface noise while the needle drops.</p>
         </div>
-        <button id="btn-crackle" class="icon-btn" type="button" aria-pressed="true">
+        <button id="btn-crackle" class="icon-btn" type="button" aria-pressed="true" title="Toggle vinyl crackle">
           <svg class="icon"><use href="#icon-crackle"/></svg>
           <span>On</span>
         </button>
@@ -193,6 +197,13 @@
   <!-- Main app: the Wall, player bar. The groove mark lives in the tab
        bar above; sign out and the crackle toggle live on the Setup tab. -->
   <section id="screen-app" class="screen" hidden>
+    <form id="search-form" class="search-form" aria-label="Search for an artist or genre">
+      <input id="search-input" type="search" class="search-input" placeholder="Search artist or genre" aria-label="Search artist or genre" autocomplete="off">
+      <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
+        <svg class="icon"><use href="#icon-search"/></svg>
+      </button>
+    </form>
+
     <nav id="bag-rail" class="bag-rail" aria-label="Record bags" hidden></nav>
 
     <p id="wall-prompt" class="wall-prompt"></p>
@@ -212,13 +223,13 @@
       </div>
       <div class="player-bottom">
         <div class="player-controls">
-          <button id="player-prev" class="icon-btn" type="button" aria-label="Previous album">
+          <button id="player-prev" class="icon-btn" type="button" aria-label="Previous album" title="Previous album">
             <svg class="icon"><use href="#icon-previous"/></svg>
           </button>
-          <button id="player-playpause" class="icon-btn" type="button" aria-label="Play">
+          <button id="player-playpause" class="icon-btn" type="button" aria-label="Play" title="Play">
             <svg class="icon"><use href="#icon-play"/></svg>
           </button>
-          <button id="player-next" class="icon-btn" type="button" aria-label="Next album">
+          <button id="player-next" class="icon-btn" type="button" aria-label="Next album" title="Next album">
             <svg class="icon"><use href="#icon-next"/></svg>
           </button>
         </div>
@@ -228,10 +239,10 @@
           <span id="player-total" class="player-time">0:00</span>
         </div>
         <span id="player-device" class="player-device" hidden></span>
-        <button id="player-nearby" class="icon-btn player-device-switch" type="button" aria-label="Records nearby">
+        <button id="player-nearby" class="icon-btn player-device-switch" type="button" aria-label="Records nearby" title="Records nearby">
           <svg class="icon"><use href="#icon-nearby"/></svg>
         </button>
-        <button id="player-device-switch" class="icon-btn player-device-switch" type="button" aria-label="Choose playback device">
+        <button id="player-device-switch" class="icon-btn player-device-switch" type="button" aria-label="Choose playback device" title="Choose playback device">
           <svg class="icon"><use href="#icon-device"/></svg>
         </button>
       </div>
@@ -249,7 +260,7 @@
       <h1>Past sessions</h1>
       <div class="past-sessions-actions">
         <button id="btn-new-session" class="icon-btn" type="button">New session</button>
-        <button id="btn-close-past-sessions" class="icon-btn" type="button" aria-label="Close past sessions">
+        <button id="btn-close-past-sessions" class="icon-btn" type="button" aria-label="Close past sessions" title="Close past sessions">
           <svg class="icon"><use href="#icon-close"/></svg>
         </button>
       </div>

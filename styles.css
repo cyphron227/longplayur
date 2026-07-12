@@ -85,6 +85,7 @@ button { cursor: pointer; }
   display: inline-block;
   vertical-align: middle;
   color: currentColor;
+  flex-shrink: 0;
 }
 
 .mark { display: block; color: var(--bone); }
@@ -446,6 +447,22 @@ button { cursor: pointer; }
 
 /* -------------------- Bag rail -------------------- */
 
+.search-form { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 20px 0; }
+.search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--obsidian-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--bone);
+  font-size: 14px;
+  padding: 8px 12px;
+  min-height: 40px;
+}
+.search-input:focus-visible { border-color: var(--amber); }
+.search-submit-btn { flex: 0 0 auto; min-height: 40px; }
+.bag-chip.is-search { color: var(--obsidian); background: var(--amber); border-color: var(--amber); }
+
 /* [hidden] override needed: display:flex below has equal CSS specificity to
    the UA stylesheet's [hidden]{display:none} and author-origin wins ties,
    so without this the rail would flash visible-but-empty before the bag
@@ -553,9 +570,20 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 /* Selection preview (selectAlbum(), the Wall's tap/long-press flow):
    bigger and more legible than the needle-drop ceremony's own
    title/deadwax, since this is meant to be read at a glance while
-   deciding, not glimpsed mid-choreography. */
-.preview-title { font-family: var(--font-serif); font-size: 30px; line-height: 1.25; color: var(--bone); margin-bottom: 6px; }
-.preview-artist { font-family: var(--font-interface); font-size: 17px; font-weight: 500; color: var(--bone-dim); }
+   deciding, not glimpsed mid-choreography. The text sits on its own
+   opaque panel (not floating directly over the cover or the dimmed wall)
+   so it stays readable regardless of what colours are behind it. */
+.preview-text-panel {
+  display: inline-block;
+  background: rgba(18, 18, 18, 0.85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 8px;
+  padding: 14px 20px;
+  max-width: min(90vw, 380px);
+}
+.preview-title { font-family: var(--font-serif); font-size: 26px; line-height: 1.25; color: var(--bone); margin-bottom: 6px; }
+.preview-artist { font-family: var(--font-interface); font-size: 16px; font-weight: 500; color: var(--bone-dim); }
 .preview-description { margin-top: 6px; }
 
 .preview-scrim {
@@ -705,15 +733,21 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 /* -------------------- Past sessions -------------------- */
 
 /* The one deliberate exception to "the page never scrolls": a journal of
-   sessions can grow arbitrarily long and has to be able to scroll somewhere. */
-#screen-past-sessions { padding: 24px; max-width: 720px; margin: 0 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.past-sessions-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
-.past-sessions-header h1 { font-family: var(--font-serif); font-size: 26px; }
+   sessions can grow arbitrarily long and has to be able to scroll somewhere.
+   overflow-x is pinned to hidden explicitly: setting only overflow-y to a
+   non-visible value makes the UA compute overflow-x as auto too (per the
+   CSS overflow spec), which on a narrow phone turned any child that didn't
+   quite fit (the header's title/buttons, a row's label/share button) into
+   an invisible horizontal scroll instead of just wrapping/truncating. */
+#screen-past-sessions { padding: 24px; max-width: 720px; margin: 0 auto; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+.past-sessions-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 24px; }
+.past-sessions-header h1 { font-family: var(--font-serif); font-size: 26px; min-width: 0; }
 .past-sessions-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .past-sessions-list { display: flex; flex-direction: column; gap: 0; }
 .session-row { border-bottom: 1px solid var(--line); padding: 18px 0; }
 .session-row-head-wrap { display: flex; align-items: center; gap: 8px; }
 .session-row-head { display: flex; flex: 1 1 auto; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; background: none; border: none; text-align: left; color: inherit; padding: 0; min-height: 44px; min-width: 0; }
+.session-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .session-share-btn { flex: 0 0 auto; }
 /* Truncates at the page width: covers that don't fit are simply clipped,
    never a horizontal scrollbar. */
@@ -766,6 +800,9 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   font-size: 14px;
 }
 .device-list button:hover { border-color: var(--bone-dim); }
+.device-list button.device-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.device-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.device-item-type { flex: 0 0 auto; font-size: 10px; }
 
 /* -------------------- Responsive -------------------- */
 
@@ -773,6 +810,11 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   .tagline { font-size: 24px; }
   /* No room next to the progress bar on a phone; the times matter more. */
   .player-device { display: none; }
+
+  /* Title on its own line if the actions don't fit beside it (see the
+     header's flex-wrap above); this is the fallback, not the common case. */
+  .past-sessions-header h1 { font-size: 20px; }
+  .past-sessions-actions .icon-btn { padding: 8px 10px; }
 
   /* Fixed and permanent: the player bar must never scroll off screen, and
      nothing outside the gallery itself should scroll at all on a phone. */

@@ -4,6 +4,7 @@
 
 import { prefersReducedMotion, formatDuration } from './ui.js';
 import * as playback from './playback.js';
+import { getArtist } from './spotify.js';
 
 export const TIMINGS = Object.freeze({
   recedeMs: 600, // 0 -> 600: other covers recede; camera pans; cover scales to 1.6
@@ -380,6 +381,42 @@ function deadwaxLine(entry, context) {
   return parts.join(' · '); // interpunct, never a dash
 }
 
+// Genre lives on the artist, not the album -- Spotify's album response
+// never populates one of its own -- so this is a second, small request
+// alongside prepareAlbum(). Cached per artist for the tab's lifetime since
+// a wall full of the same artist's albums shouldn't refetch it each time,
+// and coverage is patchy enough (many artists have no genres at all) that
+// failing quietly and falling back to the release year is the honest
+// default rather than leaving a blank line.
+const artistGenreCache = new Map();
+
+async function fetchPrimaryGenre(artistId) {
+  if (!artistId) return null;
+  if (artistGenreCache.has(artistId)) return artistGenreCache.get(artistId);
+  let genre = null;
+  try {
+    const artist = await getArtist(artistId);
+    genre = artist?.genres?.[0] || null;
+  } catch {
+    genre = null;
+  }
+  artistGenreCache.set(artistId, genre);
+  return genre;
+}
+
+/** Same as deadwaxLine() but without the artist (selectAlbum()'s preview
+ * already shows the artist on its own line above this one), leading with
+ * the artist's primary genre in place of the release year where Spotify
+ * actually has genre data for them, since it reads as more characterful
+ * than a bare year -- falling back to the year where it doesn't. */
+function descriptionLine(entry, context, genre) {
+  const year = context?.year;
+  const trackCount = context?.tracks?.length ?? entry.totalTracks ?? null;
+  const duration = context?.totalDurationMs ? formatDuration(context.totalDurationMs) : null;
+  const parts = [genre || year, trackCount ? `${trackCount} tracks` : null, duration].filter(Boolean);
+  return parts.join(' · ');
+}
+
 let hasEverDropped = localStorage.getItem(LS_HINT_SHOWN) === 'true';
 
 function showCrackleHintOnce(hintEl) {
@@ -409,6 +446,32 @@ function fallbackCenterRect(wallViewportEl) {
     y: wallViewportEl.clientHeight / 2 - 60,
     width: 120,
     height: 120,
+  };
+}
+
+// The enlarged cover's target size is deliberately independent of the
+// tapped tile's own live bounding rect: DomeGallery tiles sit on a
+// rotating 3D dome, so getBoundingClientRect() on one is a *projected*
+// size that varies with perspective depending on where it currently sits
+// (near the centre of view vs near the edge) -- scaling off it directly
+// made the enlarged cover, and everything positioned relative to it (the
+// text above it), inconsistent from album to album. This fixed,
+// viewport-relative size is the same every time; the cover still animates
+// FROM the tile's real (small, possibly distorted) rect, just always TO
+// the same place.
+const ENLARGED_MAX_PX = 420;
+
+function computeEnlargedTarget(wallViewportEl) {
+  const size = Math.min(
+    wallViewportEl.clientWidth * 0.62,
+    wallViewportEl.clientHeight * 0.5,
+    ENLARGED_MAX_PX
+  );
+  return {
+    width: size,
+    height: size,
+    left: wallViewportEl.clientWidth / 2 - size / 2,
+    top: wallViewportEl.clientHeight / 2 - size / 2,
   };
 }
 
@@ -464,16 +527,13 @@ export async function needleDrop(entry, ctx) {
 
   cover.getBoundingClientRect(); // force layout before animating.
 
-  const targetWidth = cellRect.width * 1.6;
-  const targetHeight = cellRect.height * 1.6;
-  const targetLeft = wallViewportEl.clientWidth / 2 - targetWidth / 2;
-  const targetTop = wallViewportEl.clientHeight / 2 - targetHeight / 2;
-  text.style.top = `${Math.max(8, targetTop - 56)}px`;
+  const target = computeEnlargedTarget(wallViewportEl);
+  text.style.top = `${Math.max(8, target.top - 56)}px`;
 
   requestAnimationFrame(() => {
     Object.assign(cover.style, {
-      left: `${targetLeft}px`, top: `${targetTop}px`,
-      width: `${targetWidth}px`, height: `${targetHeight}px`,
+      left: `${target.left}px`, top: `${target.top}px`,
+      width: `${target.width}px`, height: `${target.height}px`,
     });
   });
 
@@ -671,9 +731,13 @@ export async function selectAlbum(entry, ctx) {
   }
   layer.appendChild(cover);
 
+  // The text sits on its own opaque panel (not just floating over
+  // whatever is behind it) so it stays readable regardless of the album
+  // art's own colours or what part of the dimmed wall happens to show
+  // through behind it.
   const text = document.createElement('div');
   text.className = 'ceremony-text';
-  text.innerHTML = '<div class="preview-title"></div><div class="preview-artist"></div><div class="preview-description deadwax"></div>';
+  text.innerHTML = '<div class="preview-text-panel"><div class="preview-title"></div><div class="preview-artist"></div><div class="preview-description deadwax"></div></div>';
   text.querySelector('.preview-title').textContent = entry.name;
   text.querySelector('.preview-artist').textContent = entry.artist;
   layer.appendChild(text);
@@ -686,6 +750,7 @@ export async function selectAlbum(entry, ctx) {
   playBtn.type = 'button';
   playBtn.className = 'preview-play-btn';
   playBtn.setAttribute('aria-label', `Play ${entry.name}`);
+  playBtn.title = `Play ${entry.name}`;
   playBtn.innerHTML = '<svg class="icon"><use href="#icon-play"/></svg>';
   layer.appendChild(playBtn);
 
@@ -697,30 +762,34 @@ export async function selectAlbum(entry, ctx) {
 
   cover.getBoundingClientRect(); // force layout before animating.
 
-  const targetWidth = cellRect.width * 1.6;
-  const targetHeight = cellRect.height * 1.6;
-  const targetLeft = wallViewportEl.clientWidth / 2 - targetWidth / 2;
-  const targetTop = wallViewportEl.clientHeight / 2 - targetHeight / 2;
-  text.style.top = `${Math.max(8, targetTop - 96)}px`;
-  playBtn.style.left = `${targetLeft + targetWidth / 2}px`;
-  playBtn.style.top = `${targetTop + targetHeight / 2}px`;
-  findBtn.style.left = `${targetLeft + targetWidth / 2}px`;
-  findBtn.style.top = `${Math.min(wallViewportEl.clientHeight - 52, targetTop + targetHeight + 16)}px`;
+  // Fixed target size (see computeEnlargedTarget's own comment): the same
+  // for every album, so the text panel above it lands in the same place
+  // every time instead of drifting into (or away from) the cover depending
+  // on where the tapped tile happened to sit on the rotating dome.
+  const target = computeEnlargedTarget(wallViewportEl);
+  text.style.top = `${Math.max(8, target.top - 108)}px`;
+  playBtn.style.left = `${target.left + target.width / 2}px`;
+  playBtn.style.top = `${target.top + target.height / 2}px`;
+  findBtn.style.left = `${target.left + target.width / 2}px`;
+  findBtn.style.top = `${Math.min(wallViewportEl.clientHeight - 52, target.top + target.height + 16)}px`;
 
   requestAnimationFrame(() => {
     scrim.classList.add('is-visible');
     Object.assign(cover.style, {
-      left: `${targetLeft}px`, top: `${targetTop}px`,
-      width: `${targetWidth}px`, height: `${targetHeight}px`,
+      left: `${target.left}px`, top: `${target.top}px`,
+      width: `${target.width}px`, height: `${target.height}px`,
     });
     text.classList.add('is-visible');
     playBtn.classList.add('is-visible');
     findBtn.classList.add('is-visible');
   });
 
-  playback.prepareAlbum(entry).catch(() => null).then((context) => {
+  Promise.all([
+    playback.prepareAlbum(entry).catch(() => null),
+    fetchPrimaryGenre(entry.artistId),
+  ]).then(([context, genre]) => {
     const line = text.querySelector('.preview-description');
-    if (line) line.textContent = deadwaxLine(entry, context);
+    if (line) line.textContent = descriptionLine(entry, context, genre);
   });
 
   const decision = await new Promise((resolve) => {

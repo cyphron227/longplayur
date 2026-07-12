@@ -6,7 +6,7 @@ The interface is a listening room at night. The album covers are the only colour
 
 These exist because the obvious implementation of this spec looks AI-generated. They are hard requirements:
 
-1. **No emoji and no unicode glyph icons** (no ⏮ ⏸ ⤢ ⌄ ⛭ anywhere). All icons are inline SVG, 1.5px stroke, round caps, drawn from a shared sprite in index.html. Icon set needed: play, pause, previous, next, chevron, crackle (three short arcs), close, copy, export (doubles as the share icon), bin, device (the output switcher's cast-style icon). The zoom-out (four corners) icon was retired along with its manual trigger button; `wallApi.zoomToFitAll()` still fires automatically from the runout groove's at-edge case.
+1. **No emoji and no unicode glyph icons** (no ⏮ ⏸ ⤢ ⌄ ⛭ anywhere). All icons are inline SVG, 1.5px stroke, round caps, drawn from a shared sprite in index.html. Icon set needed: play, pause, previous, next, chevron, crackle (three short arcs), close, copy, export (doubles as the share icon), bin, device (the output switcher's cast icon: a screen, open at the bottom-left where two wave arcs and a dot emanate from, the standard cast glyph shape), nearby (two overlapping circles), search (a magnifying glass). The zoom-out (four corners) icon was retired along with its manual trigger button; `wallApi.zoomToFitAll()` still fires automatically from the runout groove's at-edge case.
 2. **Nothing scales on hover.** Covers respond like sleeves under gallery light: `filter: brightness(1.08)` and the label rises. Scale transforms are reserved exclusively for the ceremony.
 3. **No infinite pulsing animations.** Anything that "breathes" forever reads as a loading skeleton. The runout wake is a single ripple (see §3), then rest.
 4. **One serif element per screen state, maximum.**
@@ -60,6 +60,10 @@ There is exactly ONE grid in the app: the Wall. This removes all tapestry/wall s
 ### 2a. The bag rail
 A row of half-tile chips in deadwax mono sits directly above the Wall. "YOUR WALL" (the user's own pool) is always first; the six seed record bags follow. Selecting a chip crossfades the whole Wall (`--dur-breath`) to that bag's own spiral layout; the camera always snaps to whole rows and columns on any bag switch, at any viewport, so no cover is ever cropped, letterboxing with obsidian where the aspect ratio does not divide evenly. A record bag is a curated list of albums, not a listening session: playing from one records normally into Past sessions, tagged with which bag it came from.
 
+A search field sits above the rail (search icon, text input for an artist name or a genre). A result crossfades the Wall the same way a bag does, and adds a dismissible "ARTIST: X" / "GENRE: X" chip to the rail alongside YOUR WALL; tapping it (or YOUR WALL) returns to the user's own pool. Only real albums, and EPs of 6 or more tracks, are shown -- singles shorter than that and compilations are filtered out. Artist search resolves to that one artist's own discography; genre search resolves to several artists tagged with that genre (Spotify's own `genre:` search filter, which only works against artists, not albums directly), each contributing a few albums.
+
+Within the Wall, a pool smaller than the dome's slot count is filled with independently shuffled full passes of the pool rather than a straight repeat, so the same album cannot reappear until every other album has had its turn, and even then in a different order -- avoiding visible duplicates within any one glance across the dome.
+
 ## 3. The ceremony (choreography, exact)
 
 ### The disc (signature element)
@@ -72,9 +76,11 @@ the foreground as a decision point:
 | t (ms) | What |
 |---|---|
 | 0 | Click (or long press). Other covers ease to 20% opacity (`--dur-breath`); if a different album is the current "now playing" hero, it settles back into its cell first so the two covers never overlap. No scaling of anything except the chosen cover |
-| 0 to 600 | Camera pans to centre the chosen cover; the cover alone scales to 1.6 on an overlay layer (original cell hidden) |
-| on animation end | Serif album title and artist name fade in above (readable at a glance, not glimpsed mid-choreography); a one-line description fades in below once fetched: `ARTIST · YEAR · N TRACKS · MM:SS` (the same deadwax line the needle drop itself uses below -- Spotify's API has no free-text album description). An amber Play button sits over the cover; "Find something else" sits below it |
+| 0 to 600 | Camera pans to centre the chosen cover; the cover alone scales to a fixed size (not derived from the tapped tile's own live, perspective-projected bounding box, which varies with where it sits on the dome -- see "Consistent sizing" below), always the same for every album |
+| on animation end | A single opaque text panel fades in above the cover (not floating directly over it, so it stays legible against any album art or dimmed wall behind it): serif album title, artist name, then a one-line description -- the artist's primary genre where Spotify has one for them, falling back to the release year, plus track count and duration (never repeating the artist, already shown on its own line). An amber Play button sits over the cover; "Find something else" sits below it |
 | indefinite | Waits for a decision. Play continues into the needle drop below. "Find something else" (or tapping the scrim behind the cover, or Escape, or dragging the gallery) eases the cover back into its cell and clears the recede, with nothing played and nothing recorded in Past sessions |
+
+**Consistent sizing:** DomeGallery tiles sit on a rotating 3D dome, so a tapped tile's own `getBoundingClientRect()` is a *projected* size that varies with perspective depending on where it currently sits. Scaling the enlarged cover off that directly made its size (and everything positioned relative to it) inconsistent from album to album, including sometimes overlapping the text above it. The enlarged size is a fixed, viewport-relative value instead -- the same every time -- and the cover still animates FROM the tapped tile's real position, just always TO the same place.
 
 ### Needle drop (from the Play button in the selection above; audio at ~1.9s after Play)
 | t (ms), from Play | What |
@@ -109,7 +115,7 @@ After a successful connect and pool build, and on demand via a "Test connection"
 The groove mark, larger, rotating at 33⅓ rpm (1800ms/rev), amber stylus dot fixed. Copy: "Pulling records from the shelf."
 
 ### Player bar
-`[art] Track name / Album · Artist    prev play next` with the album-level progress hairline below (amber fill) and times in deadwax. Device note (moss): "Playing on {device}" when on Connect. A persistent device (output switcher) icon sits at the end of the bar: tapping it lists available Spotify devices and the current one; choosing another transfers playback there without resetting the tonearm arc. On a phone with no devices found, the same control offers "Wake Spotify" (see PRD F7).
+`[art] Track name / Album · Artist    prev play next` with the album-level progress hairline below (amber fill) and times in deadwax. Device note (moss): "Playing on {device}" when on Connect. A persistent device (output switcher) icon -- a screen with two cast waves and a dot, the same shape a cast/output control is generally recognised by -- sits at the end of the bar: tapping it lists available Spotify devices, each labelled with its type (Computer, Phone, Speaker, TV, Cast, etc., from Spotify's own device data) and the current one marked. Choosing another transfers playback there without resetting the tonearm arc. On a phone with no devices found, the same control offers "Wake Spotify" (see PRD F7). Any Chromecast-paired speaker that supports Spotify Connect already appears in this same list (labelled "Cast") -- that is the only way to actually get Spotify audio playing on a cast device from a webpage, so there is no separate Google Cast picker.
 
 ### Records nearby
 Opened from a player-bar action while something is playing: a low shelf of 4 to 6 related albums slides up over the bottom of the viewport, each cover captioned `ARTIST · {n} FANS` in deadwax. Needle-dropping one runs the full ceremony as normal. The shelf hides itself entirely (no error state, no empty shelf) if Deezer is unreachable.
@@ -141,6 +147,12 @@ Prompts
 Selecting an album
 - Play button aria-label: "Play {album}"
 - Dismiss: "Find something else"
+
+Search
+- Placeholder: "Search artist or genre"
+- Searching: "Searching for "{query}"."
+- No results: "No albums found for "{query}". Only full albums and EPs of 6 or more tracks are shown."
+- Result prompt: "Artist: {query}. {N} records. Tap one to drop the needle." / "Genre: {query}. {N} records. Tap one to drop the needle."
 
 Errors
 - 403 top tracks: "Spotify refused (403). In your app's settings on the developer dashboard, add your own Spotify account under User Management, then try again."

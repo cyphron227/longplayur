@@ -86,6 +86,16 @@ albums, sourced from Deezer's free public API (no account or key needed)
 and mapped back to real Spotify albums. It hides itself with no error
 state if Deezer cannot be reached.
 
+## Search
+
+A search field above the bag rail takes a free-text artist name or
+genre. Artist search pulls that one artist's own discography; genre
+search finds several artists tagged with that genre and pulls a few
+albums from each. Only full albums and EPs of 6 or more tracks are
+shown; singles and compilations are filtered out. A result replaces the
+Wall the same way a record bag does, with a dismissible chip to get back
+to your own wall.
+
 ## Privacy
 
 - No accounts, no server, no analytics, no telemetry.
@@ -135,6 +145,7 @@ js/
   albums.js               pool building, scoring, caching
   bags.js                 record bag manifest + lazy Spotify resolution
   nearby.js               Records nearby, sourced from Deezer's public API
+  search.js               search by artist or genre (Spotify's own API)
   wall.js                 bridges the dome gallery to the app's needle-drop/journal API
   dome-gallery.bundle.js  build output of gallery/ (React dome gallery), do not hand-edit
   playback.js             Web Playback SDK + Spotify Connect fallback, output switcher

@@ -5,6 +5,109 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Selection preview polish, search, autoplay prevention, tile shuffling (2026-07-12)
+
+A round of fixes and additions on top of the selection-preview flow above:
+
+- **Consistent, non-overlapping preview sizing.** The enlarged cover's
+  target size was `cellRect.width * 1.6`, where `cellRect` came from the
+  tapped tile's live `getBoundingClientRect()`. DomeGallery tiles sit on a
+  rotating 3D dome, so that is a *projected* size that varies with
+  perspective depending on where the tile currently sits -- this made the
+  enlarged cover, and the text positioned above it, inconsistent from
+  album to album, and on some albums put the text close enough to
+  overlap the cover. `computeEnlargedTarget()` in `js/ceremony.js` now
+  returns a fixed, viewport-relative size (same for every album); the
+  cover still animates from the tile's real (small, possibly distorted)
+  position, just always to the same place. Used by both `needleDrop()`
+  and `selectAlbum()`.
+- **Readable against any background.** The preview's title/artist/
+  description now sit on their own opaque, blurred panel (`.preview-text-
+  panel`) instead of floating directly over the cover or the dimmed wall,
+  so they stay legible regardless of the album art's own colours.
+- **Removed a genuine artist repetition**: the description line
+  (`descriptionLine()`) used to lead with the artist name, which was
+  already shown on its own line above it. It no longer does.
+- **Genre in place of the year**, where Spotify has one. Genres live on
+  the *artist*, not the album -- the album response never populates one --
+  so this is a second small request (`GET /artists/{id}`, `spotify.js`'s
+  new `getArtist()`), cached per artist in `js/ceremony.js`'s
+  `artistGenreCache` for the tab's lifetime. Falls back to the release
+  year where Spotify has no genre for that artist, which is common enough
+  (many artists, especially lesser-known ones, have an empty `genres`
+  array) that this needed to be a graceful fallback, not an assumption.
+  Every pool-producing module (`albums.js`, `bags.js`, `nearby.js`,
+  `search.js`) now also carries the primary artist's `artistId` on each
+  pool entry so this lookup is possible.
+- **A real pre-existing bug fixed**: `.preview-play-btn` never had
+  `pointer-events: auto`. Its parent (`.ceremony-layer`) is
+  `pointer-events: none` so drags pass through to the gallery beneath it,
+  and CSS `pointer-events` is inherited, so the button was very likely
+  unclickable this whole time -- only caught now since it had previously
+  only been verified via curl, never on an actual device.
+- **Output switcher icon redesigned.** The original combined a portrait
+  rectangle with disconnected signal arcs that did not read as a coherent
+  glyph. Replaced with the conventional cast shape: a screen open at the
+  bottom-left, with two wave arcs and a dot emanating from that corner.
+- **Devices labelled by type** (Computer, Phone, Speaker, TV, Cast, etc.,
+  from Spotify's own `device.type` field) in the output-switcher/device-
+  picker modal. This is deliberately *not* a separate Google Cast
+  integration: Spotify's authenticated audio streams cannot be flung to a
+  generic Cast receiver from a webpage, so the only way to actually get
+  Spotify audio playing on a cast device is via Spotify's own device
+  network, which already surfaces any Chromecast-paired speaker with
+  Spotify Connect support as a device of type `CastAudio`/`CastVideo`. A
+  literal separate Cast picker was considered and rejected as misleading:
+  it would only be able to cast the webpage itself, with no control over
+  Spotify playback through it.
+- **Past sessions mobile overflow.** `#screen-past-sessions` set
+  `overflow-y: auto` without an explicit `overflow-x`; per the CSS
+  overflow spec, setting only one axis to a non-`visible` value computes
+  the other as `auto` too, so anything that didn't quite fit on a narrow
+  phone (the header's title plus New session plus close button; a
+  session row's deadwax label plus share button) became an invisible
+  horizontal scroll rather than wrapping or truncating -- the share
+  button was there, just off past the right edge. Fixed with an explicit
+  `overflow-x: hidden`, a `flex-wrap` header that drops to a second line
+  if it doesn't fit, and a dedicated truncating class on the row's
+  deadwax label (`.session-row-label`) instead of letting it force
+  overflow the way an un-shrinkable flex item's text content can.
+- **Runout no longer risks Spotify's own Autoplay.** If a listener has
+  Spotify's account-level Autoplay setting on, it could previously start
+  something unrelated playing the moment an album's context ran out,
+  undermining the entire "you have to choose the next record" premise.
+  `handleRunout()` in `js/main.js` now explicitly issues a pause
+  (`playback.togglePlayPause(true)`) as soon as the runout is detected.
+  Caveat: if Autoplay is on and Spotify's own client races ahead of this
+  app's end-of-album detection (`js/ending.js`) before ever reporting a
+  paused state, the detection itself might not fire in the first place --
+  this has not been exercised against a real account with Autoplay
+  enabled, so treat this as a best-effort mitigation, not a guarantee.
+- **Fewer visible duplicate covers on the Wall.** `gallery/src/
+  DomeGallery.tsx`'s `buildItems()` used to fill a pool smaller than the
+  dome's slot count with a straight modulo repeat (image 0 at slot 0,
+  slot `pool.length`, slot `2 * pool.length`...), which could put two
+  instances of the same album close enough together to both be visible on
+  screen at once. It now fills with independently shuffled full passes of
+  the pool instead, so an album can only reappear after every other album
+  in the pool has had a turn, and even then in a different order. This is
+  the eighth deliberate change from the upstream component, documented in
+  the file's own header comment; rebuilt via `cd gallery && npm run build`.
+- **New: search by artist or genre** (`js/search.js`). Spotify's search
+  endpoint only supports the `genre:` field filter for artist and track
+  searches, not albums directly, so both modes resolve to one or more
+  artists first, then pull each artist's own albums via `/artists/{id}/
+  albums` -- more reliable than a free-text album search anyway, since
+  that also surfaces unrelated compilations and various-artist samplers.
+  Artist mode takes the single best match; genre mode takes up to 10
+  artists tagged with that genre and aggregates a few albums from each.
+  Only real albums (`album_type === 'album'`), and `single`-typed
+  releases with 6 or more tracks (an EP Spotify happens to file as a
+  single), are kept; compilations and shorter singles are filtered out,
+  per explicit request. A result reuses the bag-rail's own crossfade
+  (`switchWallPool()`) and adds a dismissible "ARTIST: X" / "GENRE: X"
+  chip alongside YOUR WALL, mutually exclusive with an active bag.
+
 ## Liner notes removed, native share added (INCREMENT-01 Phase 3)
 
 Liner notes are gone entirely: `journal.js`'s `setLinerNote()` export, the
