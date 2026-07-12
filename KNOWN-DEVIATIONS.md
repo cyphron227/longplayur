@@ -141,6 +141,18 @@ preview pool. The diagnosability fix (loud failures, the `failed` flag)
 stayed, since it is what actually made this fixable at all, and is worth
 keeping regardless of this specific bug.
 
+With the scope error gone, the same live session immediately surfaced a
+second, unrelated bug the same way: `GET /artists/{id}/albums` came back
+`400 Invalid limit` for `limit=12`. `js/search.js`'s `MAX_ALBUMS_PER_ARTIST`
+constant was set from a general assumption that Spotify list endpoints
+allow up to 50 -- true for many of them, but this specific endpoint (and,
+it turns out, the general `/search` endpoint too) caps `limit` at 10,
+confirmed against Spotify's own current API reference rather than
+assumed a second time. Fixed by paginating: `albumsForArtist()` now
+fetches two pages of 10 (`offset=0` and `offset=10`) in parallel per
+artist, for up to 20 releases before the album/EP filter runs, rather
+than requesting an invalid `limit=12` in one call.
+
 ## Liner notes removed, native share added (INCREMENT-01 Phase 3)
 
 Liner notes are gone entirely: `journal.js`'s `setLinerNote()` export, the

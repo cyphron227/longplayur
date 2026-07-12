@@ -11,7 +11,13 @@
 import { apiFetch } from './spotify.js';
 
 const MAX_ARTISTS_GENRE = 10;
-const MAX_ALBUMS_PER_ARTIST = 12;
+// GET /artists/{id}/albums caps `limit` at 10 (not 50, as most other list
+// endpoints allow) -- confirmed against Spotify's own docs after a live
+// request with limit=12 came back "400 Invalid limit". Two pages (20
+// releases pre-filter) gives a fuller discography than one without adding
+// much latency, since both requests for a given artist fire in parallel.
+const ALBUMS_PAGE_LIMIT = 10;
+const ALBUMS_PAGES_PER_ARTIST = 2;
 const POOL_TARGET = 100;
 
 function pickImage(images) {
@@ -55,8 +61,12 @@ async function albumsForArtist(artistId) {
     // reconnect to pick up the new scope. Omitting market entirely is
     // valid for this endpoint -- it just means Spotify does not filter the
     // discography to one country, which does not matter for a preview pool.
-    const data = await apiFetch(`/artists/${artistId}/albums?include_groups=album,single&limit=${MAX_ALBUMS_PER_ARTIST}`);
-    return { items: data?.items || [], failed: false };
+    const pages = await Promise.all(
+      Array.from({ length: ALBUMS_PAGES_PER_ARTIST }, (_, i) =>
+        apiFetch(`/artists/${artistId}/albums?include_groups=album,single&limit=${ALBUMS_PAGE_LIMIT}&offset=${i * ALBUMS_PAGE_LIMIT}`)
+      )
+    );
+    return { items: pages.flatMap((data) => data?.items || []), failed: false };
   } catch (err) {
     console.error('[search] GET /artists/{id}/albums failed:', err);
     return { items: [], failed: true };
