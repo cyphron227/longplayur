@@ -341,8 +341,18 @@ not escalating rather than by an explicit stop/start of the interval timer.
    integration of white noise (`last = (last + 0.02*white) / 1.02`) rather
    than a true 1/f-shaped brown noise or a pre-rendered file. Chosen to avoid
    an AudioWorklet module (extra file, extra CSP surface) and to honour "no
-   audio file asset" in PRD F6. Sounds close to brown noise but has not been
-   critically listened to on real speakers/headphones.
+   audio file asset" in PRD F6. Reworked per request (2026-07-12) to sound
+   less like a robotic loop: the bed is now two independently-generated
+   (and so naturally decorrelated) 8-second layers, highpassed/lowpassed
+   and hard-panned apart via `StereoPannerNode` for width (falls back to
+   mono if unsupported); ticks vary in loudness/frequency with an
+   exponential decay envelope, an occasional lower "pop" thump alongside
+   the usual high ticks, a random pan per hit, and occasional small
+   clusters instead of one uniform sound at an even rate. Still no audio
+   file. Not critically listened to on real speakers/headphones by an
+   automated agent -- this environment cannot play or record audio, so the
+   change is reasoned from known vinyl-noise synthesis technique, not
+   auditioned.
 
 4. **Share-card grid rounding.** Superseded by the layout rework above:
    the card no longer uses DESIGN-SPEC §4's 480px-hero-plus-224px-grid

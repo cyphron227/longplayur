@@ -46,16 +46,29 @@ export function toggleCrackle() {
 }
 
 // ---------------------------------------------------------------------
-// Web Audio crackle: synthesised, no audio file. Brown-noise bed plus
-// randomised band-passed tick bursts. Never overlaps Spotify audio because
-// it always fully fades/stops before PUT /play fires (see needleDrop below).
+// Web Audio crackle: synthesised, no audio file (Docs/CLAUDE.md). The bed
+// is two independently-generated (so naturally decorrelated), band-shaped
+// brown-noise layers hard-panned apart for stereo width, long enough that
+// looping isn't obvious even during a 30s runout crackle. Ticks vary in
+// loudness and frequency -- mostly quiet high clicks, occasionally a
+// louder low "pop" (dust/scratch thump), sometimes arriving in a small
+// cluster -- rather than one uniform sound at an even rate. Never overlaps
+// Spotify audio because it always fully fades/stops before PUT /play fires
+// (see needleDrop below).
 // ---------------------------------------------------------------------
 
+const BED_BUFFER_SECONDS = 8;
+const BED_HIGHPASS_HZ = 40; // trims sub-bass mud left over from the leaky integrator.
+const BED_LOWPASS_HZ = 2600; // wide enough to keep a little "air", not just a dull rumble.
+const BED_PAN = 0.55;
+
 let audioCtx = null;
-let brownNoiseBuffer = null;
+let brownNoiseBufferL = null;
+let brownNoiseBufferR = null;
 let whiteNoiseBuffer = null;
 let activeBed = null;
 let tickTimer = null;
+let clusterTimers = [];
 
 function ensureAudioContext() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -67,7 +80,7 @@ function dbToGain(db) {
   return Math.pow(10, db / 20);
 }
 
-function buildBrownNoiseBuffer(ctx, seconds = 2) {
+function buildBrownNoiseBuffer(ctx, seconds = BED_BUFFER_SECONDS) {
   const length = Math.floor(ctx.sampleRate * seconds);
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
   const data = buffer.getChannelData(0);
@@ -88,20 +101,43 @@ function buildWhiteNoiseBuffer(ctx, seconds = 0.05) {
   return buffer;
 }
 
-function startBed(ctx) {
-  if (!brownNoiseBuffer) brownNoiseBuffer = buildBrownNoiseBuffer(ctx);
+/** One channel of the bed: highpass trims mud, lowpass keeps it from
+ * reading as a dull rumble, then an optional pan so the two independently-
+ * generated channels sit apart instead of both dead centre. */
+function buildBedLayer(ctx, buffer, pan) {
   const source = ctx.createBufferSource();
-  source.buffer = brownNoiseBuffer;
+  source.buffer = buffer;
   source.loop = true;
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = 1200;
+  const highpass = ctx.createBiquadFilter();
+  highpass.type = 'highpass';
+  highpass.frequency.value = BED_HIGHPASS_HZ;
+  const lowpass = ctx.createBiquadFilter();
+  lowpass.type = 'lowpass';
+  lowpass.frequency.value = BED_LOWPASS_HZ;
+  source.connect(highpass).connect(lowpass);
+  if (ctx.createStereoPanner) {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = pan;
+    lowpass.connect(panner);
+    return { source, output: panner };
+  }
+  return { source, output: lowpass };
+}
+
+function startBed(ctx) {
+  if (!brownNoiseBufferL) brownNoiseBufferL = buildBrownNoiseBuffer(ctx);
+  if (!brownNoiseBufferR) brownNoiseBufferR = buildBrownNoiseBuffer(ctx);
+  const left = buildBedLayer(ctx, brownNoiseBufferL, -BED_PAN);
+  const right = buildBedLayer(ctx, brownNoiseBufferR, BED_PAN);
   const gain = ctx.createGain();
   gain.gain.value = 0;
-  source.connect(filter).connect(gain).connect(ctx.destination);
-  source.start();
+  left.output.connect(gain);
+  right.output.connect(gain);
+  gain.connect(ctx.destination);
+  left.source.start();
+  right.source.start();
   gain.gain.linearRampToValueAtTime(dbToGain(-38), ctx.currentTime + TIMINGS.crackleFadeMs / 1000);
-  return { source, gain };
+  return { sources: [left.source, right.source], gain };
 }
 
 function stopBed(bed, ctx, fadeMs) {
@@ -110,32 +146,59 @@ function stopBed(bed, ctx, fadeMs) {
   bed.gain.gain.cancelScheduledValues(now);
   bed.gain.gain.setValueAtTime(bed.gain.gain.value, now);
   bed.gain.gain.linearRampToValueAtTime(0, now + fadeMs / 1000);
-  setTimeout(() => { try { bed.source.stop(); } catch { /* already stopped */ } }, fadeMs + 50);
+  setTimeout(() => {
+    bed.sources.forEach((s) => { try { s.stop(); } catch { /* already stopped */ } });
+  }, fadeMs + 50);
 }
 
+/** One crackle event. ~12% are a lower, louder "pop" (dust/scratch thump);
+ * the rest are quiet high ticks with a skewed-random peak so most are
+ * faint and only the rare one stands out, instead of every hit landing at
+ * the same volume. Panned to a random spot instead of sitting dead centre. */
 function fireTick(ctx) {
   if (!whiteNoiseBuffer) whiteNoiseBuffer = buildWhiteNoiseBuffer(ctx);
+  const isPop = Math.random() < 0.12;
+
   const source = ctx.createBufferSource();
   source.buffer = whiteNoiseBuffer;
   const bandpass = ctx.createBiquadFilter();
   bandpass.type = 'bandpass';
-  bandpass.frequency.value = 2000 + Math.random() * 2000; // 2 to 4 kHz
-  bandpass.Q.value = 2;
+  bandpass.frequency.value = isPop ? 250 + Math.random() * 350 : 1500 + Math.random() * 2500;
+  bandpass.Q.value = isPop ? 1.2 : 1.8 + Math.random() * 1.5;
+
   const gain = ctx.createGain();
-  const durationMs = 3 + Math.random() * 5; // 3 to 8ms
+  const durationMs = isPop ? 15 + Math.random() * 20 : 2 + Math.random() * 8;
+  const peak = isPop ? 0.35 + Math.random() * 0.25 : 0.04 + Math.random() ** 2.2 * 0.22;
   const now = ctx.currentTime;
+  const decayEnd = now + durationMs / 1000;
   gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.22, now + 0.001);
-  gain.gain.linearRampToValueAtTime(0, now + durationMs / 1000);
-  source.connect(bandpass).connect(gain).connect(ctx.destination);
+  gain.gain.linearRampToValueAtTime(peak, now + 0.0007);
+  gain.gain.exponentialRampToValueAtTime(Math.max(peak * 0.01, 0.0001), decayEnd);
+  gain.gain.linearRampToValueAtTime(0, decayEnd + 0.005);
+
+  source.connect(bandpass);
+  let node = bandpass;
+  if (ctx.createStereoPanner) {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = Math.random() * 1.4 - 0.7;
+    bandpass.connect(panner);
+    node = panner;
+  }
+  node.connect(gain).connect(ctx.destination);
   source.start(now);
-  source.stop(now + durationMs / 1000 + 0.02);
+  source.stop(decayEnd + 0.02);
 }
 
 function scheduleTicks(ctx) {
   const next = () => {
     fireTick(ctx);
-    const delayMs = 1000 / (2 + Math.random() * 4); // 2 to 6 ticks/sec
+    // Real dust isn't evenly spaced: let a second hit occasionally follow
+    // almost immediately, like a small cluster, rather than one tick at a
+    // perfectly metronomic rate.
+    if (Math.random() < 0.18) {
+      clusterTimers.push(setTimeout(() => fireTick(ctx), 8 + Math.random() * 25));
+    }
+    const delayMs = 1000 / (2 + Math.random() * 4); // 2 to 6 primary ticks/sec
     tickTimer = setTimeout(next, delayMs);
   };
   next();
@@ -144,6 +207,8 @@ function scheduleTicks(ctx) {
 function stopTicks() {
   if (tickTimer) clearTimeout(tickTimer);
   tickTimer = null;
+  clusterTimers.forEach(clearTimeout);
+  clusterTimers = [];
 }
 
 /** @param {{maxDurationMs?: number}} [opts] */
