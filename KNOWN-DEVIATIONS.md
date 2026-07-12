@@ -974,3 +974,44 @@ too-small pool can avoid every repeat; that is an honest, unavoidable
 limit of the source pool, not a bug. Rebuilt via `cd gallery && npm run
 build`; confirmed the built module still exports only `mountDomeGallery`
 and contains no leaked `process.env` references.
+
+## Tile-size fix, part 2: minRadius is only a floor (2026-07-12)
+
+Reported live a second time, after the segments-aware radius fix above:
+other record bags (10-20 albums) were still rendering oversized,
+overlapping tiles, only 2 rows visible instead of 5. Root cause identified
+directly in `DomeGallery.tsx`'s own resize handler, not assumed:
+
+```
+let radius = basis * fit;              // the viewport's own natural radius
+radius = Math.min(radius, heightGuard);
+radius = clamp(radius, minRadius, maxRadius);
+```
+
+`domeRadiusForSegments()` was only ever passed as `minRadius` -- a FLOOR
+that only takes effect if the viewport's own naturally-computed radius
+comes in smaller. For a small record bag (4 segments), the solved radius
+is itself small (~115px desktop), almost always well below whatever a
+normal browser window's own viewport-driven radius computes to -- so the
+floor never actually won; the uncontrolled, segments-*unaware* natural
+radius was used instead, and dividing that by only 4 segments produced
+exactly the oversized, overlapping tiles reported. This is also why
+"Your Record Bag" (24 segments, solved radius ~687px, much closer to a
+typical natural radius) happened to look right -- not because the fix
+worked, but because the floor was more likely to bind there anyway.
+
+`mount.tsx` did not even expose `maxRadius` as a passthrough prop before
+this, despite `DomeGallery.tsx` itself already supporting it (`maxRadius
+= Infinity` default). Added it, and `wall.js` now passes the same
+computed value as both `minRadius` and `maxRadius`, pinning the radius
+exactly rather than merely flooring it, so the segments-aware target tile
+size takes effect regardless of what the viewport would otherwise have
+computed. Trade-off, stated honestly: pinning min=max also means the
+`heightGuard` safety net (which shrinks the radius further on a very
+short viewport) can no longer act, since `clamp(x, R, R)` always returns
+`R` regardless of what came before it. Not expected to matter in
+practice given the target tile sizes are modest (90px desktop / 55px
+phone), but is a real, deliberate simplification worth knowing about if
+a genuinely very short viewport (e.g. a landscape phone) turns out to
+clip the dome. Rebuilt via `cd gallery && npm run build`; confirmed the
+built module still exports only `mountDomeGallery`.

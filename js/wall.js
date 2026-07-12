@@ -57,6 +57,21 @@ function domeRadiusForSegments(segments) {
   return Math.min(ABSOLUTE_MAX_RADIUS, Math.max(ABSOLUTE_MIN_RADIUS, solvedRadius));
 }
 
+// domeRadiusForSegments() only ever got passed as `minRadius`, a FLOOR --
+// DomeGallery still separately computes its own viewport-driven radius
+// (basis * fit) and only falls back to the floor if that computed value is
+// SMALLER. On desktop, a small record bag's solved radius is itself small
+// (e.g. ~115px for 4 segments), almost always well below whatever a
+// normal-sized browser window computes from its own viewport -- so the
+// floor never actually won, the uncontrolled viewport-driven radius was
+// used instead, and dividing that by a small segment count produced
+// exactly the oversized, overlapping tiles reported live a second time
+// after the first fix. mount.tsx did not even expose maxRadius as a
+// passthrough option before this. Passing the same computed value as both
+// minRadius and maxRadius pins the radius exactly, so the segments-aware
+// target tile size actually takes effect regardless of what the viewport
+// would otherwise have computed.
+
 /**
  * @param {HTMLElement} viewportEl the clipping viewport
  * @param {HTMLElement} containerEl the element the DomeGallery mounts into
@@ -79,10 +94,12 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     .map((entry) => ({ src: entry.image, alt: `${entry.name} by ${entry.artist}` }));
 
   const domeSegments = segmentsForPool(images.length);
+  const domeRadius = domeRadiusForSegments(domeSegments);
   const mount = mountDomeGallery(containerEl, {
     images,
     segments: domeSegments,
-    minRadius: domeRadiusForSegments(domeSegments),
+    minRadius: domeRadius,
+    maxRadius: domeRadius,
     onImageClick: (src) => {
       const entry = bySrc.get(src);
       if (!entry) return;

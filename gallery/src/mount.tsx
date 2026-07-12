@@ -20,6 +20,7 @@ export interface MountOptions {
   onLongPressEnd?: () => void;
   fit?: number;
   minRadius?: number;
+  maxRadius?: number;
   maxVerticalRotationDeg?: number;
   segments?: number;
   dragDampening?: number;
@@ -48,6 +49,7 @@ export function mountDomeGallery(container: HTMLElement, options: MountOptions):
       onLongPressEnd: options.onLongPressEnd,
       fit: options.fit ?? 0.8,
       minRadius: options.minRadius ?? 900,
+      maxRadius: options.maxRadius,
       // Locked back to 0 (no vertical tilt) per explicit request, reverting
       // an earlier "unlock vertical drag" change: dragging vertically must
       // not reveal blank space above/below the tile band.

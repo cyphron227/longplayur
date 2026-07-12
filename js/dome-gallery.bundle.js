@@ -7455,6 +7455,7 @@ function qp(a, l) {
       onLongPressEnd: l.onLongPressEnd,
       fit: l.fit ?? 0.8,
       minRadius: l.minRadius ?? 900,
+      maxRadius: l.maxRadius,
       // Locked back to 0 (no vertical tilt) per explicit request, reverting
       // an earlier "unlock vertical drag" change: dragging vertically must
       // not reveal blank space above/below the tile band.
