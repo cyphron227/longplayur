@@ -328,6 +328,12 @@ button { cursor: pointer; }
   line-height: 1.5;
   margin-top: 8px;
 }
+.field-hint {
+  color: var(--bone-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
 .setup-error { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--ember); border-radius: 3px; }
 
 .premium-note {
@@ -574,27 +580,46 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 .player-progress-fill { position: absolute; top: 0; left: 0; height: 1px; background: var(--amber); }
 .player-time { font-family: var(--font-mono); font-size: 11px; color: var(--bone-dim); letter-spacing: 0.04em; }
 .player-device { font-family: var(--font-mono); font-size: 11px; color: var(--moss); letter-spacing: 0.04em; white-space: nowrap; }
+.player-device-switch { flex: 0 0 auto; border-color: transparent; padding: 8px; min-width: 36px; min-height: 36px; }
 
-/* -------------------- Record bag -------------------- */
+/* Auto-dismissing confirmation for the Android wake flow (PRD F7): moss,
+   deadwax, appears once the phone is found as a device, then fades. */
+.wake-confirmation {
+  position: absolute;
+  left: 50%;
+  bottom: 88px;
+  transform: translateX(-50%);
+  color: var(--moss);
+  background: var(--obsidian-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 8px 14px;
+  opacity: 0;
+  transition: opacity var(--dur-touch) var(--ease);
+  z-index: 40;
+}
+.wake-confirmation.is-visible { opacity: 1; }
+
+/* -------------------- Past sessions -------------------- */
 
 /* The one deliberate exception to "the page never scrolls": a journal of
-   sides can grow arbitrarily long and has to be able to scroll somewhere. */
-#screen-record-bag { padding: 24px; max-width: 720px; margin: 0 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.record-bag-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-.record-bag-header h1 { font-family: var(--font-serif); font-size: 26px; }
-.record-bag-list { display: flex; flex-direction: column; gap: 0; }
-.side-row { border-bottom: 1px solid var(--line); padding: 18px 0; }
-.side-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; background: none; border: none; width: 100%; text-align: left; color: inherit; padding: 0; min-height: 44px; }
-.side-strip { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
-.side-strip img { width: 36px; height: 36px; border-radius: 2px; object-fit: cover; }
-.side-thread { flex: 1 1 auto; height: 1px; background: var(--amber); opacity: 0.5; }
-.side-entries { margin-top: 16px; display: none; flex-direction: column; gap: 16px; }
-.side-entries.is-open { display: flex; }
-.side-entry { display: flex; gap: 12px; align-items: flex-start; }
-.side-entry img { width: 56px; height: 56px; border-radius: 2px; object-fit: cover; flex: 0 0 auto; }
-.side-entry-body { flex: 1 1 auto; min-width: 0; }
-.side-entry-title { font-size: 14px; font-weight: 500; }
-.side-entry-artist { font-size: 13px; color: var(--bone-dim); margin-bottom: 6px; }
+   sessions can grow arbitrarily long and has to be able to scroll somewhere. */
+#screen-past-sessions { padding: 24px; max-width: 720px; margin: 0 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.past-sessions-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.past-sessions-header h1 { font-family: var(--font-serif); font-size: 26px; }
+.past-sessions-list { display: flex; flex-direction: column; gap: 0; }
+.session-row { border-bottom: 1px solid var(--line); padding: 18px 0; }
+.session-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; background: none; border: none; width: 100%; text-align: left; color: inherit; padding: 0; min-height: 44px; }
+.session-strip { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+.session-strip img { width: 36px; height: 36px; border-radius: 2px; object-fit: cover; }
+.session-thread { flex: 1 1 auto; height: 1px; background: var(--amber); opacity: 0.5; }
+.session-entries { margin-top: 16px; display: none; flex-direction: column; gap: 16px; }
+.session-entries.is-open { display: flex; }
+.session-entry { display: flex; gap: 12px; align-items: flex-start; }
+.session-entry img { width: 56px; height: 56px; border-radius: 2px; object-fit: cover; flex: 0 0 auto; }
+.session-entry-body { flex: 1 1 auto; min-width: 0; }
+.session-entry-title { font-size: 14px; font-weight: 500; }
+.session-entry-artist { font-size: 13px; color: var(--bone-dim); margin-bottom: 6px; }
 .liner-note {
   width: 100%;
   background: var(--obsidian-2);
@@ -606,8 +631,8 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   resize: vertical;
   min-height: 44px;
 }
-.side-actions { display: flex; gap: 8px; margin-top: 12px; }
-.empty-record-bag { font-family: var(--font-serif); font-size: 18px; color: var(--bone-dim); text-align: center; padding: 64px 24px; }
+.session-actions { display: flex; gap: 8px; margin-top: 12px; }
+.empty-past-sessions { font-family: var(--font-serif); font-size: 18px; color: var(--bone-dim); text-align: center; padding: 64px 24px; }
 
 /* -------------------- Modal -------------------- */
 

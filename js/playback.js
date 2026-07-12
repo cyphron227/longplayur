@@ -57,6 +57,10 @@ async function initSdk() {
       deviceId = device_id;
       deviceName = 'Longplayur';
       sdkPlayer = player;
+      // Silent desktop reconnect (PRD F7): claim the device immediately,
+      // without starting playback, so the user never hits Spotify's
+      // no-active-device state before their first needle drop of the visit.
+      api.transferPlayback(device_id, false).catch(() => {});
       resolve(player);
     });
     player.addListener('not_ready', () => {

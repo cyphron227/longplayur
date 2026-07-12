@@ -34,12 +34,12 @@ const screens = {
   setup: document.getElementById('screen-setup'),
   loading: document.getElementById('screen-loading'),
   app: document.getElementById('screen-app'),
-  recordBag: document.getElementById('screen-record-bag'),
+  pastSessions: document.getElementById('screen-past-sessions'),
 };
 
 // Tabs only apply to the three screens reachable once connected; 'loading'
 // has no tab of its own and simply leaves the previous tab's state as-is.
-const tabsByScreen = { app: 'tab-wall', recordBag: 'tab-record-bag', setup: 'tab-setup' };
+const tabsByScreen = { app: 'tab-wall', pastSessions: 'tab-past-sessions', setup: 'tab-setup' };
 
 function showScreen(name) {
   for (const [key, node] of Object.entries(screens)) {
@@ -67,7 +67,7 @@ const setupError = document.getElementById('setup-error');
 const diagnostics = document.getElementById('diagnostics');
 const appTabs = document.getElementById('app-tabs');
 const tabWall = document.getElementById('tab-wall');
-const tabRecordBagBtn = document.getElementById('tab-record-bag');
+const tabPastSessionsBtn = document.getElementById('tab-past-sessions');
 const tabSetup = document.getElementById('tab-setup');
 
 /** Setup doubles as first-run onboarding and a "connection settings" tab. */
@@ -81,6 +81,36 @@ const copyRedirectBtn = document.getElementById('copy-redirect-uri');
 redirectUriEl.textContent = auth.getRedirectUri();
 clientIdInput.value = auth.getClientId();
 updateConnectButtonState();
+
+// Step 02 (create the app) has to happen on the Spotify developer dashboard,
+// which is unusable on a small screen. On a phone/tablet, offer a copyable
+// link to this exact page so the rest of setup can continue on a computer.
+const sendToComputerWell = document.getElementById('send-to-computer');
+const sendToComputerLabel = document.getElementById('send-to-computer-label');
+const sendToComputerUrl = document.getElementById('send-to-computer-url');
+const copyPageUrlBtn = document.getElementById('copy-page-url');
+
+function isMobileDevice() {
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+if (isMobileDevice()) {
+  sendToComputerUrl.textContent = window.location.href;
+  show(sendToComputerWell);
+  show(sendToComputerLabel);
+}
+
+copyPageUrlBtn?.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    const label = copyPageUrlBtn.querySelector('span');
+    const original = label.textContent;
+    label.textContent = 'Copied';
+    setTimeout(() => { label.textContent = original; }, 1500);
+  } catch {
+    // Clipboard API unavailable: the URL is already selectable as plain text.
+  }
+});
 
 clientIdInput.addEventListener('input', () => {
   hide(clientIdError);
@@ -192,6 +222,8 @@ const playerElapsed = document.getElementById('player-elapsed');
 const playerTotal = document.getElementById('player-total');
 const playerProgressFill = document.getElementById('player-progress-fill');
 const playerDevice = document.getElementById('player-device');
+const playerDeviceSwitch = document.getElementById('player-device-switch');
+const wakeConfirmation = document.getElementById('wake-confirmation');
 
 const modalDevice = document.getElementById('modal-device');
 const modalDeviceCopy = document.getElementById('modal-device-copy');
@@ -207,7 +239,7 @@ let wallApi = null;
 let latestViewModel = null;
 let pendingEntry = null;
 let currentAlbumId = null;
-let currentSideId = null;
+let currentSessionId = null;
 let ceremonyBusy = false;
 let runoutBusy = false;
 
@@ -241,10 +273,10 @@ function renderWallDom(pool) {
 
 function renderJourneyThread() {
   if (!wallApi) return;
-  if (!currentSideId) { wallApi.renderThread([]); return; }
-  const side = journal.getSide(currentSideId);
-  if (!side) return;
-  wallApi.renderThread(side.entries.map((e) => e.albumId));
+  if (!currentSessionId) { wallApi.renderThread([]); return; }
+  const session = journal.getSession(currentSessionId);
+  if (!session) return;
+  wallApi.renderThread(session.entries.map((e) => e.albumId));
 }
 
 async function handleNeedleDrop(entry) {
@@ -261,9 +293,9 @@ async function handleNeedleDrop(entry) {
     });
     currentAlbumId = entry.id;
     localStorage.setItem(LS_EVER_DROPPED, 'true');
-    const { side, sideOrdinal } = journal.recordNeedleDrop(entry);
-    currentSideId = side.id;
-    wallPrompt.textContent = `Session ${sideOrdinal} · now playing`;
+    const { session, sessionOrdinal } = journal.recordNeedleDrop(entry);
+    currentSessionId = session.id;
+    wallPrompt.textContent = `Session ${sessionOrdinal} · now playing`;
   } catch (err) {
     if (err instanceof SpotifyApiError && err.status === 403) {
       wallApi.markUnavailable(entry.id);
@@ -337,42 +369,44 @@ btnCrackle.addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------
-// Record bag
+// Past sessions (the journal). "Record bag" is reserved for curated
+// collections shown on the wall itself (js/bags.js); this is what was
+// called "Record bag" before INCREMENT-01 Phase 0's rename.
 // ---------------------------------------------------------------------
 
-const recordBagList = document.getElementById('record-bag-list');
-const btnRecordBag = document.getElementById('btn-record-bag');
-const btnCloseRecordBag = document.getElementById('btn-close-record-bag');
-const btnNewSide = document.getElementById('btn-new-side');
+const pastSessionsList = document.getElementById('past-sessions-list');
+const btnPastSessions = document.getElementById('btn-past-sessions');
+const btnClosePastSessions = document.getElementById('btn-close-past-sessions');
+const btnNewSession = document.getElementById('btn-new-session');
 
 const noteDebounceTimers = new Map();
 
-function openRecordBag() {
-  renderRecordBag();
-  showScreen('recordBag');
+function openPastSessions() {
+  renderPastSessions();
+  showScreen('pastSessions');
 }
 
-btnRecordBag.addEventListener('click', openRecordBag);
-btnCloseRecordBag.addEventListener('click', () => showScreen('app'));
+btnPastSessions.addEventListener('click', openPastSessions);
+btnClosePastSessions.addEventListener('click', () => showScreen('app'));
 
-btnNewSide.addEventListener('click', () => {
-  // Closes whatever side is currently open in the journal (PRD F8); the
+btnNewSession.addEventListener('click', () => {
+  // Closes whatever session is currently open in the journal (PRD F8); the
   // next needle drop opens a fresh one. Nothing about current playback
   // changes, which is why this needs an explicit confirmation, otherwise
   // it looks like the button does nothing at all.
-  journal.startNewSide();
-  currentSideId = null;
+  journal.startNewSession();
+  currentSessionId = null;
   renderJourneyThread();
   wallPrompt.textContent = 'New session. Drop the needle on something.';
   announce('New session started.');
 });
 
 // ---------------------------------------------------------------------
-// Top tab navigation (Now playing / Record bag / Setup), shown once connected
+// Top tab navigation (Now playing / Past sessions / Setup), shown once connected
 // ---------------------------------------------------------------------
 
 tabWall.addEventListener('click', () => showScreen('app'));
-tabRecordBagBtn.addEventListener('click', openRecordBag);
+tabPastSessionsBtn.addEventListener('click', openPastSessions);
 tabSetup.addEventListener('click', () => showScreen('setup'));
 
 function svgIcon(iconId) {
@@ -385,71 +419,70 @@ function svgIcon(iconId) {
   return svg;
 }
 
-function renderRecordBag() {
-  const sides = journal.getSidesNewestFirst();
-  const lifetimeCount = journal.getLifetimeSideCount();
-  recordBagList.innerHTML = '';
+function renderPastSessions() {
+  const sessions = journal.getSessionsNewestFirst();
+  const lifetimeCount = journal.getLifetimeSessionCount();
+  pastSessionsList.innerHTML = '';
 
-  if (sides.length === 0) {
+  if (sessions.length === 0) {
     const empty = document.createElement('p');
-    empty.className = 'empty-record-bag';
+    empty.className = 'empty-past-sessions';
     empty.textContent = 'No sessions yet. The first needle drop starts one.';
-    recordBagList.appendChild(empty);
+    pastSessionsList.appendChild(empty);
     return;
   }
 
-  sides.forEach((side, indexFromNewest) => {
+  sessions.forEach((session, indexFromNewest) => {
     const ordinal = lifetimeCount - indexFromNewest;
-    recordBagList.appendChild(renderSideRow(side, ordinal));
+    pastSessionsList.appendChild(renderSessionRow(session, ordinal));
   });
 }
 
-function renderSideRow(side, ordinal) {
+function renderSessionRow(session, ordinal) {
   const row = document.createElement('div');
-  row.className = 'side-row';
+  row.className = 'session-row';
 
   const head = document.createElement('button');
   head.type = 'button';
-  head.className = 'side-row-head';
+  head.className = 'session-row-head';
   const headLabel = document.createElement('span');
   headLabel.className = 'deadwax';
-  const recordWord = side.entries.length === 1 ? 'RECORD' : 'RECORDS';
-  headLabel.textContent = `SESSION ${ordinal} · ${formatDeadwaxDate(side.startedAt)} · ${side.entries.length} ${recordWord}`;
+  headLabel.textContent = `SESSION ${ordinal} · ${formatDeadwaxDate(session.startedAt)}`;
   head.append(headLabel, svgIcon('icon-chevron'));
   row.appendChild(head);
 
   const strip = document.createElement('div');
-  strip.className = 'side-strip';
-  side.entries.forEach((entry) => {
+  strip.className = 'session-strip';
+  session.entries.forEach((entry) => {
     if (!entry.image) return;
     const img = document.createElement('img');
     img.src = entry.image;
     img.alt = '';
     strip.appendChild(img);
   });
-  if (side.entries.length > 1) {
+  if (session.entries.length > 1) {
     const thread = document.createElement('div');
-    thread.className = 'side-thread';
+    thread.className = 'session-thread';
     strip.appendChild(thread);
   }
   row.appendChild(strip);
 
   const entriesWrap = document.createElement('div');
-  entriesWrap.className = 'side-entries';
-  side.entries.forEach((entry) => entriesWrap.appendChild(renderEntryRow(side, entry)));
+  entriesWrap.className = 'session-entries';
+  session.entries.forEach((entry) => entriesWrap.appendChild(renderEntryRow(session, entry)));
 
   const actions = document.createElement('div');
-  actions.className = 'side-actions';
+  actions.className = 'session-actions';
   const exportBtn = document.createElement('button');
   exportBtn.type = 'button';
   exportBtn.className = 'icon-btn';
   exportBtn.append(svgIcon('icon-export'), document.createTextNode('Export this session'));
-  exportBtn.addEventListener('click', () => handleExportSide(side, ordinal, exportBtn));
+  exportBtn.addEventListener('click', () => handleExportSession(session, ordinal, exportBtn));
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'icon-btn';
   deleteBtn.append(svgIcon('icon-bin'), document.createTextNode('Forget this session'));
-  deleteBtn.addEventListener('click', () => handleDeleteSide(side, ordinal));
+  deleteBtn.addEventListener('click', () => handleDeleteSession(session, ordinal));
   actions.append(exportBtn, deleteBtn);
   entriesWrap.appendChild(actions);
   row.appendChild(entriesWrap);
@@ -459,9 +492,9 @@ function renderSideRow(side, ordinal) {
   return row;
 }
 
-function renderEntryRow(side, entry) {
+function renderEntryRow(session, entry) {
   const wrap = document.createElement('div');
-  wrap.className = 'side-entry';
+  wrap.className = 'session-entry';
   if (entry.image) {
     const img = document.createElement('img');
     img.src = entry.image;
@@ -470,12 +503,12 @@ function renderEntryRow(side, entry) {
   }
 
   const body = document.createElement('div');
-  body.className = 'side-entry-body';
+  body.className = 'session-entry-body';
   const title = document.createElement('div');
-  title.className = 'side-entry-title';
+  title.className = 'session-entry-title';
   title.textContent = entry.name;
   const artist = document.createElement('div');
-  artist.className = 'side-entry-artist';
+  artist.className = 'session-entry-artist';
   artist.textContent = entry.artist;
 
   const note = document.createElement('textarea');
@@ -484,10 +517,10 @@ function renderEntryRow(side, entry) {
   note.value = entry.note || '';
   note.setAttribute('aria-label', `Liner notes for ${entry.name}`);
   note.addEventListener('input', () => {
-    const key = `${side.id}:${entry.albumId}:${entry.startedAt}`;
+    const key = `${session.id}:${entry.albumId}:${entry.startedAt}`;
     clearTimeout(noteDebounceTimers.get(key));
     noteDebounceTimers.set(key, setTimeout(() => {
-      journal.setLinerNote(side.id, entry.albumId, note.value);
+      journal.setLinerNote(session.id, entry.albumId, note.value);
     }, 500));
   });
 
@@ -496,50 +529,140 @@ function renderEntryRow(side, entry) {
   return wrap;
 }
 
-async function handleExportSide(side, ordinal, triggerBtn) {
+async function handleExportSession(session, ordinal, triggerBtn) {
   triggerBtn.disabled = true;
   try {
-    const { dataUrl } = await exporter.exportSideCard(side, ordinal);
+    const { dataUrl } = await exporter.exportSessionCard(session, ordinal);
     exporter.downloadCard(dataUrl, `longplayur-session-${ordinal}.png`);
   } finally {
     triggerBtn.disabled = false;
   }
 }
 
-function handleDeleteSide(side, ordinal) {
+function handleDeleteSession(session, ordinal) {
   const confirmed = window.confirm(`Forget session ${ordinal}? The music stays; the record of it goes.`);
   if (!confirmed) return;
-  journal.deleteSide(side.id);
-  if (currentSideId === side.id) {
-    currentSideId = null;
+  journal.deleteSession(session.id);
+  if (currentSessionId === session.id) {
+    currentSessionId = null;
     renderJourneyThread();
   }
-  renderRecordBag();
+  renderPastSessions();
 }
 
-function openDeviceModal(devices) {
+function isAndroidDevice() {
+  return /Android/i.test(navigator.userAgent);
+}
+
+function renderDeviceListItems(devices, { isSwitch }) {
   deviceList.innerHTML = '';
-  if (devices.length === 0) {
-    modalDeviceCopy.textContent = 'No Spotify devices found. Open Spotify anywhere, play anything for a second, then refresh.';
+  for (const device of devices) {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = device.is_active ? `${device.name} (current)` : device.name;
+    btn.addEventListener('click', async () => {
+      await playback.selectDevice(device.id, device.name);
+      hide(modalDevice);
+      if (!isSwitch && pendingEntry) handleNeedleDrop(pendingEntry);
+    });
+    li.appendChild(btn);
+    deviceList.appendChild(li);
+  }
+}
+
+/**
+ * @param {Array} devices
+ * @param {{isSwitch?: boolean}} [opts] isSwitch: mid-session output switcher
+ *   rather than the initial "no active device" picker, so picking a device
+ *   transfers playback (PRD F7) instead of resuming a pending needle drop.
+ */
+function openDeviceModal(devices, { isSwitch = false } = {}) {
+  if (devices.length === 0 && !isSwitch) {
+    deviceList.innerHTML = '';
+    if (isAndroidDevice()) {
+      modalDeviceCopy.textContent = 'No Spotify devices found.';
+      const li = document.createElement('li');
+      const wakeBtn = document.createElement('button');
+      wakeBtn.type = 'button';
+      wakeBtn.textContent = 'Wake Spotify';
+      wakeBtn.addEventListener('click', handleWakeSpotify);
+      li.appendChild(wakeBtn);
+      deviceList.appendChild(li);
+    } else {
+      modalDeviceCopy.textContent = 'No Spotify devices found. Open Spotify anywhere, play anything for a second, then refresh.';
+    }
+  } else if (devices.length === 0) {
+    deviceList.innerHTML = '';
+    modalDeviceCopy.textContent = 'No other Spotify devices found.';
   } else {
     modalDeviceCopy.textContent = 'Choose where Longplayur should play.';
-    for (const device of devices) {
-      const li = document.createElement('li');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = device.name;
-      btn.addEventListener('click', async () => {
-        await playback.selectDevice(device.id, device.name);
-        hide(modalDevice);
-        if (pendingEntry) handleNeedleDrop(pendingEntry);
-      });
-      li.appendChild(btn);
-      deviceList.appendChild(li);
-    }
+    renderDeviceListItems(devices, { isSwitch });
   }
   show(modalDevice);
 }
 modalDeviceClose.addEventListener('click', () => hide(modalDevice));
+
+// ---------------------------------------------------------------------
+// Android wake flow (PRD F7): deep-link into the Spotify app, then re-poll
+// for up to 15s once the user returns to Longplayur, auto-selecting the
+// phone the moment it appears as a device.
+// ---------------------------------------------------------------------
+
+const WAKE_POLL_WINDOW_MS = 15000;
+const WAKE_POLL_INTERVAL_MS = 1000;
+
+function showWakeConfirmation() {
+  show(wakeConfirmation);
+  wakeConfirmation.classList.add('is-visible');
+  announce('Found this phone. Carrying on.');
+  setTimeout(() => {
+    wakeConfirmation.classList.remove('is-visible');
+    setTimeout(() => hide(wakeConfirmation), 200);
+  }, 2200);
+}
+
+async function pollForWokenDevice(deadline) {
+  while (Date.now() < deadline) {
+    const devices = await playback.listDevices();
+    if (devices.length > 0) {
+      const device = devices[0];
+      await playback.selectDevice(device.id, device.name);
+      hide(modalDevice);
+      showWakeConfirmation();
+      if (pendingEntry) handleNeedleDrop(pendingEntry);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, WAKE_POLL_INTERVAL_MS));
+  }
+  modalDeviceCopy.textContent = 'Still no Spotify devices found. Open Spotify on this phone and try again.';
+}
+
+function handleWakeSpotify() {
+  const deadline = Date.now() + WAKE_POLL_WINDOW_MS;
+  const onVisible = () => {
+    if (document.visibilityState !== 'visible') return;
+    document.removeEventListener('visibilitychange', onVisible);
+    pollForWokenDevice(deadline);
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  // The `spotify:` URI scheme opens the installed app if present; if it is
+  // not installed there is simply no visibility change to react to, and the
+  // modal's copy already tells the user to open Spotify themselves.
+  window.location.href = 'spotify:';
+}
+
+// ---------------------------------------------------------------------
+// Output switcher (PRD F7): persistent device icon on the player bar,
+// transfers playback mid-session without resetting the tonearm arc (the
+// arc is driven by elapsed/total from whichever poll or SDK event reports
+// next, unaffected by which device is reporting it).
+// ---------------------------------------------------------------------
+
+playerDeviceSwitch.addEventListener('click', async () => {
+  const devices = await playback.listDevices();
+  openDeviceModal(devices, { isSwitch: true });
+});
 
 async function initPlaybackForApp() {
   try {
@@ -602,7 +725,7 @@ function performSignOut() {
     retireDisc(currentAlbumId);
     currentAlbumId = null;
   }
-  currentSideId = null;
+  currentSessionId = null;
   auth.signOut();
   hide(appTabs);
   showScreen('setup');

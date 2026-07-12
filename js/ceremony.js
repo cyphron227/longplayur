@@ -521,7 +521,7 @@ export async function runoutGroove(albumId, ctx) {
 export function runoutPrompt(atEdge) {
   return atEdge
     ? "You've reached the edge of the wall. Pick from the shelf."
-    : "Session's not over. Choose the next record.";
+    : "The session isn't over. Choose the next record.";
 }
 
 // ---------------------------------------------------------------------

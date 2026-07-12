@@ -61,8 +61,8 @@ Longplayur uses vinyl language throughout the interface:
 | Tonearm arc | The album-wide progress indicator on the disc |
 | Runout groove | The end of an album |
 | A session | A listening session |
-| Liner notes | A short note against a played album |
-| The record bag | Your journal of past sessions |
+| Past sessions | Your journal of past sessions |
+| A record bag | A curated album collection shown as a rail above the Wall |
 | The Wall | The full zoomed-out view of your album history |
 | New session | Starting a fresh listening session |
 
@@ -71,7 +71,7 @@ Longplayur uses vinyl language throughout the interface:
 - No accounts, no server, no analytics, no telemetry.
 - Your Spotify client ID, tokens, cached album pool, and journal live only in your browser's local storage.
 - The only network requests Longplayur makes are to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`) and to your own self-hosted copy of this site.
-- Signing out clears your Spotify session tokens but keeps your client ID and your record bag, so you are not re-typing your client ID or losing your listening history every time.
+- Signing out clears your Spotify session tokens but keeps your client ID and your past sessions, so you are not re-typing your client ID or losing your listening history every time.
 
 ## Limitations, honestly
 

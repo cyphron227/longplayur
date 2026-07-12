@@ -1,21 +1,35 @@
-// The record bag: sides, liner notes, storage. Versioned so the shape can
+// The journal of past sessions: storage only. Versioned so the shape can
 // migrate later. Every mutator does read-modify-write against localStorage
 // (never holds a long-lived in-memory copy) so two open tabs do not
 // corrupt each other; the last writer simply wins, per PRD edge case 9.
+//
+// "Record bag" is reserved for curated album collections (js/bags.js); this
+// module is the journal of what was actually played, called "sessions" in
+// all UI copy and, since INCREMENT-01 Phase 0, in storage and code too.
 
 const LS_JOURNAL = 'lp_journal';
-const SIDE_INACTIVITY_MS = 6 * 60 * 60 * 1000; // 6 hours, PRD F8.
-const CURRENT_VERSION = 1;
+const SESSION_INACTIVITY_MS = 6 * 60 * 60 * 1000; // 6 hours, PRD F8.
+const CURRENT_VERSION = 2;
 
 function uuid() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+/**
+ * v1 -> v2: the journal's own field name changed from `sides` to
+ * `sessions` (INCREMENT-01 Phase 0's storage rename). Existing journals
+ * must survive intact; only the wrapping field/key names change here, not
+ * any entry data.
+ */
 function migrate(journal) {
-  // v1 is the only shape so far; this stub is where future migrations attach.
-  if (!journal || typeof journal !== 'object') return { v: CURRENT_VERSION, sides: [] };
-  if (!Array.isArray(journal.sides)) journal.sides = [];
+  if (!journal || typeof journal !== 'object') return { v: CURRENT_VERSION, sessions: [] };
+
+  if (!journal.v || journal.v < 2) {
+    journal.sessions = Array.isArray(journal.sessions) ? journal.sessions : (Array.isArray(journal.sides) ? journal.sides : []);
+    delete journal.sides;
+  }
+  if (!Array.isArray(journal.sessions)) journal.sessions = [];
   journal.v = CURRENT_VERSION;
   return journal;
 }
@@ -23,10 +37,10 @@ function migrate(journal) {
 export function loadJournal() {
   try {
     const raw = localStorage.getItem(LS_JOURNAL);
-    if (!raw) return { v: CURRENT_VERSION, sides: [] };
+    if (!raw) return { v: CURRENT_VERSION, sessions: [] };
     return migrate(JSON.parse(raw));
   } catch {
-    return { v: CURRENT_VERSION, sides: [] };
+    return { v: CURRENT_VERSION, sessions: [] };
   }
 }
 
@@ -39,78 +53,79 @@ function saveJournal(journal) {
   return journal;
 }
 
-function lastEntryTime(side) {
-  const entries = side.entries;
-  if (!entries.length) return side.startedAt;
+function lastEntryTime(session) {
+  const entries = session.entries;
+  if (!entries.length) return session.startedAt;
   return entries[entries.length - 1].startedAt;
 }
 
-function isSideOpen(side, now) {
-  return side.endedAt === null && now - lastEntryTime(side) < SIDE_INACTIVITY_MS;
+function isSessionOpen(session, now) {
+  return session.endedAt === null && now - lastEntryTime(session) < SESSION_INACTIVITY_MS;
 }
 
 /**
- * Appends a played album to the current open side, opening a new one if
- * the last side was explicitly closed or has gone stale (PRD's 6h rule).
- * @returns {{journal: object, side: object, sideOrdinal: number}}
+ * Appends a played album to the current open session, opening a new one if
+ * the last session was explicitly closed or has gone stale (PRD's 6h rule).
+ * @returns {{journal: object, session: object, sessionOrdinal: number}}
  */
 export function recordNeedleDrop(entry) {
   const journal = loadJournal();
   const now = Date.now();
-  let side = journal.sides[journal.sides.length - 1];
+  let session = journal.sessions[journal.sessions.length - 1];
 
-  if (!side || !isSideOpen(side, now)) {
-    side = { id: uuid(), startedAt: now, endedAt: null, entries: [] };
-    journal.sides.push(side);
+  if (!session || !isSessionOpen(session, now)) {
+    session = { id: uuid(), startedAt: now, endedAt: null, entries: [] };
+    journal.sessions.push(session);
   }
 
-  side.entries.push({
+  session.entries.push({
     albumId: entry.id,
     name: entry.name,
     artist: entry.artist,
     image: entry.image,
     startedAt: now,
-    note: '',
+    note: '', // Removed entirely in Phase 3a; kept through Phases 0 to 2.
+    bagId: entry.bagId ?? null,
   });
 
   saveJournal(journal);
-  return { journal, side, sideOrdinal: journal.sides.length };
+  return { journal, session, sessionOrdinal: journal.sessions.length };
 }
 
-/** Explicit "New side": closes whatever side is currently open. */
-export function startNewSide() {
+/** Explicit "New session": closes whatever session is currently open. */
+export function startNewSession() {
   const journal = loadJournal();
-  const last = journal.sides[journal.sides.length - 1];
+  const last = journal.sessions[journal.sessions.length - 1];
   if (last && last.endedAt === null) last.endedAt = Date.now();
   saveJournal(journal);
   return journal;
 }
 
-export function setLinerNote(sideId, albumId, note) {
+export function setLinerNote(sessionId, albumId, note) {
   const journal = loadJournal();
-  const side = journal.sides.find((s) => s.id === sideId);
-  if (!side) return journal;
-  const entry = [...side.entries].reverse().find((e) => e.albumId === albumId);
+  const session = journal.sessions.find((s) => s.id === sessionId);
+  if (!session) return journal;
+  const entry = [...session.entries].reverse().find((e) => e.albumId === albumId);
   if (!entry) return journal;
   entry.note = note;
   return saveJournal(journal);
 }
 
-export function deleteSide(sideId) {
+export function deleteSession(sessionId) {
   const journal = loadJournal();
-  journal.sides = journal.sides.filter((s) => s.id !== sideId);
+  journal.sessions = journal.sessions.filter((s) => s.id !== sessionId);
   return saveJournal(journal);
 }
 
-/** Newest first, for the record bag shelf. */
-export function getSidesNewestFirst() {
-  return [...loadJournal().sides].reverse();
+/** Newest first, for the past-sessions shelf. */
+export function getSessionsNewestFirst() {
+  return [...loadJournal().sessions].reverse();
 }
 
-export function getSide(sideId) {
-  return loadJournal().sides.find((s) => s.id === sideId) || null;
+export function getSession(sessionId) {
+  return loadJournal().sessions.find((s) => s.id === sessionId) || null;
 }
 
-export function getLifetimeSideCount() {
-  return loadJournal().sides.length;
+export function getLifetimeSessionCount() {
+  return loadJournal().sessions.length;
 }

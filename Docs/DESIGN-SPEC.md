@@ -6,7 +6,7 @@ The interface is a listening room at night. The album covers are the only colour
 
 These exist because the obvious implementation of this spec looks AI-generated. They are hard requirements:
 
-1. **No emoji and no unicode glyph icons** (no ⏮ ⏸ ⤢ ⌄ ⛭ anywhere). All icons are inline SVG, 1.5px stroke, round caps, drawn from a shared sprite in index.html. Icon set needed: play, pause, previous, next, zoom-out (four corners), chevron, crackle (three short arcs), close, copy, export, bin.
+1. **No emoji and no unicode glyph icons** (no ⏮ ⏸ ⤢ ⌄ ⛭ anywhere). All icons are inline SVG, 1.5px stroke, round caps, drawn from a shared sprite in index.html. Icon set needed: play, pause, previous, next, chevron, crackle (three short arcs), close, copy, export (doubles as the share icon), bin, device (the output switcher's cast-style icon). The zoom-out (four corners) icon was retired along with its manual trigger button; `wallApi.zoomToFitAll()` still fires automatically from the runout groove's at-edge case.
 2. **Nothing scales on hover.** Covers respond like sleeves under gallery light: `filter: brightness(1.08)` and the label rises. Scale transforms are reserved exclusively for the ceremony.
 3. **No infinite pulsing animations.** Anything that "breathes" forever reads as a loading skeleton. The runout wake is a single ripple (see §3), then rest.
 4. **One serif element per screen state, maximum.**
@@ -35,7 +35,7 @@ No gradients except the label scrim on covers. No shadows anywhere; depth comes 
 |---|---|---|
 | Ceremony | DM Serif Display 400 | The needle-drop album title and empty states only |
 | Interface | Inter 400/500/600 | Everything else |
-| Deadwax | IBM Plex Mono 400 | Dates, times, side numbers, durations. ALL CAPS, tracking 0.08em, 11 to 12px, bone-dim. e.g. `SIDE 12 · 23:47 · 11 JUL 2026` |
+| Deadwax | IBM Plex Mono 400 | Dates, times, session numbers, durations. ALL CAPS, tracking 0.08em, 11 to 12px, bone-dim. e.g. `SESSION 12 · 23:47 · 11 JUL 2026` |
 
 ### Motion
 Base easing `cubic-bezier(0.4, 0, 0.2, 1)`. Never spring, never bounce.
@@ -56,6 +56,9 @@ There is exactly ONE grid in the app: the Wall. This removes all tapestry/wall s
 - **The tapestry view is a camera.** Default state: camera framed tightly on a 3×3 region of the Wall. First run: centred on the Wall's centre. Zoom and pan are CSS transforms on the wall container; the journey thread SVG lives inside the container so it scales for free.
 - **The walk:** a needle drop pans the camera (`--dur-breath`) to centre the chosen cover. At runout, the choice offered is the playing album's **8 physical neighbours on the Wall** (played ones excluded, shown spent). Your evening is literally a walk across your own wall. At the Wall's edge, or if fewer than 2 unplayed neighbours remain, the prompt adds the zoom-out option and the camera eases back slightly to reveal more.
 - **Zoom out** (button or pinch/scroll) shows the whole Wall: played covers at full opacity with a 2px amber ring, the journey thread connecting them in order, everything else at 70%, waking to 100% on hover/focus. Tap any unplayed cover to needle-drop it; the camera dives back in to it.
+
+### 2a. The bag rail
+A row of half-tile chips in deadwax mono sits directly above the Wall. "YOUR WALL" (the user's own pool) is always first; the six seed record bags follow. Selecting a chip crossfades the whole Wall (`--dur-breath`) to that bag's own spiral layout; the camera always snaps to whole rows and columns on any bag switch, at any viewport, so no cover is ever cropped, letterboxing with obsidian where the aspect ratio does not divide evenly. A record bag is a curated list of albums, not a listening session: playing from one records normally into Past sessions, tagged with which bag it came from.
 
 ## 3. The ceremony (choreography, exact)
 
@@ -83,7 +86,7 @@ First needle drop ever shows a one-time deadwax hint under the player bar: `CRAC
 |---|---|
 | 0 | Arc reaches 360°, pulses twice (opacity 1 → 0.4 → 1, 800ms each). If crackle enabled, a quiet runout loop plays, max 30s |
 | 800 | A single wake ripple: neighbours brighten to 100% in one wave outward from the centre (60ms stagger per ring), then REST at full. No looping animation |
-| 800 | Prompt: "Side's not over. Choose the next record." |
+| 800 | Prompt: "The session isn't over. Choose the next record." |
 
 ## 4. Screens
 
@@ -96,13 +99,16 @@ After a successful connect and pool build, and on demand via a "Test connection"
 The groove mark, larger, rotating at 33⅓ rpm (1800ms/rev), amber stylus dot fixed. Copy: "Pulling records from the shelf."
 
 ### Player bar
-`[art] Track name / Album · Artist    prev play next` with the album-level progress hairline below (amber fill) and times in deadwax. Device note (moss): "Playing on {device}" when on Connect.
+`[art] Track name / Album · Artist    prev play next` with the album-level progress hairline below (amber fill) and times in deadwax. Device note (moss): "Playing on {device}" when on Connect. A persistent device (output switcher) icon sits at the end of the bar: tapping it lists available Spotify devices and the current one; choosing another transfers playback there without resetting the tonearm arc. On a phone with no devices found, the same control offers "Wake Spotify" (see PRD F7).
 
-### Record bag
-Shelf of sides, newest first. Each row: `SIDE 12 · 11 JUL 2026 · 4 RECORDS` in deadwax, a strip of mini covers joined by a thin amber thread, chevron to expand. Expanded: entries with liner-note fields, "Export this side", "Forget this side".
+### Records nearby
+Opened from a player-bar action while something is playing: a low shelf of 4 to 6 related albums slides up over the bottom of the viewport, each cover captioned `ARTIST · {n} FANS` in deadwax. Needle-dropping one runs the full ceremony as normal. The shelf hides itself entirely (no error state, no empty shelf) if Deezer is unreachable.
+
+### Past sessions
+Shelf of sessions, newest first. Each row: `SESSION 12 · 11 JUL 2026` in deadwax, a share icon (right-aligned, 44px target, `aria-label="Share session {n}"`) that renders and shares the card directly from the row, a strip of mini covers joined by a thin amber thread, and a chevron to expand into its entries. There is no liner-notes field: notes were removed entirely.
 
 ### Share card (1080×1350 canvas, exact layout)
-Obsidian field, 64px margin. Covers of the side in play order on a 4-column layout: cover 1 at 480px spanning columns 1 to 2, subsequent covers 224px flowing left to right beneath, all corners 8px radius, amber thread (3px, 60% opacity) connecting cover centres in order, drawn UNDER the covers. Top-left, DM Serif 56px, bone: "A side, played in full." Bottom hairline, then deadwax 24px: `SIDE 12 · 11 JUL 2026 · LONGPLAYUR`. Typographic fallback (tainted canvas): same frame, covers replaced by a numbered tracklist of `ALBUM / ARTIST` lines, serif heading unchanged.
+Obsidian field, 64px margin. Covers of the session in play order on a 4-column layout: cover 1 at 480px spanning columns 1 to 2, subsequent covers 224px flowing left to right beneath, all corners 8px radius, amber thread (3px, 60% opacity) connecting cover centres in order, drawn UNDER the covers. Top-left, DM Serif 56px, bone: "A session, played in full." Bottom hairline, then deadwax 24px: `SESSION 12 · 11 JUL 2026 · LONGPLAYUR`. Typographic fallback (tainted canvas): same frame, covers replaced by a numbered tracklist of `ALBUM / ARTIST` lines, serif heading unchanged. On a device that supports the Web Share API with files, the rendered card is shared natively (PRD F8a) instead of only downloading.
 
 ## 5. Copy deck (verbatim; British English; sentence case; no exclamation marks; no em or en dashes)
 
@@ -115,25 +121,31 @@ Setup
 
 Prompts
 - First run: "Drop the needle on something."
-- Playing: "Side {n} · now playing" (n = count of sides in the journal, lifetime)
-- Runout: "Side's not over. Choose the next record."
-- Runout at wall edge: "You've reached the edge of the wall. Zoom out and pick from the shelf."
+- Playing: "Session {n} · now playing" (n = count of sessions in the journal, lifetime)
+- Runout: "The session isn't over. Choose the next record."
+- Runout at wall edge: "You've reached the edge of the wall. Pick from the shelf."
 - Wall: "Your wall. {N} records. Tap one to drop the needle."
+- New session: "New session. Drop the needle on something."
 
 Errors
 - 403 top tracks: "Spotify refused (403). In your app's settings on the developer dashboard, add your own Spotify account under User Management, then try again."
 - Redirect mismatch: "Spotify rejected the redirect. The redirect URI in your app settings must match this exactly: {uri}"
-- No devices: "No Spotify devices found. Open Spotify anywhere, play anything for a second, then refresh."
+- No devices (desktop): "No Spotify devices found. Open Spotify anywhere, play anything for a second, then refresh."
+- No devices (Android): button "Wake Spotify"; confirmation once found: "Found this phone. Carrying on."
 - Restricted album: "Spotify won't play this one here. Pick another record."
 - Sparse history: "Not enough listening history yet to build a wall. Play more albums and come back."
 - Offline: "You're offline. The music may continue; the room will catch up when you're back."
+- Nearby unreachable: no copy; the shelf simply does not appear.
 
-Journal
-- Empty record bag: "No sides yet. The first needle drop starts one."
-- Liner notes placeholder: "Liner notes. What did this one do to you?"
-- Export: "Export this side" · Delete: "Forget this side" · Confirm: "Forget side {n}? The music stays; the record of it goes."
+Past sessions
+- Empty: "No sessions yet. The first needle drop starts one."
+- Share (aria-label on the row's icon button): "Share session {n}"
+- Delete: "Forget this session" · Confirm: "Forget session {n}? The music stays; the record of it goes."
 
-Header: "Record bag" · "New side" · "Crackle" · "Sign out"
+Records nearby
+- Caption: "{ARTIST} · {n} FANS"
+
+Header: "Past sessions" · "New session" · "Crackle" · "Sign out"
 
 ## 6. Quality floor (unchanged, non-negotiable)
 Full keyboard grid navigation (arrows move focus across the Wall, Enter drops the needle, Escape zooms out), amber focus ring always visible, `aria-live="polite"` announcements ("Now playing {album} by {artist}", the runout prompt), 44px touch targets, AA/AAA contrast as before, responsive to 360px, no layout shift (aspect-ratio boxes), reduced motion per §1.

@@ -205,7 +205,14 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     threadPath.setAttribute('d', points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' '));
   }
 
-  setInterval(updateThreadPositions, 100);
+  const threadPollTimer = setInterval(updateThreadPositions, 100);
+
+  /** Tears this mount down cleanly so a bag switch can remount a fresh pool. */
+  function destroy() {
+    clearInterval(threadPollTimer);
+    if (threadSvg) threadSvg.remove();
+    mount.unmount();
+  }
 
   function renderThread(orderedAlbumIds) {
     activeThreadIds = orderedAlbumIds.filter((id) => byId.has(id));
@@ -247,6 +254,7 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     getCellEl,
     isZoomedOut,
     renderThread,
-    getEntry
+    getEntry,
+    destroy
   };
 }

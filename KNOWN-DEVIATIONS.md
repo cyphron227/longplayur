@@ -5,16 +5,34 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
-## "Side" renamed to "Session"; the needle-drop cover now stays expanded
+## "Side" renamed to "Session", now everywhere including storage (INCREMENT-01 Phase 0)
 
-Per explicit request: every user-facing occurrence of "side"/"Side" is now
-"session"/"Session" (wall prompts, record bag, share card, confirm
-dialogs, README). The stored journal data (`lp_journal` in localStorage,
-`js/journal.js`) deliberately keeps its old field/function names (`side`,
-`sides`, `startNewSide()`, etc.) unchanged, so nobody's already-saved
-journal breaks; only what renders to the screen changed.
+Per explicit request: every occurrence of "side"/"Side" is now
+"session"/"Session" (wall prompts, share card, confirm dialogs, README,
+PRD.md, DESIGN-SPEC.md). This originally stopped at UI copy, deliberately
+leaving the stored journal's field/function names unchanged so nobody's
+saved journal would break. INCREMENT-01 Phase 0 explicitly extended the
+rename into storage and code too, reversing that earlier decision: the
+journal's own field is now `sessions`, not `sides`, and every internal
+name follows (`startNewSession()`, `getSessionsNewestFirst()`,
+`getLifetimeSessionCount()`, `deleteSession()`, `SESSION_INACTIVITY_MS`,
+`currentSessionId`, `exportSessionCard()`, etc.). `js/journal.js` bumped
+`CURRENT_VERSION` from 1 to 2 and its `migrate()` renames an existing v1
+journal's `sides` array to `sessions` in place; no entry data is touched,
+so nobody's saved history is lost.
 
-Also per explicit request, the needle-drop ceremony's enlarged cover no
+Also per INCREMENT-01 Phase 0: "record bag" no longer refers to the
+journal at all. It is reserved exclusively for the curated album
+collections introduced in Phase 2 (a rail of chips above the Wall). The
+screen, tab, and header button that used to be labelled "Record bag" (the
+journal view) are now "Past sessions" throughout `index.html`, `js/main.js`,
+and `styles.css` (`#screen-past-sessions`, `#tab-past-sessions`,
+`#btn-past-sessions`, `.session-row` etc., replacing the old
+`#screen-record-bag` / `.side-row` names).
+
+## The needle-drop cover now stays expanded
+
+Separately from the rename above: per explicit request, the needle-drop ceremony's enlarged cover no
 longer auto-shrinks back into its cell once the held breath ends. It now
 stays large on screen as the "now playing" hero until one of two things
 happens: the gallery is dragged, or the album finishes. Both are handled

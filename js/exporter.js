@@ -97,7 +97,7 @@ function drawFrame(ctx, deadwaxText) {
   return hairlineY;
 }
 
-function renderTypographicFallback(side, deadwaxText) {
+function renderTypographicFallback(session, deadwaxText) {
   const canvas = document.createElement('canvas');
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
@@ -108,7 +108,7 @@ function renderTypographicFallback(side, deadwaxText) {
   ctx.fillStyle = '#DCD7CB';
   ctx.font = '400 22px Inter, sans-serif';
   let y = MARGIN + 56 + 84;
-  side.entries.forEach((entry, i) => {
+  session.entries.forEach((entry, i) => {
     ctx.fillText(`${i + 1}. ${entry.name} / ${entry.artist}`, MARGIN, y);
     y += 36;
   });
@@ -117,18 +117,18 @@ function renderTypographicFallback(side, deadwaxText) {
 }
 
 /**
- * @param {object} side journal side {id, startedAt, entries}
- * @param {number} sideOrdinal 1-based lifetime side number
+ * @param {object} session journal session {id, startedAt, entries}
+ * @param {number} sessionOrdinal 1-based lifetime session number
  * @returns {Promise<{dataUrl: string, typographicFallback: boolean}>}
  */
-export async function exportSideCard(side, sideOrdinal) {
-  const deadwaxText = `SESSION ${sideOrdinal} · ${formatDeadwaxDate(side.startedAt)} · LONGPLAYUR`;
+export async function exportSessionCard(session, sessionOrdinal) {
+  const deadwaxText = `SESSION ${sessionOrdinal} · ${formatDeadwaxDate(session.startedAt)} · LONGPLAYUR`;
 
   let images;
   try {
-    images = await Promise.all(side.entries.map((e) => loadImage(e.image)));
+    images = await Promise.all(session.entries.map((e) => loadImage(e.image)));
   } catch {
-    return renderTypographicFallback(side, deadwaxText);
+    return renderTypographicFallback(session, deadwaxText);
   }
 
   const canvas = document.createElement('canvas');
@@ -138,7 +138,7 @@ export async function exportSideCard(side, sideOrdinal) {
 
   drawFrame(ctx, deadwaxText);
 
-  const rects = computeLayout(side.entries.length);
+  const rects = computeLayout(session.entries.length);
   drawThread(ctx, rects); // drawn UNDER the covers.
   images.forEach((img, i) => {
     const r = rects[i];
@@ -152,7 +152,7 @@ export async function exportSideCard(side, sideOrdinal) {
   try {
     return { dataUrl: canvas.toDataURL('image/png'), typographicFallback: false };
   } catch {
-    return renderTypographicFallback(side, deadwaxText);
+    return renderTypographicFallback(session, deadwaxText);
   }
 }
 

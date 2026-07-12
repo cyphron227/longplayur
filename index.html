@@ -56,6 +56,16 @@
     <symbol id="icon-bin" viewBox="0 0 24 24">
       <path d="M5 7h14M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M7 7l1 13a1 1 0 001 1h6a1 1 0 001-1l1-13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
+    <symbol id="icon-device" viewBox="0 0 24 24">
+      <rect x="9" y="3" width="12" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M3 16v3a1 1 0 001 1h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M3 12a9 9 0 019 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M3 8a13 13 0 0113 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-nearby" viewBox="0 0 24 24">
+      <circle cx="9" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="15" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    </symbol>
   </defs>
 </svg>
 
@@ -65,7 +75,7 @@
 
   <nav id="app-tabs" class="app-tabs" hidden aria-label="Longplayur sections">
     <button id="tab-wall" class="tab-btn" type="button">Now playing</button>
-    <button id="tab-record-bag" class="tab-btn" type="button">Record bag</button>
+    <button id="tab-past-sessions" class="tab-btn" type="button">Past sessions</button>
     <button id="tab-setup" class="tab-btn" type="button">Setup</button>
   </nav>
 
@@ -85,16 +95,8 @@
         <li class="step">
           <span class="step-num">01</span>
           <div class="step-body">
-            <h2>Create a Spotify app</h2>
-            <p>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify developer dashboard</a> and create an app. Any name and description will do.</p>
-          </div>
-        </li>
-        <hr class="step-rule">
-        <li class="step">
-          <span class="step-num">02</span>
-          <div class="step-body">
-            <h2>Set the redirect URI</h2>
-            <p>In your app's settings, add this exact redirect URI:</p>
+            <h2>Copy the redirect URI</h2>
+            <p>You will paste this into your Spotify app's settings in step 03.</p>
             <div class="mono-well">
               <code id="redirect-uri"></code>
               <button id="copy-redirect-uri" class="icon-btn" type="button" aria-label="Copy redirect URI">
@@ -106,7 +108,32 @@
         </li>
         <hr class="step-rule">
         <li class="step">
+          <span class="step-num">02</span>
+          <div class="step-body">
+            <h2>Create a Spotify app</h2>
+            <p>This step needs a computer: the Spotify developer dashboard is not built for small screens.</p>
+            <p id="send-to-computer-label" class="field-hint" hidden>Send this page to your computer:</p>
+            <div id="send-to-computer" class="mono-well" hidden>
+              <code id="send-to-computer-url"></code>
+              <button id="copy-page-url" class="icon-btn" type="button" aria-label="Copy this page's link">
+                <svg class="icon"><use href="#icon-copy"/></svg>
+                <span>Copy</span>
+              </button>
+            </div>
+            <p>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify developer dashboard</a> and create an app. Any name and description will do.</p>
+          </div>
+        </li>
+        <hr class="step-rule">
+        <li class="step">
           <span class="step-num">03</span>
+          <div class="step-body">
+            <h2>Add the redirect URI to your app</h2>
+            <p>In your new app's settings, paste the redirect URI you copied in step 01. It must match exactly.</p>
+          </div>
+        </li>
+        <hr class="step-rule">
+        <li class="step">
+          <span class="step-num">04</span>
           <div class="step-body">
             <h2>Paste your client ID</h2>
             <p>Find it on your app's dashboard page.</p>
@@ -158,8 +185,8 @@
         <span>Longplayur</span>
       </div>
       <nav class="header-actions" aria-label="Longplayur">
-        <button id="btn-record-bag" class="text-btn" type="button">Record bag</button>
-        <button id="btn-new-side" class="text-btn" type="button">New session</button>
+        <button id="btn-past-sessions" class="text-btn" type="button">Past sessions</button>
+        <button id="btn-new-session" class="text-btn" type="button">New session</button>
         <button id="btn-crackle" class="text-btn" type="button" aria-pressed="true">
           <svg class="icon"><use href="#icon-crackle"/></svg>
           <span>Crackle</span>
@@ -167,6 +194,8 @@
         <button id="btn-sign-out" class="text-btn" type="button">Sign out</button>
       </nav>
     </header>
+
+    <nav id="bag-rail" class="bag-rail" aria-label="Record bags" hidden></nav>
 
     <p id="wall-prompt" class="wall-prompt"></p>
 
@@ -197,20 +226,29 @@
         <span id="player-total" class="player-time">0:00</span>
       </div>
       <span id="player-device" class="player-device" hidden></span>
+      <button id="player-nearby" class="icon-btn player-device-switch" type="button" aria-label="Records nearby">
+        <svg class="icon"><use href="#icon-nearby"/></svg>
+      </button>
+      <button id="player-device-switch" class="icon-btn player-device-switch" type="button" aria-label="Choose playback device">
+        <svg class="icon"><use href="#icon-device"/></svg>
+      </button>
     </div>
 
+    <div id="nearby-shelf" class="nearby-shelf" hidden></div>
+
     <div id="crackle-hint" class="crackle-hint" hidden>CRACKLE ON &middot; TOGGLE IN THE HEADER</div>
+    <div id="wake-confirmation" class="wake-confirmation deadwax" hidden role="status">Found this phone. Carrying on.</div>
   </section>
 
-  <!-- Record bag -->
-  <section id="screen-record-bag" class="screen" hidden>
-    <header class="record-bag-header">
-      <h1>Record bag</h1>
-      <button id="btn-close-record-bag" class="icon-btn" type="button" aria-label="Close record bag">
+  <!-- Past sessions: the journal (not to be confused with record bags, the curated collections shown on the Wall) -->
+  <section id="screen-past-sessions" class="screen" hidden>
+    <header class="past-sessions-header">
+      <h1>Past sessions</h1>
+      <button id="btn-close-past-sessions" class="icon-btn" type="button" aria-label="Close past sessions">
         <svg class="icon"><use href="#icon-close"/></svg>
       </button>
     </header>
-    <div id="record-bag-list" class="record-bag-list"></div>
+    <div id="past-sessions-list" class="past-sessions-list"></div>
   </section>
 
   <!-- Device picker modal (Spotify Connect fallback) -->
