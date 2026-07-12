@@ -4,7 +4,7 @@
 import * as auth from './auth.js';
 import { getMe, getTopTracks, SpotifyApiError } from './spotify.js';
 import { getAlbumPool, getCachedPool, isPoolFresh, buildAlbumPool, SparseHistoryError } from './albums.js';
-import { announce, show, hide, escapeHtml, formatDuration, formatDeadwaxDate } from './ui.js';
+import { announce, show, hide, escapeHtml, formatDuration, formatDeadwaxDate, prefersReducedMotion } from './ui.js';
 import { initWall } from './wall.js';
 import * as playback from './playback.js';
 import {
@@ -308,7 +308,10 @@ async function switchWallPool(pool) {
   try {
     if (currentAlbumId) retireDisc(currentAlbumId);
     wallContainer.classList.add('is-fading');
-    await delay(220);
+    // Matches #wall-container's own CSS transition-duration (--dur-breath,
+    // collapsed to 150ms under reduced motion) so the remount happens only
+    // once the fade-out has actually finished, not mid-fade.
+    await delay(prefersReducedMotion() ? 150 : 600);
     if (wallApi) wallApi.destroy();
     renderWallDom(pool);
     setWallPrompt(pool);

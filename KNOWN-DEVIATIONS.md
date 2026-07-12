@@ -238,6 +238,12 @@ are:
 - Whether Spotify's album art CDN responses actually carry CORS headers in
   practice for the share-card canvas (PRD F8 assumes they do; the
   typographic fallback exists specifically in case they do not, always).
+- Everything added in INCREMENT-01 that touches a real device or a second
+  API: silent desktop reconnect, the Android "Wake Spotify" round-trip, the
+  output switcher's mid-session transfer, Deezer's actual JSON shapes for
+  Records nearby (written to Deezer's documented API, not exercised
+  against it), and native share's transient-activation timing on iOS
+  Safari specifically.
 
 ## QA sweep against PRD edge cases
 
@@ -302,8 +308,42 @@ not escalating rather than by an explicit stop/start of the interval timer.
    test, because there is no reliable way to feature-detect "will the SDK
    actually initialise here" other than trying it.
 
-6. **"Side {n} · now playing" / record bag ordinals.** These use the side's
-   1-based position in the lifetime journal (`journal.js`), computed at
-   record time. If two browser tabs are open simultaneously and both start a
-   new side, the "last write wins" rule (PRD edge case 9) means one tab's
-   view of the ordinal can go stale until it next re-reads the journal.
+6. **"Session {n} · now playing" / Past sessions ordinals.** These use the
+   session's 1-based position in the lifetime journal (`journal.js`),
+   computed at record time. If two browser tabs are open simultaneously and
+   both start a new session, the "last write wins" rule (PRD edge case 9)
+   means one tab's view of the ordinal can go stale until it next re-reads
+   the journal.
+
+## INCREMENT-01 summary (2026-07-12)
+
+Everything above this line except the "Side renamed to Session" and "The
+needle-drop cover now stays expanded" sections predates this increment.
+INCREMENT-01 consolidated the app against `Docs/PRD.md` /
+`Docs/DESIGN-SPEC.md` (updated to match throughout) across five phases,
+each its own commit:
+
+- **Phase 0.** "Side" renamed to "Session" everywhere including storage
+  (journal v1 -> v2) and code, not just UI copy as before. "Record bag" now
+  means only the curated collections added in Phase 2; the journal screen
+  is "Past sessions".
+- **Phase 1.** Setup screen reordered to real-world order (redirect URI
+  copy first) with a mobile "send this page to your computer" notice.
+  Silent desktop reconnect, Android "Wake Spotify" with a 15s device
+  re-poll, and a persistent output-switcher icon on the player bar.
+- **Phase 2.** A bag rail above the Wall ("YOUR WALL" plus six seed
+  bags, `bags/*.json`, lazily resolved to Spotify via search and cached).
+  Records nearby, a Deezer-sourced shelf of related albums (`js/nearby.js`),
+  fetch-first with a JSONP fallback, hiding itself if unreachable.
+- **Phase 3.** Liner notes removed entirely (journal v2 -> v3). Share
+  became a native `navigator.share()` action (falling back to download)
+  triggered from an icon on each session's collapsed row, pre-rendered
+  ahead of the tap for iOS Safari's transient-activation window.
+- **Phase 4 (this sweep).** Grepped clean for em/en dashes, glyph icons,
+  leftover "side"/"record bag as journal"/"liner"/journal "note" usage;
+  cross-checked every `getElementById` call against `index.html` and every
+  relative JS import against the files on disk; confirmed `gallery/` and
+  `tests.html` were untouched and need no rebuild/rerun. No live-browser or
+  real-device verification was possible in this environment (no Spotify
+  login, no real iOS/Android hardware); see the "Not yet verified" sections
+  above and throughout this file for exactly what that leaves outstanding.

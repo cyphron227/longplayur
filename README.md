@@ -44,10 +44,10 @@ Vercel needs no build command and no environment variables; it is a static site.
 
 ## First-run setup
 
-1. Create a Spotify app at the [developer dashboard](https://developer.spotify.com/dashboard). Any name and description will do.
-2. Add the exact redirect URI Longplayur shows you (it is `location.origin + location.pathname`, so it changes if you move the deployment).
-3. Under your app's User Management, add your own Spotify account, since development-mode apps are capped at 5 allowlisted users.
-4. Paste the client ID into Longplayur and press Connect Spotify.
+1. Copy the redirect URI Longplayur shows you (it is `location.origin + location.pathname`, so it changes if you move the deployment).
+2. Create a Spotify app at the [developer dashboard](https://developer.spotify.com/dashboard). Any name and description will do. This step needs a computer; on a phone, Longplayur offers a copyable link to send the page to one.
+3. Add the redirect URI you copied in step 1 to the app's settings. It must match exactly.
+4. Under your app's User Management, add your own Spotify account, since development-mode apps are capped at 5 allowlisted users, then paste the client ID into Longplayur and press Connect Spotify.
 
 If something goes wrong, use the "Test connection" diagnostic on the setup screen: it runs a `GET /me` and a one-item top-tracks call and reports each as OK or a specific, actionable failure.
 
@@ -63,23 +63,44 @@ Longplayur uses vinyl language throughout the interface:
 | A session | A listening session |
 | Past sessions | Your journal of past sessions |
 | A record bag | A curated album collection shown as a rail above the Wall |
+| Records nearby | A shelf of related albums for whatever is currently playing |
 | The Wall | The full zoomed-out view of your album history |
 | New session | Starting a fresh listening session |
+
+## Record bags
+
+Above the Wall sits a rail of chips: "YOUR WALL" (your own pool) plus six
+seed bags shipped with Longplayur (`bags/*.json`) -- 90s US rap, soul
+essentials, Motown, trip hop, Britpop, and late-night jazz, each an
+original 15-to-25-album curation. Selecting one crossfades the Wall to
+that bag; the albums resolve to real Spotify album IDs via search the
+first time you open that bag, then stay cached. Anything you play from a
+bag records into Past sessions exactly like anything else, tagged with
+which bag it came from.
+
+## Records nearby
+
+While something is playing, the device-shaped icon's neighbour on the
+player bar (the overlapping-circles icon) opens a shelf of 4 to 6 related
+albums, sourced from Deezer's free public API (no account or key needed)
+and mapped back to real Spotify albums. It hides itself with no error
+state if Deezer cannot be reached.
 
 ## Privacy
 
 - No accounts, no server, no analytics, no telemetry.
 - Your Spotify client ID, tokens, cached album pool, and journal live only in your browser's local storage.
-- The only network requests Longplayur makes are to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`) and to your own self-hosted copy of this site.
+- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby only, and only artist/album metadata -- never your listening history), and to your own self-hosted copy of this site.
 - Signing out clears your Spotify session tokens but keeps your client ID and your past sessions, so you are not re-typing your client ID or losing your listening history every time.
 
 ## Limitations, honestly
 
 - Requires Spotify Premium. There is no free-tier fallback.
 - The Web Playback SDK works in desktop Chrome, Edge, and Firefox. iOS Safari and most mobile browsers fall back to Spotify Connect (control a device that's already playing Spotify elsewhere) with a 5-second polling loop instead of the SDK's real-time events, so the player bar is slightly less responsive there.
-- No playlists, no social features, no accounts, no mobile app: this is a v1, and those are deliberate non-goals, not oversights.
+- No playlists, no social features, no accounts, no native mobile app: this is a v1, and those are deliberate non-goals, not oversights.
 - End-of-album detection is a heuristic (see `js/ending.js` and `tests.html`). It is unit-tested against 8+ cases per playback path, but has not yet been exercised against a real Spotify account by an automated agent; see `KNOWN-DEVIATIONS.md`.
 - The album disc's centre label is a flat colour rather than a true sample of the album art's dominant edge colour, to avoid a second canvas/CORS dependency inside the persistent per-cell SVG.
+- The Android "Wake Spotify" flow, the output switcher, and native share have not been exercised on a real device by an automated agent; see `KNOWN-DEVIATIONS.md`.
 
 ## Development
 
@@ -106,18 +127,21 @@ Open `tests.html` in a browser (or via the local server above) to run the pure-f
 index.html      screens, SVG icon sprite, the groove brand mark
 styles.css      design tokens, layout, ceremony choreography CSS
 gallery/        isolated Vite build for the Wall's dome gallery (see above)
+bags/           seed record bag definitions (name, blurb, album/artist pairs)
 js/
   main.js                 boot, screen routing, event wiring
   auth.js                 OAuth 2.0 PKCE, token refresh
   spotify.js              API client, 429 handling
   albums.js               pool building, scoring, caching
+  bags.js                 record bag manifest + lazy Spotify resolution
+  nearby.js               Records nearby, sourced from Deezer's public API
   wall.js                 bridges the dome gallery to the app's needle-drop/journal API
   dome-gallery.bundle.js  build output of gallery/ (React dome gallery), do not hand-edit
-  playback.js             Web Playback SDK + Spotify Connect fallback
+  playback.js             Web Playback SDK + Spotify Connect fallback, output switcher
   ending.js               end-of-album detection (pure functions)
   ceremony.js             needle drop, crackle (Web Audio), tonearm arc, runout groove
-  journal.js              sides, liner notes, record bag storage
-  exporter.js             the share card (canvas)
+  journal.js              Past sessions storage (versioned, migrates forward)
+  exporter.js             the share card (canvas, native share + download)
   ui.js                   DOM helpers, escaping, aria-live announcer
 ```
 

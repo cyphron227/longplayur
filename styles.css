@@ -589,7 +589,7 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   .mark--loading { animation: none; }
-  .item__image, .ceremony-cover, .ceremony-disc, .ceremony-text, .wall-thread path, .preview-scrim, .preview-play-btn { transition-duration: 150ms !important; animation-duration: 1ms !important; }
+  .item__image, .ceremony-cover, .ceremony-disc, .ceremony-text, .wall-thread path, .preview-scrim, .preview-play-btn, #wall-container { transition-duration: 150ms !important; animation-duration: 1ms !important; }
   /* The DomeGallery component's own drag/focus/inertia animations are
      defined inside its injected <style> tag (gallery/src/DomeGallery.tsx)
      with fixed durations, not this app's --dur-* tokens, so they do not
