@@ -108,6 +108,39 @@ A round of fixes and additions on top of the selection-preview flow above:
   (`switchWallPool()`) and adds a dismissible "ARTIST: X" / "GENRE: X"
   chip alongside YOUR WALL, mutually exclusive with an active bag.
 
+## Search: real bug, found via a live device report, fixed on the same day
+
+Shipped search returned zero results for every query -- confirmed live by
+Yaron testing "Frank Ocean" and "uk hip hop", both empty. `js/search.js`'s
+Spotify requests were wrapped in a bare `try/catch { return []; }`, so a
+genuinely broken request was indistinguishable from an honest empty
+result; there was no way to tell which had happened from the outside.
+
+First fix: made failures loud instead of silent -- every failed request
+now `console.error`s, and `failed` threads back through
+`searchByArtist()`/`searchByGenre()`/`searchAlbums()` so `main.js` can
+show "Search failed, check your connection" instead of the misleading
+"No albums found" when the request itself broke, rather than merely
+finding nothing. At the same time, `market=from_token` was added to both
+Spotify calls, reasoned from general API best practice for
+market-restricted endpoints -- this was not evidence-based, since nothing
+was known yet about the actual failure.
+
+That guess was wrong, and made things worse in a specific way: the
+console logging then surfaced the real cause directly from a live
+session -- `403 Insufficient client scope` on the `/search` call.
+`market=from_token` requires Spotify to resolve the user's country from
+their private profile, which needs the `user-read-private` scope; this
+app's OAuth scopes (`js/auth.js`) do not include it, and adding it would
+mean every already-connected user has to reconnect to pick up the new
+scope. `market=from_token` was removed from both calls (`searchArtists()`
+and `albumsForArtist()`) rather than adding the scope -- omitting
+`market` entirely is valid for both endpoints and only means Spotify does
+not filter the discography to one country, which does not matter for a
+preview pool. The diagnosability fix (loud failures, the `failed` flag)
+stayed, since it is what actually made this fixable at all, and is worth
+keeping regardless of this specific bug.
+
 ## Liner notes removed, native share added (INCREMENT-01 Phase 3)
 
 Liner notes are gone entirely: `journal.js`'s `setLinerNote()` export, the

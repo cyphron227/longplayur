@@ -49,7 +49,13 @@ function toEntry(album, rank) {
  * apart from an honest empty result. */
 async function albumsForArtist(artistId) {
   try {
-    const data = await apiFetch(`/artists/${artistId}/albums?include_groups=album,single&limit=${MAX_ALBUMS_PER_ARTIST}&market=from_token`);
+    // No market param: market=from_token needs the user-read-private scope
+    // (to resolve the user's country) which this app does not request, and
+    // requesting it would mean every existing connected user has to
+    // reconnect to pick up the new scope. Omitting market entirely is
+    // valid for this endpoint -- it just means Spotify does not filter the
+    // discography to one country, which does not matter for a preview pool.
+    const data = await apiFetch(`/artists/${artistId}/albums?include_groups=album,single&limit=${MAX_ALBUMS_PER_ARTIST}`);
     return { items: data?.items || [], failed: false };
   } catch (err) {
     console.error('[search] GET /artists/{id}/albums failed:', err);
@@ -59,7 +65,7 @@ async function albumsForArtist(artistId) {
 
 async function searchArtists(q, limit) {
   try {
-    const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=${limit}&market=from_token`);
+    const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=${limit}`);
     return { items: data?.artists?.items || [], failed: false };
   } catch (err) {
     console.error('[search] GET /search (type=artist) failed:', err);
