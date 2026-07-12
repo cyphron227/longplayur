@@ -198,10 +198,16 @@
        bar above; sign out and the crackle toggle live on the Setup tab. -->
   <section id="screen-app" class="screen" hidden>
     <form id="search-form" class="search-form" aria-label="Search for an artist or genre">
-      <input id="search-input" type="search" class="search-input" placeholder="Search artist or genre" aria-label="Search artist or genre" autocomplete="off">
-      <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
-        <svg class="icon"><use href="#icon-search"/></svg>
-      </button>
+      <div class="search-mode-toggle" role="radiogroup" aria-label="Search by">
+        <button type="button" id="search-mode-artist" class="search-mode-btn deadwax" aria-pressed="true">Artist</button>
+        <button type="button" id="search-mode-genre" class="search-mode-btn deadwax" aria-pressed="false">Genre</button>
+      </div>
+      <div class="search-input-row">
+        <input id="search-input" type="search" class="search-input" placeholder="Search by artist" aria-label="Search term" autocomplete="off">
+        <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
+          <svg class="icon"><use href="#icon-search"/></svg>
+        </button>
+      </div>
     </form>
 
     <nav id="bag-rail" class="bag-rail" aria-label="Record bags" hidden></nav>

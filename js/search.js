@@ -119,22 +119,22 @@ async function searchByGenre(query) {
 
 /**
  * @param {string} query free-text artist name or genre
- * @returns {Promise<{pool: Array, mode: 'artist'|'genre'|null, failed: boolean}>}
- *   pool is pool-shaped entries (same shape as albums.js/bags.js produce);
- *   mode records which interpretation actually found something, so the
- *   caller can label the result. failed means the Spotify requests
- *   themselves broke (check the browser console for the logged error) --
- *   distinct from a genuine, successful zero-result search.
+ * @param {'artist'|'genre'} mode which interpretation to use -- this used
+ *   to be guessed (try artist, fall back to genre only if that found
+ *   literally nothing), but Spotify's artist search is fuzzy enough that
+ *   almost any genre-like word also matches some real, if obscure, artist
+ *   (e.g. "soul" matching the band Soul II Soul), so the guess essentially
+ *   never fell through to genre mode in practice. The caller now asks for
+ *   one explicitly (see the mode toggle next to the search field).
+ * @returns {Promise<{pool: Array, failed: boolean}>} pool is pool-shaped
+ *   entries (same shape as albums.js/bags.js produce). failed means the
+ *   Spotify requests themselves broke (check the browser console for the
+ *   logged error) -- distinct from a genuine, successful zero-result search.
  */
-export async function searchAlbums(query) {
+export async function searchAlbums(query, mode) {
   const trimmed = query.trim();
-  if (!trimmed) return { pool: [], mode: null, failed: false };
+  if (!trimmed) return { pool: [], failed: false };
 
-  const byArtist = await searchByArtist(trimmed);
-  if (byArtist.pool.length > 0) return { pool: byArtist.pool, mode: 'artist', failed: false };
-
-  const byGenre = await searchByGenre(trimmed);
-  if (byGenre.pool.length > 0) return { pool: byGenre.pool, mode: 'genre', failed: false };
-
-  return { pool: [], mode: null, failed: byArtist.failed && byGenre.failed };
+  const result = mode === 'genre' ? await searchByGenre(trimmed) : await searchByArtist(trimmed);
+  return result;
 }

@@ -153,6 +153,18 @@ fetches two pages of 10 (`offset=0` and `offset=10`) in parallel per
 artist, for up to 20 releases before the album/EP filter runs, rather
 than requesting an invalid `limit=12` in one call.
 
+With requests actually succeeding, a third issue surfaced -- this one a
+genuine design flaw rather than a request bug: searching "soul" (meaning
+the genre) returned the band Soul II Soul's discography instead, because
+`searchAlbums()` tried artist mode first and only fell back to genre mode
+if that found literally nothing. Spotify's artist search is fuzzy enough
+that almost any genre-like word also matches some real, if obscure,
+artist, so that fallback essentially never triggered in practice --
+confirmed live. Auto-detection was removed entirely: `searchAlbums()` now
+takes an explicit `mode` ('artist' | 'genre') argument, chosen via a new
+Artist/Genre toggle next to the search field (`main.js`'s `searchMode`
+state, defaulting to 'artist'), rather than guessed.
+
 ## Liner notes removed, native share added (INCREMENT-01 Phase 3)
 
 Liner notes are gone entirely: `journal.js`'s `setLinerNote()` export, the

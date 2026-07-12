@@ -88,12 +88,13 @@ state if Deezer cannot be reached.
 
 ## Search
 
-A search field above the bag rail takes a free-text artist name or
-genre. Artist search pulls that one artist's own discography; genre
-search finds several artists tagged with that genre and pulls a few
-albums from each. Only full albums and EPs of 6 or more tracks are
-shown; singles and compilations are filtered out. A result replaces the
-Wall the same way a record bag does, with a dismissible chip to get back
+A search field above the bag rail takes a free-text term plus an
+explicit Artist/Genre toggle. Artist mode pulls that one artist's own
+discography; genre mode finds several artists tagged with that genre and
+pulls a few albums from each. Only full albums and EPs of 6 or more
+tracks are shown; singles and compilations are filtered out. A result
+replaces the Wall the same way a record bag does, with a dismissible chip
+to get back
 to your own wall.
 
 ## Privacy

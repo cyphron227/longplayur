@@ -60,7 +60,7 @@ There is exactly ONE grid in the app: the Wall. This removes all tapestry/wall s
 ### 2a. The bag rail
 A row of half-tile chips in deadwax mono sits directly above the Wall. "YOUR WALL" (the user's own pool) is always first; the six seed record bags follow. Selecting a chip crossfades the whole Wall (`--dur-breath`) to that bag's own spiral layout; the camera always snaps to whole rows and columns on any bag switch, at any viewport, so no cover is ever cropped, letterboxing with obsidian where the aspect ratio does not divide evenly. A record bag is a curated list of albums, not a listening session: playing from one records normally into Past sessions, tagged with which bag it came from.
 
-A search field sits above the rail (search icon, text input for an artist name or a genre). A result crossfades the Wall the same way a bag does, and adds a dismissible "ARTIST: X" / "GENRE: X" chip to the rail alongside YOUR WALL; tapping it (or YOUR WALL) returns to the user's own pool. Only real albums, and EPs of 6 or more tracks, are shown -- singles shorter than that and compilations are filtered out. Artist search resolves to that one artist's own discography; genre search resolves to several artists tagged with that genre (Spotify's own `genre:` search filter, which only works against artists, not albums directly), each contributing a few albums.
+A search field sits above the rail: an Artist/Genre toggle (a pair of pills, one always pressed; Artist is the default), then the text input and search icon. The mode is chosen explicitly, not guessed -- Spotify's artist search is fuzzy enough that almost any genre-like word also matches some real, if obscure, artist (e.g. "soul" matching the band Soul II Soul), so an earlier "try artist, fall back to genre" auto-detect essentially never actually reached genre mode. A result crossfades the Wall the same way a bag does, and adds a dismissible "ARTIST: X" / "GENRE: X" chip to the rail alongside YOUR WALL; tapping it (or YOUR WALL) returns to the user's own pool. Only real albums, and EPs of 6 or more tracks, are shown -- singles shorter than that and compilations are filtered out. Artist mode resolves to that one artist's own discography; genre mode resolves to several artists tagged with that genre (Spotify's own `genre:` search filter, which only works against artists, not albums directly), each contributing a few albums.
 
 Within the Wall, a pool smaller than the dome's slot count is filled with independently shuffled full passes of the pool rather than a straight repeat, so the same album cannot reappear until every other album has had its turn, and even then in a different order -- avoiding visible duplicates within any one glance across the dome.
 
@@ -149,9 +149,11 @@ Selecting an album
 - Dismiss: "Find something else"
 
 Search
-- Placeholder: "Search artist or genre"
+- Mode toggle: "Artist" / "Genre" (Artist is the default)
+- Placeholder: "Search by artist" / "Search by genre"
 - Searching: "Searching for "{query}"."
 - No results: "No albums found for "{query}". Only full albums and EPs of 6 or more tracks are shown."
+- Failed (the request itself broke, not a genuine empty result): "Search failed. Check your connection and try again."
 - Result prompt: "Artist: {query}. {N} records. Tap one to drop the needle." / "Genre: {query}. {N} records. Tap one to drop the needle."
 
 Errors

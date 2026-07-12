@@ -447,7 +447,20 @@ button { cursor: pointer; }
 
 /* -------------------- Bag rail -------------------- */
 
-.search-form { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 20px 0; }
+.search-form { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 20px 0; }
+.search-mode-toggle { display: flex; gap: 6px; }
+.search-mode-btn {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--bone-dim);
+  padding: 5px 10px;
+  min-height: 28px;
+  transition: color var(--dur-touch) var(--ease), border-color var(--dur-touch) var(--ease), background var(--dur-touch) var(--ease);
+}
+.search-mode-btn:hover { color: var(--bone); }
+.search-mode-btn[aria-pressed="true"] { color: var(--obsidian); background: var(--amber); border-color: var(--amber); }
+.search-input-row { display: flex; gap: 8px; }
 .search-input {
   flex: 1 1 auto;
   min-width: 0;

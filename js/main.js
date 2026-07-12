@@ -402,21 +402,40 @@ async function renderBagRail() {
 }
 
 // ---------------------------------------------------------------------
-// Search: by artist or genre. Shares the bag-rail chip (a dismissible
-// "ARTIST: X" / "GENRE: X" chip appears alongside YOUR WALL) and the same
-// switchWallPool() crossfade the bags use.
+// Search: by artist or genre, chosen explicitly via the mode toggle
+// rather than guessed -- Spotify's artist search is fuzzy enough that
+// almost any genre-like word also matches some real, if obscure, artist
+// (e.g. "soul" matching the band Soul II Soul), so a "try artist, fall
+// back to genre" guess essentially never actually reached genre mode.
+// Shares the bag-rail chip (a dismissible "ARTIST: X" / "GENRE: X" chip
+// appears alongside YOUR WALL) and the same switchWallPool() crossfade
+// the bags use.
 // ---------------------------------------------------------------------
 
 const searchForm = document.getElementById('search-form');
 const searchInput = document.getElementById('search-input');
+const searchModeArtistBtn = document.getElementById('search-mode-artist');
+const searchModeGenreBtn = document.getElementById('search-mode-genre');
+
+let searchMode = 'artist';
+
+function setSearchMode(mode) {
+  searchMode = mode;
+  searchModeArtistBtn.setAttribute('aria-pressed', String(mode === 'artist'));
+  searchModeGenreBtn.setAttribute('aria-pressed', String(mode === 'genre'));
+  searchInput.placeholder = mode === 'artist' ? 'Search by artist' : 'Search by genre';
+}
+searchModeArtistBtn?.addEventListener('click', () => setSearchMode('artist'));
+searchModeGenreBtn?.addEventListener('click', () => setSearchMode('genre'));
 
 async function performSearch(query) {
   if (bagSwitchBusy) return;
   const trimmed = query.trim();
   if (!trimmed) return;
 
+  const mode = searchMode;
   wallPrompt.textContent = `Searching for "${trimmed}".`;
-  const { pool, mode, failed } = await searchAlbums(trimmed);
+  const { pool, failed } = await searchAlbums(trimmed, mode);
   if (pool.length === 0) {
     wallPrompt.textContent = failed
       ? `Search failed. Check your connection and try again.`
