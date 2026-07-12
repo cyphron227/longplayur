@@ -8,19 +8,27 @@
 // Only albums, and EPs of 6 or more tracks, are kept: singles shorter than
 // that and compilations are filtered out, per explicit request.
 //
-// Genre mode is a "soft" search combining three sources, because Spotify's
-// exact genre:"..." tag filter alone is too brittle for a lot of real genre
-// terms in practice (confirmed live: "jungle" and "britpop" both returned
-// nothing, while "soul" returned the band Soul II Soul instead of soul
-// records). The three sources, most to least confident:
+// Genre mode is a "soft" search combining several sources, because
+// Spotify's exact genre:"..." tag filter alone is too brittle for a lot of
+// real genre terms in practice (confirmed live: "jungle" and "britpop"
+// both returned nothing, while "soul" returned the band Soul II Soul
+// instead of soul records). Most to least confident:
 //   1. Spotify's exact genre:"..." tag search (kept -- sometimes works).
 //   2. A plain free-text Spotify artist search, kept only where the artist's
-//      own .genres tags softly match the query (substring either direction).
+//      own .genres tags softly match the query (word-level overlap, not raw
+//      substring -- see phraseSoftMatches for why "britpop" must not match
+//      an artist merely tagged "pop").
 //   3. Deezer's own, coarser genre taxonomy (e.g. "Soul & Funk", "Rap/Hip
 //      Hop") -- the same public, keyless API "Records nearby" already uses
 //      -- whose member artists are resolved back to Spotify by name.
+//   4. Last resort, only if 1-3 all came back empty: the plain free-text
+//      search results unfiltered, so a niche term with no matching tag or
+//      Deezer bucket (e.g. "jungle") still returns something rather than
+//      nothing, at the cost of possibly matching on artist name alone.
 // Results are deduplicated and ranked in that order, then capped before
 // fetching any album data (each artist costs up to 2 paginated requests).
+// getGenreSuggestions() separately exposes Deezer's own genre names for an
+// autocomplete, steering users toward terms most likely to hit tier 1-3.
 
 import { apiFetch } from './spotify.js';
 import { deezerFetch } from './deezer.js';
@@ -73,16 +81,31 @@ function normalize(s) {
   return (s || '').trim().toLowerCase();
 }
 
-/** True if the query and one of the artist's own genre tags overlap as
- * substrings in either direction ("uk hip hop" query vs "uk hip hop" tag,
- * or a broader tag like "hip hop" containing a narrower query). */
+function tokenize(s) {
+  return normalize(s).split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+/** True if every word of the shorter phrase appears as a whole word in the
+ * longer one ("uk hip hop" vs "hip hop" matches on {hip, hop}). Word-level,
+ * not raw substring: a raw substring check let query "britpop" match any
+ * artist merely tagged "pop", since "britpop".includes("pop") is true --
+ * confirmed live, an artist tagged just "pop" was pulled into a "britpop"
+ * search. Tokenizing first means "britpop" and "pop" are different single
+ * words, so that false match no longer happens, while genuine multi-word
+ * overlaps like "hip hop" / "uk hip hop" still work. */
+function phraseSoftMatches(candidate, query) {
+  const c = tokenize(candidate);
+  const q = tokenize(query);
+  if (c.length === 0 || q.length === 0) return false;
+  const cSet = new Set(c);
+  const qSet = new Set(q);
+  const isSubset = (small, big) => [...small].every((w) => big.has(w));
+  return isSubset(qSet, cSet) || isSubset(cSet, qSet);
+}
+
+/** True if the query softly matches one of the artist's own genre tags. */
 function genreSoftMatches(genres, query) {
-  const q = normalize(query);
-  if (!q) return false;
-  return (genres || []).some((g) => {
-    const gg = normalize(g);
-    return gg && (gg.includes(q) || q.includes(gg));
-  });
+  return (genres || []).some((g) => phraseSoftMatches(g, query));
 }
 
 /** @returns {Promise<{items: Array, failed: boolean}>} failed distinguishes
@@ -142,10 +165,7 @@ async function deezerGenreArtists(query) {
     if (genres.length === 0) return { items: [], failed: genreList === null };
 
     const q = normalize(query);
-    const matches = genres.filter((g) => {
-      const name = normalize(g.name);
-      return name && (name === q || name.includes(q) || q.includes(name));
-    });
+    const matches = genres.filter((g) => phraseSoftMatches(g.name, query));
     if (matches.length === 0) return { items: [], failed: false };
 
     // Prefer the bucket whose name length is closest to the query -- the
@@ -222,6 +242,21 @@ async function searchByGenre(query) {
     if (!candidates.has(a.id)) candidates.set(a.id, a);
   });
 
+  // Last resort: for niche terms with no exact tag, no genre-tag overlap,
+  // and no matching Deezer bucket at all (confirmed live for "jungle" --
+  // Deezer's own taxonomy is too coarse to have a bucket for it), fall
+  // back to whichever artists the plain free-text search found by name,
+  // unfiltered. This can surface an artist whose name matches but whose
+  // actual style doesn't (the same imprecision "soul" once had matching
+  // the band Soul II Soul) -- but only after every more precise source has
+  // come back empty, so a loosely-related result stands in for nothing at
+  // all, per explicit request for a softer, more allowing search.
+  if (candidates.size === 0) {
+    freeResult.items.forEach((a) => {
+      if (!candidates.has(a.id)) candidates.set(a.id, a);
+    });
+  }
+
   if (candidates.size === 0) {
     const allFailed = tagResult.failed && freeResult.failed && deezerResult.failed;
     return { pool: [], failed: allFailed };
@@ -253,4 +288,21 @@ export async function searchAlbums(query, mode) {
 
   const result = mode === 'genre' ? await searchByGenre(trimmed) : await searchByArtist(trimmed);
   return result;
+}
+
+/**
+ * Genre names for an autocomplete on the search field, so a genre search
+ * is steered toward terms most likely to actually return something rather
+ * than typed blind. Sourced from Deezer's own public genre list (the same
+ * one deezerGenreArtists() matches against) rather than any hand-written
+ * list, since that is the one genre vocabulary this app can verify live
+ * rather than guess at -- Spotify does not expose a public "list every
+ * genre tag" endpoint for this kind of app to call.
+ * @returns {Promise<string[]>} alphabetised genre names, or [] if Deezer
+ *   cannot be reached.
+ */
+export async function getGenreSuggestions() {
+  const genreList = await getDeezerGenreList();
+  const genres = (genreList?.data || []).filter((g) => g && g.id !== 0 && g.name);
+  return genres.map((g) => g.name).sort((a, b) => a.localeCompare(b));
 }

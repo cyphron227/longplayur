@@ -94,8 +94,10 @@ discography. Genre mode is a soft search: it combines Spotify's own exact
 genre tag search, a free-text Spotify search cross-checked against each
 artist's own genre tags, and Deezer's broader public genre taxonomy (the
 same free source Records nearby uses) so real-world genre terms Spotify's
-exact tag filter misses still turn up something. Only full albums and EPs
-of 6 or more tracks are shown; singles and compilations are filtered out.
+exact tag filter misses still turn up something, with an autocomplete
+(sourced live from Deezer's genre list) helping steer genre searches
+toward terms with real coverage. Only full albums and EPs of 6 or more
+tracks are shown; singles and compilations are filtered out.
 A result replaces the Wall the same way a record bag does, with a
 dismissible chip to get back to your own wall.
 

@@ -203,11 +203,12 @@
         <button type="button" id="search-mode-genre" class="search-mode-btn deadwax" aria-pressed="false">Genre</button>
       </div>
       <div class="search-input-row">
-        <input id="search-input" type="search" class="search-input" placeholder="Search by artist" aria-label="Search term" autocomplete="off">
+        <input id="search-input" type="search" class="search-input" placeholder="Search by artist" aria-label="Search term" autocomplete="off" list="genre-suggestions">
         <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
           <svg class="icon"><use href="#icon-search"/></svg>
         </button>
       </div>
+      <datalist id="genre-suggestions"></datalist>
     </form>
 
     <nav id="bag-rail" class="bag-rail" aria-label="Record bags" hidden></nav>

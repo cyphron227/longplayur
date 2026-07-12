@@ -16,7 +16,7 @@ import * as journal from './journal.js';
 import * as exporter from './exporter.js';
 import { loadBagManifest, resolveBag } from './bags.js';
 import { getRecordsNearby } from './nearby.js';
-import { searchAlbums } from './search.js';
+import { searchAlbums, getGenreSuggestions } from './search.js';
 
 // Strip the OAuth `code`/`state`/`error` from the address bar before anything else runs.
 const callbackParams = auth.consumeCallbackParams();
@@ -416,14 +416,41 @@ const searchForm = document.getElementById('search-form');
 const searchInput = document.getElementById('search-input');
 const searchModeArtistBtn = document.getElementById('search-mode-artist');
 const searchModeGenreBtn = document.getElementById('search-mode-genre');
+const genreSuggestionsList = document.getElementById('genre-suggestions');
 
 let searchMode = 'artist';
+
+// The datalist only holds genre names, and only while Genre mode is
+// active, so Artist mode doesn't offer genre words as suggestions.
+// Sourced from Deezer's real genre list (search.js's getGenreSuggestions())
+// rather than a hand-written list, so every suggestion is a term this
+// app's own genre search can actually resolve.
+function clearGenreSuggestions() {
+  if (genreSuggestionsList) genreSuggestionsList.textContent = '';
+}
+
+async function populateGenreSuggestions() {
+  if (!genreSuggestionsList) return;
+  const genres = await getGenreSuggestions();
+  if (searchMode !== 'genre') return; // mode may have changed back while this was in flight.
+  genreSuggestionsList.textContent = '';
+  genres.forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    genreSuggestionsList.appendChild(option);
+  });
+}
 
 function setSearchMode(mode) {
   searchMode = mode;
   searchModeArtistBtn.setAttribute('aria-pressed', String(mode === 'artist'));
   searchModeGenreBtn.setAttribute('aria-pressed', String(mode === 'genre'));
   searchInput.placeholder = mode === 'artist' ? 'Search by artist' : 'Search by genre';
+  if (mode === 'genre') {
+    populateGenreSuggestions();
+  } else {
+    clearGenreSuggestions();
+  }
 }
 searchModeArtistBtn?.addEventListener('click', () => setSearchMode('artist'));
 searchModeGenreBtn?.addEventListener('click', () => setSearchMode('genre'));

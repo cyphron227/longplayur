@@ -174,20 +174,51 @@ fuzziness. `searchByGenre()` was rewritten into a "soft search" combining
 three sources instead of relying on the tag filter alone: (1) the existing
 exact `genre:"..."` tag search, kept since it sometimes works; (2) a
 plain free-text Spotify artist search, kept only where the returned
-artist's own `.genres` array softly overlaps the query as a substring in
-either direction; (3) Deezer's own public genre taxonomy (`GET /genre`
-then `GET /genre/{id}/artists`) -- the same keyless API "Records nearby"
-already uses -- whose coarser buckets (e.g. "Rap/Hip Hop" covers "uk hip
-hop", "Soul & Funk" covers "jungle"-adjacent soul terms) catch genre words
-Spotify's own tag search misses entirely, with each Deezer artist name
-resolved back to a real Spotify artist via the same search call. The
-three sources are deduplicated by artist ID and ranked in that order
-(exact tag first), capped at 15 artists total before any album data is
-fetched, since each artist costs up to 2 paginated requests. The shared
-Deezer fetch-with-JSONP-fallback logic was pulled out of `nearby.js` into
-a new `js/deezer.js` module so both features use the same tested client
-rather than duplicating it. `POOL_TARGET` was also lowered from 100 to 40
-per explicit request, applying to both artist and genre mode.
+artist's own `.genres` array softly overlaps the query; (3) Deezer's own
+public genre taxonomy (`GET /genre` then `GET /genre/{id}/artists`) -- the
+same keyless API "Records nearby" already uses -- whose coarser buckets
+(e.g. "Rap/Hip Hop" covers "uk hip hop") catch genre words Spotify's own
+tag search misses entirely, with each Deezer artist name resolved back to
+a real Spotify artist via the same search call. The three sources are
+deduplicated by artist ID and ranked in that order (exact tag first),
+capped at 15 artists total before any album data is fetched, since each
+artist costs up to 2 paginated requests. The shared Deezer
+fetch-with-JSONP-fallback logic was pulled out of `nearby.js` into a new
+`js/deezer.js` module so both features use the same tested client rather
+than duplicating it. `POOL_TARGET` was also lowered from 100 to 40 per
+explicit request, applying to both artist and genre mode.
+
+The soft-search matching above was initially implemented as a raw
+substring check ("does one string contain the other"), and that shipped
+with a real bug caught on the very next live test: searching "britpop"
+pulled in an artist tagged only "pop", because `"britpop".includes("pop")`
+is true. `genreSoftMatches()` and the Deezer bucket matcher were rewritten
+to a word-level check instead (`phraseSoftMatches()`, `js/search.js`):
+both strings are split into words, and one word-set must be a subset of
+the other, so "britpop" and "pop" are simply different single-word tokens
+and no longer collide, while genuine multi-word overlaps like "hip hop" /
+"uk hip hop" still work. The same live round confirmed "jungle" still
+came back completely empty: no exact Spotify tag, no artist whose own
+genre tags mention it, and no matching Deezer bucket either (Deezer's own
+taxonomy has no bucket fine enough for it). A fourth, last-resort tier was
+added: when all three ranked sources come back empty, `searchByGenre()`
+now falls back to the plain free-text artist-search results unfiltered,
+so a niche term still surfaces something rather than nothing -- at the
+cost of the same imprecision the "soul" -> Soul II Soul case had, since
+this tier only matches by artist name, not genre. It only ever runs when
+nothing more precise was found, and is documented here as a deliberate
+trade-off rather than a fixed bug, per the explicit request for a softer,
+more allowing search over an empty one.
+
+To reduce how often genre search lands on a term with no real coverage in
+the first place, the search field now offers an autocomplete: a
+`<datalist>` bound to the input via `list="genre-suggestions"`, populated
+only while Genre mode is active (`main.js`'s `populateGenreSuggestions()`)
+from a new `getGenreSuggestions()` export in `js/search.js`. Suggestions
+are Deezer's own genre names, fetched live rather than hand-written, since
+Spotify does not expose a public "list every genre tag" endpoint for an
+app like this to call, and hand-writing a genre-tag list would be exactly
+the kind of unverified guess that caused the two bugs above.
 
 ## Liner notes removed, native share added (INCREMENT-01 Phase 3)
 
