@@ -550,11 +550,13 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 .ceremony-deadwax { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; color: var(--bone-dim); }
 .ceremony-text.is-visible { opacity: 1; }
 
-/* Long-press preview: bigger and more legible than the needle-drop
-   ceremony's own title/deadwax, since this is meant to be read at a
-   glance while still holding the tile, not glimpsed mid-choreography. */
+/* Selection preview (selectAlbum(), the Wall's tap/long-press flow):
+   bigger and more legible than the needle-drop ceremony's own
+   title/deadwax, since this is meant to be read at a glance while
+   deciding, not glimpsed mid-choreography. */
 .preview-title { font-family: var(--font-serif); font-size: 30px; line-height: 1.25; color: var(--bone); margin-bottom: 6px; }
 .preview-artist { font-family: var(--font-interface); font-size: 17px; font-weight: 500; color: var(--bone-dim); }
+.preview-description { margin-top: 6px; }
 
 .preview-scrim {
   position: absolute;
@@ -584,14 +586,37 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   transition: opacity var(--dur-touch) var(--ease), transform var(--dur-touch) var(--ease);
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* .ceremony-layer (the parent) is pointer-events:none so drags pass
+     through to the gallery beneath it; without this override, inherited
+     pointer-events:none would make the button itself unclickable. */
+  pointer-events: auto;
 }
 .preview-play-btn.is-visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 .preview-play-btn .icon { width: 30px; height: 30px; margin-left: 3px; }
 .preview-play-btn:hover { filter: brightness(1.08); }
 
+.preview-find-btn {
+  position: absolute;
+  transform: translateX(-50%);
+  background: none;
+  border: none;
+  color: var(--bone-dim);
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 10px 12px;
+  min-height: 44px;
+  opacity: 0;
+  transition: opacity var(--dur-touch) var(--ease), color var(--dur-touch) var(--ease);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.preview-find-btn.is-visible { opacity: 1; }
+.preview-find-btn:hover { color: var(--bone); }
+
 @media (prefers-reduced-motion: reduce) {
   .mark--loading { animation: none; }
-  .item__image, .ceremony-cover, .ceremony-disc, .ceremony-text, .wall-thread path, .preview-scrim, .preview-play-btn, #wall-container { transition-duration: 150ms !important; animation-duration: 1ms !important; }
+  .item__image, .ceremony-cover, .ceremony-disc, .ceremony-text, .wall-thread path, .preview-scrim, .preview-play-btn, .preview-find-btn, #wall-container { transition-duration: 150ms !important; animation-duration: 1ms !important; }
   /* The DomeGallery component's own drag/focus/inertia animations are
      defined inside its injected <style> tag (gallery/src/DomeGallery.tsx)
      with fixed durations, not this app's --dur-* tokens, so they do not

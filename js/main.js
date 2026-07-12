@@ -8,8 +8,8 @@ import { announce, show, hide, escapeHtml, formatDuration, formatRunningTime, fo
 import { initWall } from './wall.js';
 import * as playback from './playback.js';
 import {
-  needleDrop, runoutGroove, runoutPrompt, updateTonearmProgress, retireDisc,
-  isCrackleEnabled, toggleCrackle, settleActiveOverlay, showLongPressPreview, hideLongPressPreview
+  needleDrop, selectAlbum, runoutGroove, runoutPrompt, updateTonearmProgress, retireDisc,
+  isCrackleEnabled, toggleCrackle, settleActiveOverlay, cancelSelectionPreview
 } from './ceremony.js';
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './ending.js';
 import * as journal from './journal.js';
@@ -264,24 +264,21 @@ function delay(ms) {
 function renderWallDom(pool) {
   wallContainer.innerHTML = '';
   wallApi = initWall(wallViewport, wallContainer, pool, {
-    onSelect: (entry) => handleNeedleDrop(entry),
+    // Tapping (or long-pressing) a cover no longer plays it immediately:
+    // both bring it to the foreground as a selection preview and wait for
+    // Play or "Find something else" -- see handleSelectAlbum().
+    onSelect: (entry) => handleSelectAlbum(entry),
+    onLongPress: (entry) => handleSelectAlbum(entry),
     onZoomOut: () => renderJourneyThread(),
     // Dragging the gallery is one of the two conditions that ends the "now
     // playing" hero cover (the other is the album finishing, in
     // handleRunout); settle it back into its cell so the gallery is free
-    // to explore.
+    // to explore. It should also drop any selection preview that's still
+    // waiting on a decision, for the same reason.
     onGalleryDragMove: () => {
       settleActiveOverlay(wallApi, { animate: true });
-      hideLongPressPreview();
+      cancelSelectionPreview();
     },
-    // The preview stays open after release (not tied to onLongPressEnd) so
-    // there's time to actually press Play; see hideLongPressPreview's own
-    // dismiss triggers (the Play button, tapping the scrim, or Escape).
-    onLongPress: (entry) => showLongPressPreview(entry, {
-      wallApi,
-      wallViewportEl: wallViewport,
-      onPlay: () => handleNeedleDrop(entry),
-    }),
   });
 }
 
@@ -407,6 +404,48 @@ async function handleNeedleDrop(entry) {
     localStorage.setItem(LS_EVER_DROPPED, 'true');
     // prepareAlbum() has run by now (needleDrop awaits commitPlayback), so
     // the context carries the album's real tracklist duration.
+    const durationMs = playback.getCurrentContext()?.totalDurationMs ?? null;
+    const { session, sessionOrdinal } = journal.recordNeedleDrop(entry, { durationMs });
+    currentSessionId = session.id;
+    wallPrompt.textContent = `Session ${sessionOrdinal} · now playing`;
+  } catch (err) {
+    if (err instanceof SpotifyApiError && err.status === 403) {
+      wallApi.markUnavailable(entry.id);
+      wallPrompt.textContent = "Spotify won't play this one here. Pick another record.";
+    } else {
+      wallPrompt.textContent = describeSpotifyError(err);
+    }
+  } finally {
+    ceremonyBusy = false;
+  }
+}
+
+/**
+ * The Wall's primary tap/long-press flow: brings the cover to the
+ * foreground with its name, artist, and a one-line description, and waits
+ * for Play or "Find something else" before anything actually plays (see
+ * ceremony.js's selectAlbum()). Nothing is recorded in the journal unless
+ * the listener actually presses Play.
+ */
+async function handleSelectAlbum(entry) {
+  if (ceremonyBusy) return;
+  ceremonyBusy = true;
+  pendingEntry = entry;
+  wallPrompt.textContent = '';
+  announce(`${entry.name} by ${entry.artist}. Press play, or find something else.`);
+  try {
+    const result = await selectAlbum(entry, {
+      wallApi,
+      wallViewportEl: wallViewport,
+      currentAlbumId,
+      crackleHintEl: crackleHint,
+    });
+    if (!result.committed) {
+      wallPrompt.textContent = 'Pick another record.';
+      return;
+    }
+    currentAlbumId = entry.id;
+    localStorage.setItem(LS_EVER_DROPPED, 'true');
     const durationMs = playback.getCurrentContext()?.totalDurationMs ?? null;
     const { session, sessionOrdinal } = journal.recordNeedleDrop(entry, { durationMs });
     currentSessionId = session.id;

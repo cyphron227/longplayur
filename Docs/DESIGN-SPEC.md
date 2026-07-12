@@ -65,19 +65,29 @@ A row of half-tile chips in deadwax mono sits directly above the Wall. "YOUR WAL
 ### The disc (signature element)
 When an album plays, a vinyl disc slides out from behind its sleeve: a circle of `--vinyl`, diameter 92% of the tile, offset so ~30% of it shows beyond the sleeve's right edge, carrying 3 concentric hairline grooves and a small centre label rendered from the album art's dominant edge. The **tonearm arc** is an amber stroke on the disc's exposed edge, showing progress through the WHOLE ALBUM (elapsed across all tracks ÷ total album duration, from `GET /albums/{id}` track durations). It advances with a 1s linear transition so it creeps like a stylus.
 
-### Needle drop (from click; audio at ~3.0s)
+### Selecting an album (from click, before any of the above)
+Clicking or long-pressing a cover does not play it. It brings the cover to
+the foreground as a decision point:
+
 | t (ms) | What |
 |---|---|
-| 0 | Click. All other covers ease to 20% opacity (`--dur-breath`). No scaling of anything except the chosen cover |
+| 0 | Click (or long press). Other covers ease to 20% opacity (`--dur-breath`); if a different album is the current "now playing" hero, it settles back into its cell first so the two covers never overlap. No scaling of anything except the chosen cover |
 | 0 to 600 | Camera pans to centre the chosen cover; the cover alone scales to 1.6 on an overlay layer (original cell hidden) |
-| 400 | Serif album title fades in above; deadwax line below: `ARTIST · YEAR · N TRACKS · MM:SS` |
-| 600 to 1100 | The disc slides out from behind the sleeve (translateX, `--dur-breath`) |
-| 700 | Crackle starts if enabled: Web Audio synthesised, no audio file. Brown-noise bed at −38 dBFS through a 1.2 kHz low-pass, plus randomised tick bursts (2 to 6 per second, 3 to 8ms, band-passed 2 to 4 kHz). 200ms fade-in |
-| 1100 to 3000 | **The held breath.** Nothing moves. The stillness is the feature |
-| 3000 | Crackle fades (200ms). `PUT /me/player/play` fires |
-| on first playing state | Title and deadwax fade; cover eases back to 1.0 into its cell WITH the disc still out; other covers return to 45%; player bar populates |
+| on animation end | Serif album title and artist name fade in above (readable at a glance, not glimpsed mid-choreography); a one-line description fades in below once fetched: `ARTIST · YEAR · N TRACKS · MM:SS` (the same deadwax line the needle drop itself uses below -- Spotify's API has no free-text album description). An amber Play button sits over the cover; "Find something else" sits below it |
+| indefinite | Waits for a decision. Play continues into the needle drop below. "Find something else" (or tapping the scrim behind the cover, or Escape, or dragging the gallery) eases the cover back into its cell and clears the recede, with nothing played and nothing recorded in Past sessions |
+
+### Needle drop (from the Play button in the selection above; audio at ~1.9s after Play)
+| t (ms), from Play | What |
+|---|---|
+| 0 | The disc slides out from behind the sleeve (translateX, `--dur-breath`). Title/artist/description are already showing from the selection step above, so there is no separate title-reveal beat here |
+| 100 | Crackle starts if enabled: Web Audio synthesised, no audio file (see js/ceremony.js for the current synthesis). 200ms fade-in |
+| 100 to 900 | **The held breath.** Nothing moves. Deliberately shorter than a from-cold needle drop, since the anticipation already happened while deciding whether to press Play |
+| 900 | Crackle fades (200ms). `PUT /me/player/play` fires |
+| on first playing state | Title/artist/description fade; cover eases back to 1.0 into its cell WITH the disc still out; other covers return to 45%; player bar populates |
 
 **The breath is skippable:** any click, Enter, or Space during it cuts straight to play. Skipping must feel intentional, not like fixing a bug: the crackle stops with a soft tick.
+
+The direct, no-preview version of this choreography (recede straight into disc/crackle/breath with no Play-button gate) still exists for callers that already represent a confirmed choice: resuming a needle drop after a device picker, and Records nearby's one-tap shelf.
 
 First needle drop ever shows a one-time deadwax hint under the player bar: `CRACKLE ON · TOGGLE IN THE HEADER`.
 
@@ -122,10 +132,15 @@ Setup
 Prompts
 - First run: "Drop the needle on something."
 - Playing: "Session {n} · now playing" (n = count of sessions in the journal, lifetime)
+- Selection dismissed ("Find something else" pressed): "Pick another record."
 - Runout: "The session isn't over. Choose the next record."
 - Runout at wall edge: "You've reached the edge of the wall. Pick from the shelf."
 - Wall: "Your wall. {N} records. Tap one to drop the needle."
 - New session: "New session. Drop the needle on something."
+
+Selecting an album
+- Play button aria-label: "Play {album}"
+- Dismiss: "Find something else"
 
 Errors
 - 403 top tracks: "Spotify refused (403). In your app's settings on the developer dashboard, add your own Spotify account under User Management, then try again."

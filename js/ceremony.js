@@ -19,6 +19,11 @@ export const TIMINGS = Object.freeze({
   runoutRippleStaggerMs: 60,
   runoutWakeAtMs: 800,
   runoutCrackleMaxMs: 30000,
+  // Confirmed-play tail (selectAlbum()'s Play button, below): shorter than
+  // the direct-drop timings above since the anticipation already happened
+  // while the listener was deciding.
+  postPlayCrackleDelayMs: 100,
+  postPlayBreathMs: 800,
 });
 
 const LS_CRACKLE = 'lp_crackle';
@@ -394,10 +399,27 @@ function ensureLayer(viewportEl) {
   return ceremonyLayer;
 }
 
+// Records nearby (PRD F10) and bag-rail albums can be dropped while they
+// are not part of the currently-mounted wall's pool, so there may be no
+// cell to animate from; fall back to a small rect at the viewport centre
+// so the ceremony still runs in full rather than silently doing nothing.
+function fallbackCenterRect(wallViewportEl) {
+  return {
+    x: wallViewportEl.clientWidth / 2 - 60,
+    y: wallViewportEl.clientHeight / 2 - 60,
+    width: 120,
+    height: 120,
+  };
+}
+
 /**
- * Runs the full needle-drop choreography and leaves the enlarged cover on
- * screen as the active overlay (does not auto-shrink; see
- * settleActiveOverlay()). Resolves once that overlay is in place.
+ * Runs the full needle-drop choreography immediately, with no selection
+ * preview gate, and leaves the enlarged cover on screen as the active
+ * overlay (does not auto-shrink; see settleActiveOverlay()). Used by
+ * callers that already represent a confirmed choice -- resuming a needle
+ * drop once a playback device has been picked, and Records nearby's shelf
+ * (a one-tap "quick add", not the Wall's primary selection flow; see
+ * selectAlbum() below for that). Resolves once that overlay is in place.
  * @param {object} entry pool entry being dropped
  * @param {{wallApi: object, wallViewportEl: HTMLElement, currentAlbumId: string|null, crackleHintEl: HTMLElement}} ctx
  */
@@ -411,16 +433,7 @@ export async function needleDrop(entry, ctx) {
   }
 
   const layer = ensureLayer(wallViewportEl);
-  // Records nearby (PRD F10) and bag-rail albums can be needle-dropped while
-  // they are not the currently-mounted wall's pool, so there may be no cell
-  // to animate from; fall back to a small rect at the viewport centre so the
-  // ceremony still runs in full rather than silently doing nothing.
-  const cellRect = wallApi.getCellRect(entry.id) || {
-    x: wallViewportEl.clientWidth / 2 - 60,
-    y: wallViewportEl.clientHeight / 2 - 60,
-    width: 120,
-    height: 120,
-  };
+  const cellRect = wallApi.getCellRect(entry.id) || fallbackCenterRect(wallViewportEl);
 
   wallApi.recedeAllExcept(entry.id);
   wallApi.panToAlbum(entry.id, { animate: true });
@@ -598,42 +611,57 @@ export function runoutPrompt(atEdge) {
 }
 
 // ---------------------------------------------------------------------
-// Long-press preview: a sticky peek at an album's cover with its name and
-// artist shown large above it, plus an overlaid Play button. Distinct from
-// the needle-drop ceremony (no disc, no crackle, no dimming the rest of
-// the wall) and, unlike a plain hover peek, stays open after release so
-// there is time to actually press Play -- dismissed via the Play button,
-// tapping the scrim behind it, or Escape.
+// Select an album: brings its cover to the foreground with its name,
+// artist, and a one-line description (Spotify's API has no free-text
+// album description, so this reuses the ceremony's own deadwax line:
+// artist, year, track count, total duration), then waits for the listener
+// to press Play or dismiss it ("Find something else") -- nothing plays
+// until Play is pressed. This is the Wall's primary tap/long-press flow
+// (both call this the same way); see needleDrop() above for the direct,
+// no-preview path used elsewhere (Records nearby, resuming after a
+// device picker).
 // ---------------------------------------------------------------------
 
-let longPressPreview = null; // { albumId, cover, text, scrim, playBtn, onKey }
+let openPreview = null; // { entry, cancel: () => void }, set only while a decision is pending.
 
 /**
- * @param {object} entry pool entry being previewed
- * @param {{wallApi: object, wallViewportEl: HTMLElement, onPlay: () => void}} ctx
+ * @param {object} entry pool entry being selected
+ * @param {{wallApi: object, wallViewportEl: HTMLElement, currentAlbumId: string|null, crackleHintEl: HTMLElement}} ctx
+ * @returns {Promise<{committed: boolean}>} committed: true once playback
+ *   has actually started (the caller should record the journal entry the
+ *   same way it would for needleDrop()); false if dismissed without
+ *   playing, in which case nothing changed and there is nothing to record.
  */
-export function showLongPressPreview(entry, ctx) {
-  const { wallApi, wallViewportEl, onPlay } = ctx;
-  hideLongPressPreview();
+export async function selectAlbum(entry, ctx) {
+  const { wallApi, wallViewportEl, currentAlbumId, crackleHintEl } = ctx;
 
-  const cellRect = wallApi.getCellRect(entry.id);
-  if (!cellRect) return;
+  if (activeOverlay?.albumId === entry.id) return { committed: true }; // already the "now playing" hero.
+  if (openPreview) openPreview.cancel();
 
   const reduced = prefersReducedMotion();
-  const dur = reduced ? TIMINGS.reducedMs : 200;
+
+  // A different album is already the enlarged "now playing" hero: ease it
+  // back into its cell first (keeping its disc/progress as a persistent
+  // per-cell disc, same as a gallery drag) so the two covers don't overlap.
+  // Playback itself is untouched -- it keeps playing regardless of what
+  // happens to this preview.
+  if (activeOverlay && activeOverlay.albumId !== entry.id) {
+    await settleActiveOverlay(wallApi, { animate: true });
+  }
+
   const layer = ensureLayer(wallViewportEl);
+  const cellRect = wallApi.getCellRect(entry.id) || fallbackCenterRect(wallViewportEl);
 
-  const scrim = document.createElement('div');
-  scrim.className = 'preview-scrim';
-  layer.appendChild(scrim);
+  wallApi.recedeAllExcept(entry.id);
+  wallApi.panToAlbum(entry.id, { animate: true });
 
+  const moveDur = reduced ? TIMINGS.reducedMs : TIMINGS.recedeMs;
   const cover = document.createElement('div');
   cover.className = 'ceremony-cover';
   Object.assign(cover.style, {
     left: `${cellRect.x}px`, top: `${cellRect.y}px`,
     width: `${cellRect.width}px`, height: `${cellRect.height}px`,
-    opacity: '0',
-    transition: `left ${dur}ms var(--ease), top ${dur}ms var(--ease), width ${dur}ms var(--ease), height ${dur}ms var(--ease), opacity ${dur}ms var(--ease)`,
+    transition: `left ${moveDur}ms var(--ease), top ${moveDur}ms var(--ease), width ${moveDur}ms var(--ease), height ${moveDur}ms var(--ease)`,
   });
   if (entry.image) {
     const img = document.createElement('img');
@@ -643,6 +671,17 @@ export function showLongPressPreview(entry, ctx) {
   }
   layer.appendChild(cover);
 
+  const text = document.createElement('div');
+  text.className = 'ceremony-text';
+  text.innerHTML = '<div class="preview-title"></div><div class="preview-artist"></div><div class="preview-description deadwax"></div>';
+  text.querySelector('.preview-title').textContent = entry.name;
+  text.querySelector('.preview-artist').textContent = entry.artist;
+  layer.appendChild(text);
+
+  const scrim = document.createElement('div');
+  scrim.className = 'preview-scrim';
+  layer.insertBefore(scrim, cover); // scrim sits behind the cover/text.
+
   const playBtn = document.createElement('button');
   playBtn.type = 'button';
   playBtn.className = 'preview-play-btn';
@@ -650,12 +689,11 @@ export function showLongPressPreview(entry, ctx) {
   playBtn.innerHTML = '<svg class="icon"><use href="#icon-play"/></svg>';
   layer.appendChild(playBtn);
 
-  const text = document.createElement('div');
-  text.className = 'ceremony-text';
-  text.innerHTML = '<div class="preview-title"></div><div class="preview-artist"></div>';
-  text.querySelector('.preview-title').textContent = entry.name;
-  text.querySelector('.preview-artist').textContent = entry.artist;
-  layer.appendChild(text);
+  const findBtn = document.createElement('button');
+  findBtn.type = 'button';
+  findBtn.className = 'preview-find-btn';
+  findBtn.textContent = 'Find something else';
+  layer.appendChild(findBtn);
 
   cover.getBoundingClientRect(); // force layout before animating.
 
@@ -663,40 +701,138 @@ export function showLongPressPreview(entry, ctx) {
   const targetHeight = cellRect.height * 1.6;
   const targetLeft = wallViewportEl.clientWidth / 2 - targetWidth / 2;
   const targetTop = wallViewportEl.clientHeight / 2 - targetHeight / 2;
-  text.style.top = `${Math.max(8, targetTop - 76)}px`;
+  text.style.top = `${Math.max(8, targetTop - 96)}px`;
   playBtn.style.left = `${targetLeft + targetWidth / 2}px`;
   playBtn.style.top = `${targetTop + targetHeight / 2}px`;
+  findBtn.style.left = `${targetLeft + targetWidth / 2}px`;
+  findBtn.style.top = `${Math.min(wallViewportEl.clientHeight - 52, targetTop + targetHeight + 16)}px`;
 
   requestAnimationFrame(() => {
-    cover.style.opacity = '1';
+    scrim.classList.add('is-visible');
     Object.assign(cover.style, {
       left: `${targetLeft}px`, top: `${targetTop}px`,
       width: `${targetWidth}px`, height: `${targetHeight}px`,
     });
     text.classList.add('is-visible');
-    scrim.classList.add('is-visible');
     playBtn.classList.add('is-visible');
+    findBtn.classList.add('is-visible');
   });
 
-  scrim.addEventListener('click', hideLongPressPreview);
-  playBtn.addEventListener('click', () => {
-    onPlay?.();
-    hideLongPressPreview();
+  playback.prepareAlbum(entry).catch(() => null).then((context) => {
+    const line = text.querySelector('.preview-description');
+    if (line) line.textContent = deadwaxLine(entry, context);
   });
-  const onKey = (e) => { if (e.key === 'Escape') hideLongPressPreview(); };
-  window.addEventListener('keydown', onKey);
 
-  longPressPreview = { albumId: entry.id, cover, text, scrim, playBtn, onKey };
-}
+  const decision = await new Promise((resolve) => {
+    const onKey = (e) => { if (e.key === 'Escape') finish('dismiss'); };
+    const onPlayClick = () => finish('play');
+    const onFindClick = () => finish('dismiss');
+    const onScrimClick = () => finish('dismiss');
+    function finish(result) {
+      window.removeEventListener('keydown', onKey);
+      playBtn.removeEventListener('click', onPlayClick);
+      findBtn.removeEventListener('click', onFindClick);
+      scrim.removeEventListener('click', onScrimClick);
+      openPreview = null;
+      resolve(result);
+    }
+    window.addEventListener('keydown', onKey);
+    playBtn.addEventListener('click', onPlayClick);
+    findBtn.addEventListener('click', onFindClick);
+    scrim.addEventListener('click', onScrimClick);
+    openPreview = { entry, cancel: () => finish('dismiss') };
+  });
 
-export function hideLongPressPreview() {
-  if (!longPressPreview) return;
-  const { cover, text, scrim, playBtn, onKey } = longPressPreview;
-  longPressPreview = null;
-  window.removeEventListener('keydown', onKey);
-  cover.style.opacity = '0';
-  text.classList.remove('is-visible');
+  const decisionDur = reduced ? TIMINGS.reducedMs : TIMINGS.recedeMs;
   scrim.classList.remove('is-visible');
   playBtn.classList.remove('is-visible');
-  setTimeout(() => { cover.remove(); text.remove(); scrim.remove(); playBtn.remove(); }, 220);
+  findBtn.classList.remove('is-visible');
+  setTimeout(() => { scrim.remove(); playBtn.remove(); findBtn.remove(); }, decisionDur);
+
+  if (decision === 'dismiss') {
+    text.classList.remove('is-visible');
+    Object.assign(cover.style, {
+      left: `${cellRect.x}px`, top: `${cellRect.y}px`,
+      width: `${cellRect.width}px`, height: `${cellRect.height}px`,
+    });
+    if (!reduced) await delay(decisionDur);
+    cover.remove();
+    text.remove();
+    wallApi.clearResting();
+    return { committed: false };
+  }
+
+  // decision === 'play': the previous hero (if any) already stepped down
+  // above; it is now genuinely being replaced, so retire its disc for good.
+  if (currentAlbumId && currentAlbumId !== entry.id) {
+    retireDisc(currentAlbumId);
+    wallApi.markPlayed(currentAlbumId);
+  }
+
+  return runConfirmedPlayTail(entry, { wallApi, wallViewportEl, crackleHintEl }, { cover, text });
+}
+
+/** Dismisses whatever selection preview is currently open, as if the
+ * listener had pressed "Find something else" -- used when the gallery
+ * gets dragged out from under it (see main.js's onGalleryDragMove). */
+export function cancelSelectionPreview() {
+  openPreview?.cancel();
+}
+
+/**
+ * The disc-slide / crackle / held-breath / commit tail, run once the
+ * listener presses Play on a selection preview. Reuses that preview's
+ * cover/text elements rather than rebuilding them, so there is no
+ * shrink-then-reexpand flicker between the two stages. Deliberately
+ * quicker than needleDrop()'s own choreography, since the anticipation of
+ * the held breath already happened while the listener was deciding.
+ */
+async function runConfirmedPlayTail(entry, ctx, overlay) {
+  const { wallApi, wallViewportEl, crackleHintEl } = ctx;
+  const { cover, text } = overlay;
+  const reduced = prefersReducedMotion();
+  const layer = ensureLayer(wallViewportEl);
+
+  const disc = buildDiscSvg();
+  cover.appendChild(disc.svg);
+
+  let skipped = false;
+  let resolveSkip;
+  const skipPromise = new Promise((resolve) => { resolveSkip = resolve; });
+  const onSkipKey = (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { skipped = true; resolveSkip(); }
+  };
+  const onSkipClick = () => { skipped = true; resolveSkip(); };
+  window.addEventListener('keydown', onSkipKey);
+  layer.addEventListener('click', onSkipClick);
+
+  disc.svg.classList.add('is-out');
+  if (!reduced) {
+    await Promise.race([delay(TIMINGS.postPlayCrackleDelayMs), skipPromise]);
+    if (!skipped) startCrackle();
+    if (!skipped) {
+      await Promise.race([delay(TIMINGS.postPlayBreathMs), skipPromise]);
+    }
+  }
+
+  window.removeEventListener('keydown', onSkipKey);
+  layer.removeEventListener('click', onSkipClick);
+  stopCrackle({ soft: skipped });
+
+  try {
+    await playback.commitPlayback();
+  } catch (err) {
+    cover.remove();
+    text.remove();
+    wallApi.clearResting();
+    throw err;
+  }
+
+  text.classList.remove('is-visible');
+  wallApi.enterRestingState(entry.id, { keepHidden: true });
+  wallApi.setCurrent(entry.id);
+  activeOverlay = { albumId: entry.id, cover, text, disc };
+  showCrackleHintOnce(crackleHintEl);
+
+  return { committed: true };
 }

@@ -77,15 +77,72 @@ Detecting "the gallery was dragged" needed a further small addition to the
 DomeGallery fork (`gallery/src/DomeGallery.tsx`): an `onDragMove` prop
 firing once a gesture actually crosses the movement threshold that
 distinguishes a drag from a tap (not on every pointer-down, which would
-also fire for plain taps). A long-press feature was added the same way
-(`onLongPress`/`onLongPressEnd`/`longPressMs` props): holding a tile shows
-a quick, lightweight preview of its cover, name, and artist via
-`showLongPressPreview()`/`hideLongPressPreview()` in `js/ceremony.js` (no
-disc, no crackle, no camera pan, no dimming the rest of the wall, unlike
-the full ceremony) -- distinct from the "now playing" hero cover, and the
-two can coexist on screen if you long-press something else while a
-session is playing. The component's own file header now documents seven
-deliberate changes from the upstream source in total.
+also fire for plain taps). A long-press capability was added the same way
+(`onLongPress`/`onLongPressEnd`/`longPressMs` props on the tile) so the
+Wall could react to holding a cover, not just tapping it.
+
+## Selecting an album no longer plays it immediately (per explicit request)
+
+Tapping or long-pressing a cover used to run the full needle-drop ceremony
+straight away. It now opens a selection preview first -- name, artist, and
+a one-line description, plus Play / "Find something else" -- and nothing
+plays (and nothing is recorded in Past sessions) unless Play is pressed.
+`js/ceremony.js`'s `selectAlbum(entry, ctx)` is the new entry point for
+this; it resolves `{ committed: true }` once playback has actually
+started (the caller then records the journal entry the same way it would
+for a direct drop) or `{ committed: false }` if dismissed.
+
+This absorbed and replaced the earlier "long-press preview"
+(`showLongPressPreview()`/`hideLongPressPreview()`, a lightweight peek
+with no disc/crackle/camera-pan): since a tap now shows essentially the
+same thing with more information and an explicit decision, keeping a
+separate, different-looking long-press preview alongside it would have
+been redundant. `onSelect` and `onLongPress` are both wired to the same
+`handleSelectAlbum()` in `js/main.js` now.
+
+**The "description"** is the same artist/year/track-count/duration deadwax
+line the needle drop itself already showed -- Spotify's Web API has no
+free-text album description field, so this is the closest honest
+approximation available, not an invented summary.
+
+**Committing (Play pressed)** reuses the preview's own cover/text DOM
+elements rather than tearing them down and having the needle drop rebuild
+them from the wall cell, specifically to avoid a shrink-then-reexpand
+flicker between the two stages. The disc-slide/crackle/held-breath
+timings after Play are deliberately shorter than a directly-triggered drop
+(`TIMINGS.postPlayCrackleDelayMs`/`postPlayBreathMs`, ~1s total vs ~2.3s)
+since the anticipation already happened while deciding whether to press
+Play.
+
+**If a different album is already the "now playing" hero** when a new
+preview opens, it eases back into its cell via the existing
+`settleActiveOverlay()` (same mechanism as a gallery drag) *before* the
+preview appears, so the two enlarged covers never overlap on screen --
+critically, this happens whether or not the new preview is ever confirmed,
+since it is purely visual (the still-playing album keeps its disc/progress
+as a persistent per-cell disc either way) and does not touch playback,
+the journal, or the "played" ring on that album's tile. The tile only
+actually gets marked played, and its persistent disc retired for good,
+once Play is confirmed on the *new* album -- not merely by opening its
+preview -- so dismissing a preview never misrepresents what has and hasn't
+been played this session.
+
+**`needleDrop()` (the original, no-preview function) still exists
+unchanged** and is used by the two callers that already represent a
+confirmed choice rather than a fresh browse: resuming a needle drop after
+picking a device from the output-switcher/Android-wake modal, and Records
+nearby's shelf (a one-tap "quick add" from a curated list, not the Wall's
+primary tap-to-browse interaction -- it was judged not to need the extra
+preview step, though this is a judgement call, not a hard requirement, and
+could be revisited).
+
+**Bug caught in the process:** `.preview-play-btn` never had
+`pointer-events: auto` set. Its parent (`.ceremony-layer`) is
+`pointer-events: none` so drags pass through to the gallery beneath it,
+and CSS `pointer-events` is inherited, so the Play button itself was very
+likely unclickable this whole time, including in the original long-press
+preview this replaces -- it was only ever verified via curl (the code
+being live), never on an actual device. Fixed alongside this change.
 
 The now-removed zoom-out/"fullscreen" button also took its atEdge runout
 copy with it ("Zoom out and pick from the shelf" became "Pick from the

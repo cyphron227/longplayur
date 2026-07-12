@@ -60,12 +60,22 @@ removed entirely in the same increment (see F8).
 - Performance: covers lazy-loaded (300px Spotify image size), transform-based pan/zoom only (no re-layout), 60fps target on a mid-range laptop.
 
 ### F6. The ceremony (signature — do not cut corners here)
-Needle drop sequence (see DESIGN-SPEC for exact timing):
-1. Other covers recede (dim + slight scale down).
-2. Chosen cover moves to centre and enlarges; a groove ring fades in around it.
+Selecting a cover (tap or long press) does not play it: it brings the
+cover to the foreground with its name, artist, and a one-line description
+(artist, year, track count, duration — Spotify has no free-text album
+description), and waits for Play or "Find something else." Nothing plays,
+and nothing is recorded in Past sessions, unless Play is pressed.
+
+Needle drop sequence, once Play is pressed (see DESIGN-SPEC for exact timing):
+1. Other covers recede (dim + slight scale down) — already true from the selection step above.
+2. Chosen cover is already centred and enlarged from the selection step; no re-animation.
 3. The disc slides out from behind the sleeve (the signature element, DESIGN-SPEC §3).
-4. A held breath before audio. Optional soft vinyl crackle, synthesised with the Web Audio API (filtered noise bursts; NO audio file asset). Crackle setting persisted; default ON; toggle in the header; never overlaps Spotify audio. The breath is SKIPPABLE: click, Enter or Space cuts straight to play.
+4. A held breath before audio, shorter than a from-cold drop since the anticipation already happened while deciding. Optional soft vinyl crackle, synthesised with the Web Audio API (no audio file asset). Crackle setting persisted; default ON; never overlaps Spotify audio. The breath is SKIPPABLE: click, Enter or Space cuts straight to play.
 5. First track starts.
+
+A direct, no-preview version of this sequence (skip straight from tap to
+step 1) still exists for confirmed choices: resuming after a device
+picker, and Records nearby's shelf.
 
 Tonearm arc: an amber stroke on the disc's exposed edge representing progress through the WHOLE ALBUM (sum of track durations; position = elapsed across tracklist), not the current track. Requires fetching the album's tracklist durations (`GET /albums/{id}`) at needle drop.
 
