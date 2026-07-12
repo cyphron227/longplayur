@@ -149,6 +149,58 @@ the `<script src=...>` JSONP fallback). No Deezer-hosted images are ever
 used: album art always comes from the Spotify album the Deezer result
 resolves to, so `img-src` did not need to change.
 
+## Now-playing layout rework: no in-app header, settings live on Setup, new share card
+
+A second Claude session (`claude.ai/code`, commit `911899c`) reworked this
+same area of the app in parallel with INCREMENT-01, from the same base
+commit; the two were merged together rather than one overwriting the
+other. Where the two disagreed on placement, INCREMENT-01's explicit,
+written Phase 3c requirement won (see below); everything else from
+`911899c` was kept, adapted to the session/Past-sessions naming:
+
+- The main screen's header row (wordmark + Record bag / New session /
+  Crackle / Sign out) is gone. The groove mark now sits at the left of the
+  top tab bar, with no site name next to it; the tab bar is the only
+  chrome above the wall. This supersedes PRD F9 ("Settings (header,
+  minimal) ... No settings page") and DESIGN-SPEC's header layout.
+- "New session" moved to the Past sessions page's header.
+- The crackle toggle moved to the Setup tab (a "Vinyl crackle" preference
+  row with an On/Off button). The one-time hint copy changed accordingly:
+  `CRACKLE ON · TOGGLE IN SETUP`, not "IN THE HEADER" as DESIGN-SPEC §3
+  specifies.
+- Sign out now exists only on the Setup tab (it was already there;
+  the header duplicate was removed).
+- The player bar is two rows: track, artist, and album name each get a
+  full-width ellipsized line of their own above the controls/progress row,
+  so long song names are no longer squeezed beside the controls. The
+  "Playing on {device}" label is hidden at phone widths to keep the
+  progress bar usable; the output-switcher and Records-nearby icons
+  (INCREMENT-01 Phase 1/2, added after `911899c`) sit in that same row.
+- Past sessions rows: the cover strip clips at the page width (`overflow:
+  hidden`, no horizontal scrolling), and the session heading now includes
+  the total running time of the session's albums when known, appended
+  after the date (`SESSION 12 · 11 JUL 2026 · 48 MIN`). Durations are
+  captured at needle-drop time (`journal.recordNeedleDrop()` stores
+  `durationMs` from the prepared album context, renamed
+  `journal.sessionDurationMs()`); entries recorded before this change have
+  no duration and contribute 0, so old sessions may show a low total or
+  none at all.
+- **Where this diverged from `911899c`'s own choice:** that commit made
+  export a prominent amber "Share this session" button inside the
+  expanded session view. INCREMENT-01 Phase 3c explicitly specifies an
+  icon-only share button on the *collapsed* row instead ("so sharing never
+  requires expanding the session details... one share affordance per
+  session, on the row"), which is what shipped; the prominent in-expanded-
+  view button was not carried over.
+- The share card (DESIGN-SPEC §4, and "Deliberate simplifications" item 4
+  below, now superseded) was redrawn: the session's covers fill a square
+  grid of 1, 4, 9, or 16 cells (smallest that fits; sessions beyond 16
+  albums show the first 16; unused cells get a quiet vinyl placeholder),
+  with the album count and total running time overlaid on a bottom
+  gradient scrim so the text stays readable over any cover art. The
+  played-order thread is no longer drawn on the card. This card is what
+  INCREMENT-01 Phase 3b's native share (`navigator.share()`) now sends.
+
 ## The Wall is now the real react-bits DomeGallery, not the flat spiral grid in DESIGN-SPEC §2
 
 Superseded by explicit direction from Yaron after initial ship, in two
@@ -259,7 +311,7 @@ Spotify account yet (see above), so treat "pass" as "pass on inspection."
 | 4 | No Connect devices found | Pass | `js/playback.js startConnectFallback()`, `js/main.js openDeviceModal()` |
 | 5 | Token refresh failure: silent retry once, return to setup, keep journal | Pass | `js/auth.js getValidAccessToken()` single-flight refresh; sign-out is never called on this path, so the journal is untouched |
 | 6 | Rate limit 429, honour Retry-After, bounded retries | Pass | `js/spotify.js apiFetch()`, max 2 retries |
-| 7 | Restricted album (403 on play): mark unavailable, do not break the side | Pass | `js/ceremony.js needleDrop()` rethrows a failed `commitPlayback()`, `js/main.js handleNeedleDrop()` catch marks the cover unavailable and never calls `journal.recordNeedleDrop()` |
+| 7 | Restricted album (403 on play): mark unavailable, do not break the session | Pass | `js/ceremony.js needleDrop()` rethrows a failed `commitPlayback()`, `js/main.js handleNeedleDrop()` catch marks the cover unavailable and never calls `journal.recordNeedleDrop()` |
 | 8 | Offline: detect, banner, resume gracefully | Pass (added late in the QA pass, see below) | `#offline-banner` in `index.html`, wired in `js/main.js` |
 | 9 | Two tabs open: last writer wins, no journal corruption | Pass | `js/journal.js` never holds a long-lived in-memory copy; every mutator re-reads localStorage before writing |
 
@@ -292,12 +344,9 @@ not escalating rather than by an explicit stop/start of the interval timer.
    audio file asset" in PRD F6. Sounds close to brown noise but has not been
    critically listened to on real speakers/headphones.
 
-4. **Share-card grid rounding.** DESIGN-SPEC §4 specifies a 480px first
-   cover "spanning columns 1 to 2" inside a 4-column, 224px-cell grid across
-   a 952px content width; those two numbers do not divide evenly. This build
-   uses the literal 480px and 224px values and computes the grid gap to fill
-   the remaining width, rather than deriving cover 1's size from the column
-   math. The visual difference is a few pixels.
+4. **Share-card grid rounding.** Superseded by the layout rework above:
+   the card no longer uses DESIGN-SPEC §4's 480px-hero-plus-224px-grid
+   layout at all; it is now a uniform square grid of 1, 4, 9, or 16 cells.
 
 5. **Mobile/iOS detection.** `playback.js` skips straight to the Connect
    fallback on iOS (including iPadOS, detected via

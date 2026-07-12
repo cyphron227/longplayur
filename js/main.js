@@ -4,7 +4,7 @@
 import * as auth from './auth.js';
 import { getMe, getTopTracks, SpotifyApiError } from './spotify.js';
 import { getAlbumPool, getCachedPool, isPoolFresh, buildAlbumPool, SparseHistoryError } from './albums.js';
-import { announce, show, hide, escapeHtml, formatDuration, formatDeadwaxDate, prefersReducedMotion } from './ui.js';
+import { announce, show, hide, escapeHtml, formatDuration, formatRunningTime, formatDeadwaxDate, prefersReducedMotion } from './ui.js';
 import { initWall } from './wall.js';
 import * as playback from './playback.js';
 import {
@@ -219,6 +219,7 @@ const playerNearby = document.getElementById('player-nearby');
 const playerBar = document.getElementById('player-bar');
 const playerArt = document.getElementById('player-art');
 const playerTrack = document.getElementById('player-track');
+const playerArtist = document.getElementById('player-artist');
 const playerAlbum = document.getElementById('player-album');
 const playerPlayPause = document.getElementById('player-playpause');
 const playerPrev = document.getElementById('player-prev');
@@ -404,7 +405,10 @@ async function handleNeedleDrop(entry) {
     });
     currentAlbumId = entry.id;
     localStorage.setItem(LS_EVER_DROPPED, 'true');
-    const { session, sessionOrdinal } = journal.recordNeedleDrop(entry);
+    // prepareAlbum() has run by now (needleDrop awaits commitPlayback), so
+    // the context carries the album's real tracklist duration.
+    const durationMs = playback.getCurrentContext()?.totalDurationMs ?? null;
+    const { session, sessionOrdinal } = journal.recordNeedleDrop(entry, { durationMs });
     currentSessionId = session.id;
     wallPrompt.textContent = `Session ${sessionOrdinal} · now playing`;
   } catch (err) {
@@ -438,9 +442,8 @@ function updatePlayerBar(viewModel) {
   show(playerBar);
   if (viewModel.albumArt) playerArt.src = viewModel.albumArt;
   playerTrack.textContent = viewModel.trackName || '';
-  playerAlbum.textContent = viewModel.albumName && viewModel.artistName
-    ? `${viewModel.albumName} · ${viewModel.artistName}`
-    : (viewModel.albumName || viewModel.artistName || '');
+  playerArtist.textContent = viewModel.artistName || '';
+  playerAlbum.textContent = viewModel.albumName || '';
 
   const playIcon = playerPlayPause.querySelector('use');
   playIcon.setAttribute('href', viewModel.isPlaying ? '#icon-pause' : '#icon-play');
@@ -471,7 +474,9 @@ playerPrev.addEventListener('click', () => playback.skipPrevious());
 playerNext.addEventListener('click', () => playback.skipNext());
 
 function syncCrackleButton() {
-  btnCrackle.setAttribute('aria-pressed', String(isCrackleEnabled()));
+  const on = isCrackleEnabled();
+  btnCrackle.setAttribute('aria-pressed', String(on));
+  btnCrackle.querySelector('span').textContent = on ? 'On' : 'Off';
 }
 syncCrackleButton();
 btnCrackle.addEventListener('click', () => {
@@ -486,7 +491,6 @@ btnCrackle.addEventListener('click', () => {
 // ---------------------------------------------------------------------
 
 const pastSessionsList = document.getElementById('past-sessions-list');
-const btnPastSessions = document.getElementById('btn-past-sessions');
 const btnClosePastSessions = document.getElementById('btn-close-past-sessions');
 const btnNewSession = document.getElementById('btn-new-session');
 
@@ -495,7 +499,6 @@ function openPastSessions() {
   showScreen('pastSessions');
 }
 
-btnPastSessions.addEventListener('click', openPastSessions);
 btnClosePastSessions.addEventListener('click', () => showScreen('app'));
 
 btnNewSession.addEventListener('click', () => {
@@ -506,6 +509,7 @@ btnNewSession.addEventListener('click', () => {
   journal.startNewSession();
   currentSessionId = null;
   renderJourneyThread();
+  renderPastSessions();
   wallPrompt.textContent = 'New session. Drop the needle on something.';
   announce('New session started.');
 });
@@ -559,7 +563,10 @@ function renderSessionRow(session, ordinal) {
   head.className = 'session-row-head';
   const headLabel = document.createElement('span');
   headLabel.className = 'deadwax';
-  headLabel.textContent = `SESSION ${ordinal} · ${formatDeadwaxDate(session.startedAt)}`;
+  const parts = [`SESSION ${ordinal}`, formatDeadwaxDate(session.startedAt)];
+  const runningMs = journal.sessionDurationMs(session);
+  if (runningMs > 0) parts.push(formatRunningTime(runningMs));
+  headLabel.textContent = parts.join(' · ');
   head.append(headLabel, svgIcon('icon-chevron'));
 
   // Share lives on the collapsed row itself (INCREMENT-01 Phase 3c): one
@@ -932,7 +939,6 @@ function performSignOut() {
   hide(testConnectionLink);
 }
 
-document.getElementById('btn-sign-out').addEventListener('click', performSignOut);
 setupSignOutBtn.addEventListener('click', performSignOut);
 
 async function boot() {

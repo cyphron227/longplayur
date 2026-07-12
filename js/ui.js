@@ -61,6 +61,16 @@ export function formatDuration(ms) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+/** Formats milliseconds as a rounded running time: "48 min", "3 hr 12 min".
+ * Used for a session's total album time (record bag rows, the share card). */
+export function formatRunningTime(ms) {
+  const totalMinutes = Math.round(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return minutes > 0 ? `${hours} hr ${minutes} min` : `${hours} hr`;
+  return `${minutes} min`;
+}
+
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 export function formatDeadwaxDate(timestamp) {
   const d = new Date(timestamp);

@@ -78,7 +78,7 @@ function isSessionOpen(session, now) {
  * the last session was explicitly closed or has gone stale (PRD's 6h rule).
  * @returns {{journal: object, session: object, sessionOrdinal: number}}
  */
-export function recordNeedleDrop(entry) {
+export function recordNeedleDrop(entry, { durationMs = null } = {}) {
   const journal = loadJournal();
   const now = Date.now();
   let session = journal.sessions[journal.sessions.length - 1];
@@ -94,6 +94,7 @@ export function recordNeedleDrop(entry) {
     artist: entry.artist,
     image: entry.image,
     startedAt: now,
+    durationMs,
     bagId: entry.bagId ?? null,
   });
 
@@ -127,4 +128,10 @@ export function getSession(sessionId) {
 
 export function getLifetimeSessionCount() {
   return loadJournal().sessions.length;
+}
+
+/** Sum of the known album durations in a session. Entries recorded before
+ * durations were stored contribute 0, so this can undercount old sessions. */
+export function sessionDurationMs(session) {
+  return session.entries.reduce((sum, e) => sum + (e.durationMs || 0), 0);
 }
