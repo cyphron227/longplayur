@@ -240,6 +240,30 @@ Deezer's ~30 buckets on a fresh install) and grows richer with genuine
 Spotify genre tags the more the app is actually used, with zero
 hand-written genre content and zero reliance on a deprecated endpoint.
 
+Resolving each Deezer artist name back to Spotify (`deezerGenreArtists()`)
+fired all of them as one `Promise.all`, up to `DEEZER_GENRE_ARTIST_LIMIT`
+(10) concurrent Spotify search calls, on top of the exact-tag and
+free-text searches `searchByGenre()` always ran alongside it -- up to 12
+concurrent Spotify requests for a single genre search. Stacked against the
+final stage, which fetched all `MAX_ARTISTS_FOR_ALBUMS` (15) candidates'
+discographies as one more `Promise.all` (2 requests each, so up to 30
+concurrent), a genre search could burst up to roughly 40 concurrent
+Spotify requests. Live testing tripped an actual `429` from this,
+confirmed from the browser console, breaking both artist and genre search
+(genre search's burst exhausted the rate limit window that artist search's
+much smaller single request then also landed in). Fixed two ways: (1)
+`searchByGenre()` now runs only the two cheap sources (exact tag,
+free-text) first, and only pays for the Deezer lookup -- and its own
+Spotify-resolution burst -- when those two together found fewer than
+`MIN_CANDIDATES_BEFORE_DEEZER` (5) candidates, rather than always running
+all three regardless of whether the cheap sources already had enough; (2)
+both the Deezer-name-resolution step and the final per-artist album fetch
+now go through a new `mapWithConcurrency()` helper (a small fixed-size
+worker pool) instead of one big `Promise.all`, capping how many Spotify
+requests are ever in flight at once to `RESOLVE_CONCURRENCY` (3) and
+`ALBUMS_FETCH_CONCURRENCY` (4) respectively, rather than bursting the
+entire batch at once.
+
 ## Liner notes removed, native share added (INCREMENT-01 Phase 3)
 
 Liner notes are gone entirely: `journal.js`'s `setLinerNote()` export, the

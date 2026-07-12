@@ -48,6 +48,39 @@ const POOL_TARGET = 40;
 // match doesn't balloon into dozens of parallel album requests.
 const MAX_ARTISTS_FOR_ALBUMS = 15;
 const DEEZER_GENRE_ARTIST_LIMIT = 10;
+// If the exact tag search plus genre-tag-matched free-text search already
+// found at least this many candidates, skip the Deezer taxonomy lookup
+// entirely -- it costs its own Deezer fetch plus up to
+// DEEZER_GENRE_ARTIST_LIMIT extra Spotify search calls to resolve artist
+// names, and firing it unconditionally on every genre search, stacked on
+// top of the final per-artist album fetch below, produced enough
+// concurrent Spotify requests to trip a live 429 (confirmed live).
+const MIN_CANDIDATES_BEFORE_DEEZER = 5;
+// How many Spotify requests this module will have in flight at once for a
+// batch of independent lookups (Deezer-artist-name resolution, and each
+// candidate artist's own discography). Spotify's rate limit is a live 429
+// away, not a documented fixed number, so this stays conservative rather
+// than tuned to a specific ceiling.
+const RESOLVE_CONCURRENCY = 3;
+const ALBUMS_FETCH_CONCURRENCY = 4;
+
+/** Runs `fn` over `items` with at most `limit` calls in flight at once,
+ * rather than firing every call in one Promise.all -- the difference
+ * between, say, 15 artists' album requests landing on Spotify as one burst
+ * of 30 concurrent requests (2 pages each) versus a steady stream of at
+ * most `limit` * 2. */
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 function pickImage(images) {
   if (!Array.isArray(images) || images.length === 0) return null;
@@ -229,12 +262,10 @@ async function deezerGenreArtists(query) {
     const deezerArtists = (artistsData?.data || []).slice(0, DEEZER_GENRE_ARTIST_LIMIT);
     if (deezerArtists.length === 0) return { items: [], failed: false };
 
-    const resolved = await Promise.all(
-      deezerArtists.map((da) =>
-        searchArtists(da.name, 1)
-          .then((r) => r.items?.[0] || null)
-          .catch(() => null)
-      )
+    const resolved = await mapWithConcurrency(deezerArtists, RESOLVE_CONCURRENCY, (da) =>
+      searchArtists(da.name, 1)
+        .then((r) => r.items?.[0] || null)
+        .catch(() => null)
     );
     return { items: resolved.filter(Boolean), failed: false };
   } catch (err) {
@@ -271,16 +302,15 @@ async function searchByArtist(query) {
  * albums, forming a wall for that genre rather than any one artist's
  * catalogue. */
 async function searchByGenre(query) {
-  const [tagResult, freeResult, deezerResult] = await Promise.all([
+  const [tagResult, freeResult] = await Promise.all([
     searchArtists(`genre:"${query}"`, MAX_ARTISTS_GENRE),
     searchArtists(query, MAX_ARTISTS_GENRE),
-    deezerGenreArtists(query),
   ]);
 
   // Rank 0 = exact tag match (most confident), 1 = free-text softly matched
-  // against its own genre tags, 2 = resolved via Deezer's broader taxonomy.
-  // A Map preserves insertion order, so inserting in rank order also keeps
-  // the final candidate list rank-sorted with no separate sort step.
+  // against its own genre tags. A Map preserves insertion order, so
+  // inserting in rank order also keeps the final candidate list
+  // rank-sorted with no separate sort step.
   const candidates = new Map();
   tagResult.items.forEach((a) => {
     if (!candidates.has(a.id)) candidates.set(a.id, a);
@@ -290,9 +320,20 @@ async function searchByGenre(query) {
     .forEach((a) => {
       if (!candidates.has(a.id)) candidates.set(a.id, a);
     });
-  deezerResult.items.forEach((a) => {
-    if (!candidates.has(a.id)) candidates.set(a.id, a);
-  });
+
+  // Deezer's own broader taxonomy is only worth its cost -- its own Deezer
+  // fetch plus up to DEEZER_GENRE_ARTIST_LIMIT extra Spotify search calls
+  // to resolve artist names -- when the two cheap sources above didn't
+  // already find enough. Running it unconditionally on every genre search
+  // used to stack that cost on top of the per-artist album fetch below and
+  // produced enough concurrent Spotify requests to trip a live 429.
+  let deezerResult = { items: [], failed: false };
+  if (candidates.size < MIN_CANDIDATES_BEFORE_DEEZER) {
+    deezerResult = await deezerGenreArtists(query);
+    deezerResult.items.forEach((a) => {
+      if (!candidates.has(a.id)) candidates.set(a.id, a);
+    });
+  }
 
   // Last resort: for niche terms with no exact tag, no genre-tag overlap,
   // and no matching Deezer bucket at all (confirmed live for "jungle" --
@@ -315,7 +356,7 @@ async function searchByGenre(query) {
   }
 
   const artistList = Array.from(candidates.values()).slice(0, MAX_ARTISTS_FOR_ALBUMS);
-  const albumLists = await Promise.all(artistList.map((a) => albumsForArtist(a.id)));
+  const albumLists = await mapWithConcurrency(artistList, ALBUMS_FETCH_CONCURRENCY, (a) => albumsForArtist(a.id));
   const anyFailed = albumLists.every((r) => r.failed); // every request failing, not just one artist coming up short.
   return { pool: poolFromAlbumLists(albumLists.map((r) => r.items)), failed: anyFailed };
 }
