@@ -95,8 +95,9 @@ genre tag search, a free-text Spotify search cross-checked against each
 artist's own genre tags, and Deezer's broader public genre taxonomy (the
 same free source Records nearby uses) so real-world genre terms Spotify's
 exact tag filter misses still turn up something, with an autocomplete
-(sourced live from Deezer's genre list) helping steer genre searches
-toward terms with real coverage. Only full albums and EPs of 6 or more
+helping steer genre searches toward terms with real coverage: Deezer's
+genre list merged with real Spotify genre tags picked up from past
+searches, growing richer with use. Only full albums and EPs of 6 or more
 tracks are shown; singles and compilations are filtered out.
 A result replaces the Wall the same way a record bag does, with a
 dismissible chip to get back to your own wall.
@@ -104,8 +105,8 @@ dismissible chip to get back to your own wall.
 ## Privacy
 
 - No accounts, no server, no analytics, no telemetry.
-- Your Spotify client ID, tokens, cached album pool, and journal live only in your browser's local storage.
-- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby only, and only artist/album metadata -- never your listening history), and to your own self-hosted copy of this site.
+- Your Spotify client ID, tokens, cached album pool, journal, and a small cache of genre names picked up from past searches (used only to power the genre autocomplete) live only in your browser's local storage.
+- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby and genre search only, and only artist/album/genre metadata -- never your listening history), and to your own self-hosted copy of this site.
 - Signing out clears your Spotify session tokens but keeps your client ID and your past sessions, so you are not re-typing your client ID or losing your listening history every time.
 
 ## Limitations, honestly

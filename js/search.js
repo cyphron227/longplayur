@@ -27,8 +27,9 @@
 //      nothing, at the cost of possibly matching on artist name alone.
 // Results are deduplicated and ranked in that order, then capped before
 // fetching any album data (each artist costs up to 2 paginated requests).
-// getGenreSuggestions() separately exposes Deezer's own genre names for an
-// autocomplete, steering users toward terms most likely to hit tier 1-3.
+// getGenreSuggestions() separately exposes genre names for an autocomplete
+// (Deezer's list plus real Spotify tags harvested from past searches, see
+// harvestGenres()), steering users toward terms most likely to hit tier 1-3.
 
 import { apiFetch } from './spotify.js';
 import { deezerFetch } from './deezer.js';
@@ -79,6 +80,55 @@ function toEntry(album, rank) {
 
 function normalize(s) {
   return (s || '').trim().toLowerCase();
+}
+
+// Spotify has no working public endpoint that lists its own genre
+// vocabulary -- both GET /recommendations/available-genre-seeds and GET
+// /browse/categories are marked Deprecated in Spotify's own current API
+// reference (checked directly, not assumed). What Spotify does still
+// return, on every artist object from GET /search?type=artist, is that
+// artist's own .genres array -- real tags like "britpop" or "madchester",
+// finer-grained than Deezer's ~30 broad buckets. searchArtists() harvests
+// every one of those it sees into localStorage, so the genre autocomplete
+// grows richer with real Spotify vocabulary the more the app is used,
+// rather than starting (and staying) as coarse as Deezer alone.
+const GENRE_VOCAB_KEY = 'lp_genre_vocab';
+const GENRE_VOCAB_MAX = 500;
+
+function loadGenreVocab() {
+  try {
+    const raw = localStorage.getItem(GENRE_VOCAB_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function harvestGenres(artists) {
+  const genres = (artists || []).flatMap((a) => a?.genres || []).filter(Boolean);
+  if (genres.length === 0) return;
+
+  const vocab = loadGenreVocab();
+  if (vocab.length >= GENRE_VOCAB_MAX) return; // simplest correct cap: stop adding once full, keep what's already learned.
+
+  const seen = new Set(vocab.map((g) => normalize(g)));
+  let changed = false;
+  for (const g of genres) {
+    const key = normalize(g);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    vocab.push(g);
+    changed = true;
+    if (vocab.length >= GENRE_VOCAB_MAX) break;
+  }
+
+  if (!changed) return;
+  try {
+    localStorage.setItem(GENRE_VOCAB_KEY, JSON.stringify(vocab));
+  } catch {
+    // localStorage full/unavailable: this run's harvest is simply lost.
+  }
 }
 
 function tokenize(s) {
@@ -135,7 +185,9 @@ async function albumsForArtist(artistId) {
 async function searchArtists(q, limit) {
   try {
     const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=${limit}`);
-    return { items: data?.artists?.items || [], failed: false };
+    const items = data?.artists?.items || [];
+    harvestGenres(items);
+    return { items, failed: false };
   } catch (err) {
     console.error('[search] GET /search (type=artist) failed:', err);
     return { items: [], failed: true };
@@ -293,16 +345,31 @@ export async function searchAlbums(query, mode) {
 /**
  * Genre names for an autocomplete on the search field, so a genre search
  * is steered toward terms most likely to actually return something rather
- * than typed blind. Sourced from Deezer's own public genre list (the same
- * one deezerGenreArtists() matches against) rather than any hand-written
- * list, since that is the one genre vocabulary this app can verify live
- * rather than guess at -- Spotify does not expose a public "list every
- * genre tag" endpoint for this kind of app to call.
- * @returns {Promise<string[]>} alphabetised genre names, or [] if Deezer
- *   cannot be reached.
+ * than typed blind. Two real sources, merged and deduplicated, neither
+ * hand-written: Deezer's own public genre list (the same one
+ * deezerGenreArtists() matches against, coarse but always present from
+ * first launch) and the Spotify genre vocabulary harvested from every
+ * artist search this app has actually made (see harvestGenres() above) --
+ * finer-grained, and grows richer the more the app is used. Spotify itself
+ * has no working "list every genre tag" endpoint left to call directly
+ * (both candidates are marked Deprecated in Spotify's current API
+ * reference), so this is the closest available substitute.
+ * @returns {Promise<string[]>} alphabetised genre names, deduplicated
+ *   case-insensitively (Deezer's casing wins on a collision, since it is
+ *   the more consistently curated of the two).
  */
 export async function getGenreSuggestions() {
   const genreList = await getDeezerGenreList();
-  const genres = (genreList?.data || []).filter((g) => g && g.id !== 0 && g.name);
-  return genres.map((g) => g.name).sort((a, b) => a.localeCompare(b));
+  const deezerNames = (genreList?.data || []).filter((g) => g && g.id !== 0 && g.name).map((g) => g.name);
+  const harvested = loadGenreVocab();
+
+  const seen = new Set();
+  const merged = [];
+  [...deezerNames, ...harvested].forEach((name) => {
+    const key = normalize(name);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push(name);
+  });
+  return merged.sort((a, b) => a.localeCompare(b));
 }

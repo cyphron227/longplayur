@@ -215,10 +215,30 @@ the first place, the search field now offers an autocomplete: a
 `<datalist>` bound to the input via `list="genre-suggestions"`, populated
 only while Genre mode is active (`main.js`'s `populateGenreSuggestions()`)
 from a new `getGenreSuggestions()` export in `js/search.js`. Suggestions
-are Deezer's own genre names, fetched live rather than hand-written, since
-Spotify does not expose a public "list every genre tag" endpoint for an
-app like this to call, and hand-writing a genre-tag list would be exactly
-the kind of unverified guess that caused the two bugs above.
+were initially Deezer's own genre names only, fetched live rather than
+hand-written, since Spotify does not expose a public "list every genre
+tag" endpoint for an app like this to call, and hand-writing a genre-tag
+list would be exactly the kind of unverified guess that caused the two
+bugs above.
+
+That was flagged as too basic on the next live round (Deezer's taxonomy
+is only ~30 broad buckets). Spotify's real per-artist genre vocabulary
+(things like "britpop" or "madchester", visible on every artist object
+`/search?type=artist` returns) is far richer, but there is no working
+Spotify endpoint left to enumerate it up front: `GET /recommendations/
+available-genre-seeds` and `GET /browse/categories` are both marked
+Deprecated in Spotify's own current API reference (checked directly
+before ruling them out, not assumed -- the project's actual constraint
+being avoided here is guessing at deprecated-endpoint behaviour a third
+time in the same session). Instead, `searchArtists()` now harvests the
+`.genres` array off every artist object it ever sees (from both artist
+mode and genre mode searches) into `localStorage['lp_genre_vocab']`
+(capped at 500 unique tags, deduplicated case-insensitively), and
+`getGenreSuggestions()` merges that harvested vocabulary with Deezer's
+baseline list. The autocomplete therefore starts identical to before (just
+Deezer's ~30 buckets on a fresh install) and grows richer with genuine
+Spotify genre tags the more the app is actually used, with zero
+hand-written genre content and zero reliance on a deprecated endpoint.
 
 ## Liner notes removed, native share added (INCREMENT-01 Phase 3)
 
