@@ -487,8 +487,6 @@ const btnPastSessions = document.getElementById('btn-past-sessions');
 const btnClosePastSessions = document.getElementById('btn-close-past-sessions');
 const btnNewSession = document.getElementById('btn-new-session');
 
-const noteDebounceTimers = new Map();
-
 function openPastSessions() {
   renderPastSessions();
   showScreen('pastSessions');
@@ -550,6 +548,9 @@ function renderSessionRow(session, ordinal) {
   const row = document.createElement('div');
   row.className = 'session-row';
 
+  const headWrap = document.createElement('div');
+  headWrap.className = 'session-row-head-wrap';
+
   const head = document.createElement('button');
   head.type = 'button';
   head.className = 'session-row-head';
@@ -557,7 +558,18 @@ function renderSessionRow(session, ordinal) {
   headLabel.className = 'deadwax';
   headLabel.textContent = `SESSION ${ordinal} · ${formatDeadwaxDate(session.startedAt)}`;
   head.append(headLabel, svgIcon('icon-chevron'));
-  row.appendChild(head);
+
+  // Share lives on the collapsed row itself (INCREMENT-01 Phase 3c): one
+  // affordance per session, no need to expand first.
+  const shareBtn = document.createElement('button');
+  shareBtn.type = 'button';
+  shareBtn.className = 'icon-btn session-share-btn';
+  shareBtn.setAttribute('aria-label', `Share session ${ordinal}`);
+  shareBtn.appendChild(svgIcon('icon-export'));
+  shareBtn.addEventListener('click', () => handleShareSession(session, ordinal, shareBtn));
+
+  headWrap.append(head, shareBtn);
+  row.appendChild(headWrap);
 
   const strip = document.createElement('div');
   strip.className = 'session-strip';
@@ -581,21 +593,18 @@ function renderSessionRow(session, ordinal) {
 
   const actions = document.createElement('div');
   actions.className = 'session-actions';
-  const exportBtn = document.createElement('button');
-  exportBtn.type = 'button';
-  exportBtn.className = 'icon-btn';
-  exportBtn.append(svgIcon('icon-export'), document.createTextNode('Export this session'));
-  exportBtn.addEventListener('click', () => handleExportSession(session, ordinal, exportBtn));
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'icon-btn';
   deleteBtn.append(svgIcon('icon-bin'), document.createTextNode('Forget this session'));
   deleteBtn.addEventListener('click', () => handleDeleteSession(session, ordinal));
-  actions.append(exportBtn, deleteBtn);
+  actions.append(deleteBtn);
   entriesWrap.appendChild(actions);
   row.appendChild(entriesWrap);
 
   head.addEventListener('click', () => entriesWrap.classList.toggle('is-open'));
+
+  preRenderShareCard(session, ordinal);
 
   return row;
 }
@@ -619,29 +628,51 @@ function renderEntryRow(session, entry) {
   artist.className = 'session-entry-artist';
   artist.textContent = entry.artist;
 
-  const note = document.createElement('textarea');
-  note.className = 'liner-note';
-  note.placeholder = 'Liner notes. What did this one do to you?';
-  note.value = entry.note || '';
-  note.setAttribute('aria-label', `Liner notes for ${entry.name}`);
-  note.addEventListener('input', () => {
-    const key = `${session.id}:${entry.albumId}:${entry.startedAt}`;
-    clearTimeout(noteDebounceTimers.get(key));
-    noteDebounceTimers.set(key, setTimeout(() => {
-      journal.setLinerNote(session.id, entry.albumId, note.value);
-    }, 500));
-  });
-
-  body.append(title, artist, note);
+  body.append(title, artist);
   wrap.appendChild(body);
   return wrap;
 }
 
-async function handleExportSession(session, ordinal, triggerBtn) {
+// Share cards are rendered ahead of the tap that shares them (INCREMENT-01
+// Phase 3b / PRD F8a): iOS Safari requires navigator.share() to run inside
+// the tap's transient activation, and rendering (loading album art over the
+// network) is too slow to fit inside that window. Kicked off as soon as
+// each row exists (Past sessions opening), keyed by session id.
+const sessionCardCache = new Map();
+
+function preRenderShareCard(session, ordinal) {
+  if (sessionCardCache.has(session.id)) return;
+  sessionCardCache.set(session.id, exporter.renderSessionCard(session, ordinal));
+}
+
+function getSessionCard(session, ordinal) {
+  preRenderShareCard(session, ordinal);
+  return sessionCardCache.get(session.id);
+}
+
+async function handleShareSession(session, ordinal, triggerBtn) {
   triggerBtn.disabled = true;
   try {
-    const { dataUrl } = await exporter.exportSessionCard(session, ordinal);
-    exporter.downloadCard(dataUrl, `longplayur-session-${ordinal}.png`);
+    const filename = `longplayur-session-${ordinal}.png`;
+    const { canvas } = await getSessionCard(session, ordinal);
+
+    if (navigator.canShare) {
+      try {
+        const file = await exporter.canvasToFile(canvas, filename);
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Longplayur',
+            text: `Session ${ordinal} · ${formatDeadwaxDate(session.startedAt)}`,
+          });
+          return;
+        }
+      } catch (err) {
+        if (err?.name === 'AbortError') return; // user cancelled the sheet: silent, no error UI.
+        // NotAllowedError or anything else: fall through to download.
+      }
+    }
+    exporter.downloadCanvas(canvas, filename);
   } finally {
     triggerBtn.disabled = false;
   }
@@ -651,6 +682,7 @@ function handleDeleteSession(session, ordinal) {
   const confirmed = window.confirm(`Forget session ${ordinal}? The music stays; the record of it goes.`);
   if (!confirmed) return;
   journal.deleteSession(session.id);
+  sessionCardCache.delete(session.id);
   if (currentSessionId === session.id) {
     currentSessionId = null;
     renderJourneyThread();

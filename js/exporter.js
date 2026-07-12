@@ -113,15 +113,20 @@ function renderTypographicFallback(session, deadwaxText) {
     y += 36;
   });
 
-  return { dataUrl: canvas.toDataURL('image/png'), typographicFallback: true };
+  return { canvas, typographicFallback: true };
 }
 
 /**
+ * Renders the share card to a canvas (does not download or share it; see
+ * downloadCanvas() and canvasToFile()). Pre-rendering this ahead of the
+ * user's tap -- rather than inside the tap handler -- matters on iOS
+ * Safari, where navigator.share() must run within the tap's transient
+ * activation and image loading is too slow to fit inside that window.
  * @param {object} session journal session {id, startedAt, entries}
  * @param {number} sessionOrdinal 1-based lifetime session number
- * @returns {Promise<{dataUrl: string, typographicFallback: boolean}>}
+ * @returns {Promise<{canvas: HTMLCanvasElement, typographicFallback: boolean}>}
  */
-export async function exportSessionCard(session, sessionOrdinal) {
+export async function renderSessionCard(session, sessionOrdinal) {
   const deadwaxText = `SESSION ${sessionOrdinal} · ${formatDeadwaxDate(session.startedAt)} · LONGPLAYUR`;
 
   let images;
@@ -149,18 +154,33 @@ export async function exportSessionCard(session, sessionOrdinal) {
     ctx.restore();
   });
 
+  // A canvas can still be tainted even with crossOrigin="anonymous" set if
+  // the CDN response omits CORS headers for some reason; toDataURL/toBlob
+  // throw (or produce a null blob) in that case rather than the image load
+  // itself failing, so this is a second, separate fallback path.
   try {
-    return { dataUrl: canvas.toDataURL('image/png'), typographicFallback: false };
+    canvas.toDataURL('image/png');
+    return { canvas, typographicFallback: false };
   } catch {
     return renderTypographicFallback(session, deadwaxText);
   }
 }
 
-export function downloadCard(dataUrl, filename) {
+export function downloadCanvas(canvas, filename) {
   const a = document.createElement('a');
-  a.href = dataUrl;
+  a.href = canvas.toDataURL('image/png');
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+/** @returns {Promise<File>} for navigator.share({ files: [file] }). */
+export function canvasToFile(canvas, filename) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) { reject(new Error('canvas.toBlob produced no data.')); return; }
+      resolve(new File([blob], filename, { type: 'image/png' }));
+    }, 'image/png');
+  });
 }

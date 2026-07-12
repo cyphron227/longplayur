@@ -5,6 +5,36 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Liner notes removed, native share added (INCREMENT-01 Phase 3)
+
+Liner notes are gone entirely: `journal.js`'s `setLinerNote()` export, the
+`note` field on journal entries, and the textarea in each Past sessions
+entry row are all removed. `CURRENT_VERSION` moved 2 -> 3 and `migrate()`
+strips any lingering `note` field from existing entries on load; sessions
+and their other entry data are otherwise untouched.
+
+The share action moved to a dedicated icon button on each session's
+collapsed row (`aria-label="Share session {n}"`, 44px target), and now
+attempts a native share (PRD F8a) before falling back to download. Since a
+button cannot nest inside another button, the row's head is now two
+siblings (`.session-row-head` for expand/collapse, `.session-share-btn`
+for sharing) inside a new `.session-row-head-wrap`, rather than one button
+as before.
+
+`exporter.js`'s `exportSessionCard()` (returned a `dataUrl`) became
+`renderSessionCard()` (returns a `canvas`), so callers can choose
+`canvas.toDataURL()` (download, via the new `downloadCanvas()`) or
+`canvas.toBlob()` (share, via the new `canvasToFile()`) without rendering
+twice. Per PRD F8a's transient-activation constraint, rendering is kicked
+off as soon as each row exists (`preRenderShareCard()`, fired from
+`renderSessionRow()`, cached in `main.js`'s `sessionCardCache` keyed by
+session id) rather than inside the share button's own click handler, so a
+tap on an already-open Past sessions screen only needs `canvas.toBlob()` +
+`navigator.share()` before it. This has not been exercised on a real iOS
+device; if transient activation is still lost in practice, the pre-render
+would need to start even earlier (e.g. when a session is recorded, rather
+than when Past sessions is opened).
+
 ## "Side" renamed to "Session", now everywhere including storage (INCREMENT-01 Phase 0)
 
 Per explicit request: every occurrence of "side"/"Side" is now

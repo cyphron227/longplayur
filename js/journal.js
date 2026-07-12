@@ -9,7 +9,7 @@
 
 const LS_JOURNAL = 'lp_journal';
 const SESSION_INACTIVITY_MS = 6 * 60 * 60 * 1000; // 6 hours, PRD F8.
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 function uuid() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -18,9 +18,10 @@ function uuid() {
 
 /**
  * v1 -> v2: the journal's own field name changed from `sides` to
- * `sessions` (INCREMENT-01 Phase 0's storage rename). Existing journals
- * must survive intact; only the wrapping field/key names change here, not
- * any entry data.
+ * `sessions` (INCREMENT-01 Phase 0's storage rename).
+ * v2 -> v3: liner notes removed entirely (INCREMENT-01 Phase 3a); every
+ * entry's `note` field is dropped. Existing sessions and entries otherwise
+ * survive both migrations intact.
  */
 function migrate(journal) {
   if (!journal || typeof journal !== 'object') return { v: CURRENT_VERSION, sessions: [] };
@@ -30,6 +31,15 @@ function migrate(journal) {
     delete journal.sides;
   }
   if (!Array.isArray(journal.sessions)) journal.sessions = [];
+
+  if (!journal.v || journal.v < 3) {
+    for (const session of journal.sessions) {
+      for (const entry of session.entries || []) {
+        delete entry.note;
+      }
+    }
+  }
+
   journal.v = CURRENT_VERSION;
   return journal;
 }
@@ -84,7 +94,6 @@ export function recordNeedleDrop(entry) {
     artist: entry.artist,
     image: entry.image,
     startedAt: now,
-    note: '', // Removed entirely in Phase 3a; kept through Phases 0 to 2.
     bagId: entry.bagId ?? null,
   });
 
@@ -99,16 +108,6 @@ export function startNewSession() {
   if (last && last.endedAt === null) last.endedAt = Date.now();
   saveJournal(journal);
   return journal;
-}
-
-export function setLinerNote(sessionId, albumId, note) {
-  const journal = loadJournal();
-  const session = journal.sessions.find((s) => s.id === sessionId);
-  if (!session) return journal;
-  const entry = [...session.entries].reverse().find((e) => e.albumId === albumId);
-  if (!entry) return journal;
-  entry.note = note;
-  return saveJournal(journal);
 }
 
 export function deleteSession(sessionId) {
