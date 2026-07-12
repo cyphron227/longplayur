@@ -2,7 +2,11 @@
 
 const AUTH_URL = 'https://accounts.spotify.com/authorize';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
-const SCOPES = 'user-top-read user-library-read streaming user-read-playback-state user-modify-playback-state';
+// playlist-read-private/-collaborative added for the Crates screen's
+// "your playlists" source. New scopes only take effect on a fresh
+// authorisation, not a token refresh -- anyone already connected before
+// this change needs to sign out and reconnect once to grant it.
+const SCOPES = 'user-top-read user-library-read streaming user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative';
 
 const LS_CLIENT_ID = 'lp_client_id';
 const LS_TOKENS = 'lp_tokens';

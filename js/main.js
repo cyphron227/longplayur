@@ -15,6 +15,7 @@ import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './ending.
 import * as journal from './journal.js';
 import * as exporter from './exporter.js';
 import { loadBagManifest, resolveBag } from './bags.js';
+import { loadMyPlaylists, resolvePlaylist } from './playlists.js';
 import { getRecordsNearby } from './nearby.js';
 import { searchAlbums, getGenreSuggestions } from './search.js';
 
@@ -37,12 +38,13 @@ const screens = {
   setup: document.getElementById('screen-setup'),
   loading: document.getElementById('screen-loading'),
   app: document.getElementById('screen-app'),
+  crates: document.getElementById('screen-crates'),
   pastSessions: document.getElementById('screen-past-sessions'),
 };
 
-// Tabs only apply to the three screens reachable once connected; 'loading'
+// Tabs only apply to the four screens reachable once connected; 'loading'
 // has no tab of its own and simply leaves the previous tab's state as-is.
-const tabsByScreen = { app: 'tab-wall', pastSessions: 'tab-past-sessions', setup: 'tab-setup' };
+const tabsByScreen = { app: 'tab-wall', crates: 'tab-crates', pastSessions: 'tab-past-sessions', setup: 'tab-setup' };
 
 function showScreen(name) {
   for (const [key, node] of Object.entries(screens)) {
@@ -70,6 +72,7 @@ const setupError = document.getElementById('setup-error');
 const diagnostics = document.getElementById('diagnostics');
 const appTabs = document.getElementById('app-tabs');
 const tabWall = document.getElementById('tab-wall');
+const tabCrates = document.getElementById('tab-crates');
 const tabPastSessionsBtn = document.getElementById('tab-past-sessions');
 const tabSetup = document.getElementById('tab-setup');
 
@@ -213,7 +216,12 @@ function describeSpotifyError(err) {
 const wallViewport = document.getElementById('wall-viewport');
 const wallContainer = document.getElementById('wall-container');
 const wallPrompt = document.getElementById('wall-prompt');
-const bagRail = document.getElementById('bag-rail');
+const cratesBtn = document.getElementById('crates-btn');
+const cratesBtnLabel = document.getElementById('crates-btn-label');
+const cratesYourBagBtn = document.getElementById('crates-your-bag-btn');
+const crateBagsGrid = document.getElementById('crate-bags-grid');
+const cratePlaylistsGrid = document.getElementById('crate-playlists-grid');
+const cratePlaylistsStatus = document.getElementById('crate-playlists-status');
 const nearbyShelf = document.getElementById('nearby-shelf');
 const playerNearby = document.getElementById('player-nearby');
 
@@ -250,14 +258,20 @@ let currentSessionId = null;
 let ceremonyBusy = false;
 let runoutBusy = false;
 
-// Record bags (PRD F11): the user's own pool is always available to switch
-// back to ("YOUR WALL"); the seed bags resolve to real Spotify albums
-// lazily, the first time each is actually selected.
+// Record bags, playlists, and search (PRD F11/F12): the user's own pool
+// ("Your Record Bag") is always available to switch back to; seed bags
+// resolve to real Spotify albums lazily, the first time each is actually
+// selected; the user's own Spotify playlists (js/playlists.js) work the
+// same way. All four sources are mutually exclusive and chosen from the
+// Crates screen, not the Wall itself -- selecting any of them crossfades
+// the Wall (switchWallPool()) and returns to the Now Playing tab.
 let userWallPool = null;
 let activeBagId = null;
-let activeSearchQuery = null; // { query, mode: 'artist'|'genre' } | null, mutually exclusive with activeBagId
+let activePlaylistId = null;
+let activeSearchQuery = null; // { query, mode: 'artist'|'genre' } | null
 let bagSwitchBusy = false;
 let bagManifestCache = null;
+let playlistManifestCache = null; // null until the Crates screen has been opened at least once
 
 function delay(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -284,18 +298,38 @@ function renderWallDom(pool) {
   });
 }
 
-function setWallPrompt(pool) {
-  const everDropped = localStorage.getItem(LS_EVER_DROPPED) === 'true';
+/** Label for whatever source is currently on the Wall -- shown on the
+ * Crates-screen entry point button and used to build the wall prompt. */
+function currentSourceLabel() {
   if (activeSearchQuery) {
     const label = activeSearchQuery.mode === 'artist' ? 'Artist' : 'Genre';
-    wallPrompt.textContent = `${label}: ${activeSearchQuery.query}. ${pool.length} records. Tap one to drop the needle.`;
-  } else if (activeBagId) {
+    return `${label}: ${activeSearchQuery.query}`;
+  }
+  if (activeBagId) {
+    const bag = (bagManifestCache || []).find((b) => b.id === activeBagId);
+    return bag ? bag.name : 'Record bag';
+  }
+  if (activePlaylistId) {
+    const playlist = (playlistManifestCache || []).find((p) => p.id === activePlaylistId);
+    return playlist ? playlist.name : 'Playlist';
+  }
+  return 'Your Record Bag';
+}
+
+function updateCratesBtnLabel() {
+  if (cratesBtnLabel) cratesBtnLabel.textContent = currentSourceLabel();
+}
+
+function setWallPrompt(pool) {
+  const everDropped = localStorage.getItem(LS_EVER_DROPPED) === 'true';
+  if (activeSearchQuery || activeBagId || activePlaylistId) {
     wallPrompt.textContent = `${pool.length} records. Tap one to drop the needle.`;
   } else {
     wallPrompt.textContent = everDropped
-      ? `Your wall. ${pool.length} records. Tap one to drop the needle.`
+      ? `Your Record Bag. ${pool.length} records. Tap one to drop the needle.`
       : 'Drop the needle on something.';
   }
+  updateCratesBtnLabel();
 }
 
 /**
@@ -324,82 +358,148 @@ async function switchWallPool(pool) {
   }
 }
 
-function renderBagChips(bags) {
-  bagRail.innerHTML = '';
+const cratesStatus = document.getElementById('crates-status');
 
-  const wallChip = document.createElement('button');
-  wallChip.type = 'button';
-  wallChip.className = 'bag-chip deadwax';
-  wallChip.textContent = 'YOUR WALL';
-  wallChip.setAttribute('aria-pressed', String(!activeBagId && !activeSearchQuery));
-  wallChip.addEventListener('click', () => selectBag(null));
-  bagRail.appendChild(wallChip);
+/** A single card in the Crates screen's bag/playlist grids. Built via
+ * createElement rather than innerHTML since playlist names/images come
+ * straight from Spotify and are untrusted. */
+function buildCrateCard({ label, sublabel, image, pressed, title, onClick }) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'crate-card';
+  card.setAttribute('aria-pressed', String(pressed));
+  if (title) card.title = title;
 
-  if (activeSearchQuery) {
-    const searchChip = document.createElement('button');
-    searchChip.type = 'button';
-    searchChip.className = 'bag-chip deadwax is-search';
-    const label = activeSearchQuery.mode === 'artist' ? 'ARTIST' : 'GENRE';
-    searchChip.textContent = `${label}: ${activeSearchQuery.query.toUpperCase()}`;
-    searchChip.setAttribute('aria-pressed', 'true');
-    searchChip.title = 'Back to your wall';
-    searchChip.addEventListener('click', () => selectBag(null));
-    bagRail.appendChild(searchChip);
+  const art = image ? document.createElement('img') : document.createElement('div');
+  art.className = 'crate-card-art';
+  if (image) { art.src = image; art.alt = ''; }
+  card.appendChild(art);
+
+  const name = document.createElement('span');
+  name.className = 'crate-card-name';
+  name.textContent = label;
+  card.appendChild(name);
+
+  if (sublabel) {
+    const meta = document.createElement('span');
+    meta.className = 'crate-card-meta';
+    meta.textContent = sublabel;
+    card.appendChild(meta);
   }
 
-  for (const bag of bags) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'bag-chip deadwax';
-    chip.textContent = bag.name.toUpperCase();
-    chip.title = bag.blurb;
-    chip.setAttribute('aria-pressed', String(!activeSearchQuery && activeBagId === bag.id));
-    chip.addEventListener('click', () => selectBag(bag.id));
-    bagRail.appendChild(chip);
-  }
+  card.addEventListener('click', onClick);
+  return card;
+}
 
-  show(bagRail);
+function renderBagCards() {
+  crateBagsGrid.innerHTML = '';
+  for (const bag of bagManifestCache || []) {
+    crateBagsGrid.appendChild(buildCrateCard({
+      label: bag.name,
+      title: bag.blurb,
+      pressed: !activeSearchQuery && !activePlaylistId && activeBagId === bag.id,
+      onClick: () => selectBag(bag.id),
+    }));
+  }
+}
+
+function renderPlaylistCards() {
+  cratePlaylistsGrid.innerHTML = '';
+  for (const playlist of playlistManifestCache || []) {
+    cratePlaylistsGrid.appendChild(buildCrateCard({
+      label: playlist.name,
+      sublabel: `${playlist.trackCount} tracks`,
+      image: playlist.image,
+      pressed: !activeSearchQuery && !activeBagId && activePlaylistId === playlist.id,
+      onClick: () => selectPlaylist(playlist.id),
+    }));
+  }
+}
+
+/** Populates the Crates screen. Record bags are cheap (small local JSON)
+ * and loaded once and cached; the user's own Spotify playlists are a live
+ * API call, so they're only fetched the first time this screen is opened,
+ * not eagerly at boot. */
+async function renderCratesScreen() {
+  cratesYourBagBtn.setAttribute('aria-pressed', String(!activeBagId && !activePlaylistId && !activeSearchQuery));
+
+  if (!bagManifestCache) {
+    try {
+      bagManifestCache = await loadBagManifest();
+    } catch {
+      bagManifestCache = [];
+    }
+  }
+  renderBagCards();
+
+  if (!playlistManifestCache) {
+    cratePlaylistsStatus.textContent = 'Loading your playlists.';
+    playlistManifestCache = await loadMyPlaylists();
+  }
+  cratePlaylistsStatus.textContent = playlistManifestCache.length === 0
+    ? 'No playlists found. If you connected before this was added, try reconnecting on the Setup tab.'
+    : '';
+  renderPlaylistCards();
 }
 
 async function selectBag(bagId) {
-  if (bagId === activeBagId && !activeSearchQuery) return;
+  if (bagId === activeBagId && !activeSearchQuery && !activePlaylistId) { showScreen('app'); return; }
   if (bagSwitchBusy) return;
 
   if (bagId === null) {
     activeBagId = null;
+    activePlaylistId = null;
     activeSearchQuery = null;
-    renderBagChips(bagManifestCache || []);
     if (userWallPool) await switchWallPool(userWallPool);
+    showScreen('app');
     return;
   }
 
   const bag = (bagManifestCache || []).find((b) => b.id === bagId);
   if (!bag) return;
 
-  wallPrompt.textContent = `${bag.name}. Pulling records from the shelf.`;
+  cratesStatus.textContent = `${bag.name}. Pulling records from the shelf.`;
   const pool = await resolveBag(bag);
   if (pool.length === 0) {
-    wallPrompt.textContent = `Could not resolve any records in ${bag.name} right now.`;
+    cratesStatus.textContent = `Could not resolve any records in ${bag.name} right now.`;
     return;
   }
+  cratesStatus.textContent = '';
   activeBagId = bagId;
+  activePlaylistId = null;
   activeSearchQuery = null;
-  renderBagChips(bagManifestCache || []);
   await switchWallPool(pool);
+  showScreen('app');
 }
 
-async function renderBagRail() {
-  try {
-    bagManifestCache = await loadBagManifest();
-  } catch {
-    bagManifestCache = [];
-  }
-  if (bagManifestCache.length === 0 && !activeSearchQuery) {
-    hide(bagRail);
+async function selectPlaylist(playlistId) {
+  if (playlistId === activePlaylistId && !activeSearchQuery && !activeBagId) { showScreen('app'); return; }
+  if (bagSwitchBusy) return;
+
+  const playlist = (playlistManifestCache || []).find((p) => p.id === playlistId);
+  if (!playlist) return;
+
+  cratesStatus.textContent = `${playlist.name}. Pulling records from the crate.`;
+  const pool = await resolvePlaylist(playlist);
+  if (pool.length === 0) {
+    cratesStatus.textContent = `Could not resolve any records in ${playlist.name} right now.`;
     return;
   }
-  renderBagChips(bagManifestCache);
+  cratesStatus.textContent = '';
+  activePlaylistId = playlistId;
+  activeBagId = null;
+  activeSearchQuery = null;
+  await switchWallPool(pool);
+  showScreen('app');
 }
+
+function openCrates() {
+  showScreen('crates');
+  renderCratesScreen();
+}
+cratesBtn?.addEventListener('click', openCrates);
+tabCrates.addEventListener('click', openCrates);
+cratesYourBagBtn?.addEventListener('click', () => selectBag(null));
 
 // ---------------------------------------------------------------------
 // Search: by artist or genre, chosen explicitly via the mode toggle
@@ -407,9 +507,8 @@ async function renderBagRail() {
 // almost any genre-like word also matches some real, if obscure, artist
 // (e.g. "soul" matching the band Soul II Soul), so a "try artist, fall
 // back to genre" guess essentially never actually reached genre mode.
-// Shares the bag-rail chip (a dismissible "ARTIST: X" / "GENRE: X" chip
-// appears alongside YOUR WALL) and the same switchWallPool() crossfade
-// the bags use.
+// Lives on the Crates screen alongside record bags and playlists, and
+// shares the same switchWallPool() crossfade they use.
 // ---------------------------------------------------------------------
 
 const searchForm = document.getElementById('search-form');
@@ -461,18 +560,20 @@ async function performSearch(query) {
   if (!trimmed) return;
 
   const mode = searchMode;
-  wallPrompt.textContent = `Searching for "${trimmed}".`;
+  cratesStatus.textContent = `Searching for "${trimmed}".`;
   const { pool, failed } = await searchAlbums(trimmed, mode);
   if (pool.length === 0) {
-    wallPrompt.textContent = failed
+    cratesStatus.textContent = failed
       ? `Search failed. Check your connection and try again.`
       : `No albums found for "${trimmed}". Only full albums and EPs of 6 or more tracks are shown.`;
     return;
   }
+  cratesStatus.textContent = '';
   activeBagId = null;
+  activePlaylistId = null;
   activeSearchQuery = { query: trimmed, mode };
-  renderBagChips(bagManifestCache || []);
   await switchWallPool(pool);
+  showScreen('app');
 }
 
 searchForm?.addEventListener('submit', (e) => {
@@ -661,10 +762,11 @@ btnNewSession.addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------
-// Top tab navigation (Now playing / Past sessions / Setup), shown once connected
+// Top tab navigation (Now playing / Crates / Past sessions / Setup), shown once connected
 // ---------------------------------------------------------------------
 
 tabWall.addEventListener('click', () => showScreen('app'));
+tabCrates.addEventListener('click', openCrates);
 tabPastSessionsBtn.addEventListener('click', openPastSessions);
 tabSetup.addEventListener('click', () => showScreen('setup'));
 
@@ -737,11 +839,6 @@ function renderSessionRow(session, ordinal) {
     img.alt = '';
     strip.appendChild(img);
   });
-  if (session.entries.length > 1) {
-    const thread = document.createElement('div');
-    thread.className = 'session-thread';
-    strip.appendChild(thread);
-  }
   row.appendChild(strip);
 
   const entriesWrap = document.createElement('div');
@@ -1085,10 +1182,10 @@ async function enterApp({ forceRefresh = false } = {}) {
     showScreen('app');
     userWallPool = pool;
     activeBagId = null;
+    activePlaylistId = null;
     renderWallDom(pool);
     setWallPrompt(pool);
-    announce(`Your wall. ${pool.length} records. Tap one to drop the needle.`);
-    renderBagRail();
+    announce(`Your Record Bag. ${pool.length} records. Tap one to drop the needle.`);
     initPlaybackForApp();
   } catch (err) {
     if (err instanceof SparseHistoryError) {

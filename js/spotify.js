@@ -103,6 +103,36 @@ export function getAlbum(albumId) {
   return apiFetch(`/albums/${albumId}`);
 }
 
+/** The user's own playlists (owned and followed). Needs the
+ * playlist-read-private / playlist-read-collaborative scopes. */
+export async function getMyPlaylists(maxPages = 2) {
+  const playlists = [];
+  let url = '/me/playlists?limit=50';
+  for (let page = 0; page < maxPages && url; page += 1) {
+    const data = await apiFetch(url);
+    playlists.push(...(data.items || []));
+    url = data.next ? data.next.replace('https://api.spotify.com/v1', '') : null;
+  }
+  return playlists;
+}
+
+/** A playlist's tracks, with each track's full album object inlined via
+ * `fields` so no separate per-album fetch is needed to build a pool entry
+ * (unlike record bags, which only start with a title/artist string).
+ * Capped at 4 pages (200 tracks) so one very large playlist can't balloon
+ * into an unbounded number of requests. */
+export async function getPlaylistTracks(playlistId, maxPages = 4) {
+  const tracks = [];
+  const fields = 'items(track(album(id,uri,name,artists,images,total_tracks,release_date,album_type))),next';
+  let url = `/playlists/${playlistId}/tracks?limit=50&fields=${encodeURIComponent(fields)}`;
+  for (let page = 0; page < maxPages && url; page += 1) {
+    const data = await apiFetch(url);
+    tracks.push(...(data.items || []));
+    url = data.next ? data.next.replace('https://api.spotify.com/v1', '') : null;
+  }
+  return tracks;
+}
+
 /** Genres live on the artist, not the album -- Spotify's album response
  * never populates a genre list of its own. */
 export function getArtist(artistId) {

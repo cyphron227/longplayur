@@ -436,10 +436,10 @@ function ensureLayer(viewportEl) {
   return ceremonyLayer;
 }
 
-// Records nearby (PRD F10) and bag-rail albums can be dropped while they
-// are not part of the currently-mounted wall's pool, so there may be no
-// cell to animate from; fall back to a small rect at the viewport centre
-// so the ceremony still runs in full rather than silently doing nothing.
+// Records nearby (PRD F10) albums can be dropped while they are not part
+// of the currently-mounted wall's pool, so there may be no cell to animate
+// from; fall back to a small rect at the viewport centre so the ceremony
+// still runs in full rather than silently doing nothing.
 function fallbackCenterRect(wallViewportEl) {
   return {
     x: wallViewportEl.clientWidth / 2 - 60,

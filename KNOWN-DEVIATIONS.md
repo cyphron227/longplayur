@@ -722,3 +722,124 @@ each its own commit:
   real-device verification was possible in this environment (no Spotify
   login, no real iOS/Android hardware); see the "Not yet verified" sections
   above and throughout this file for exactly what that leaves outstanding.
+
+## Crates screen replaces the bag rail; Spotify playlists added (2026-07-12)
+
+Per explicit request: the artist/genre search field and the record-bag
+picker moved off the Wall entirely, onto a new dedicated "Crates" screen
+(a fourth top tab, alongside Now Playing / Past sessions / Setup), and the
+Wall's own "YOUR WALL" chip is renamed "Your Record Bag" throughout.
+
+- **Why.** The bag rail + search form living directly above the Wall
+  (`#bag-rail`, `#search-form` in `#screen-app`) had no room to grow: a
+  horizontal chip strip does not scale to showing playlist cover art, and
+  crowds the Wall itself. Moving the picker to its own screen leaves the
+  Wall screen holding only a single small entry-point button (`#crates-btn`,
+  labelled with whatever source is currently loaded) that opens it.
+- **New: Spotify playlists as a Wall source** (`js/playlists.js`,
+  `Docs/PRD.md` F13). The user's own playlists (owned and followed) render
+  as cover-art cards on the Crates screen, resolved to real Spotify album
+  pool entries the same way record bags are, tagged `playlistId` (mirrors
+  `bagId`) so Past sessions can record which playlist a session came from.
+  Unlike record bags, a playlist's own track objects already carry a full
+  Spotify album object (`GET /playlists/{id}/tracks` with a `fields` filter
+  inlining `track.album`), so no per-track search call is needed to
+  resolve one -- just dedup and the existing album/EP filter. Capped at 4
+  pages (200 tracks) per playlist. Resolved pools are cached per playlist
+  keyed to the playlist's own `snapshot_id`, so an edited playlist
+  resolves fresh automatically rather than serving a stale cache -- record
+  bags have no equivalent staleness risk since their source JSON is
+  static, so this is a genuinely new concern playlists introduce.
+- **New OAuth scopes required.** `playlist-read-private` and
+  `playlist-read-collaborative` were added to `js/auth.js`'s `SCOPES`.
+  Scopes only take effect on a fresh authorisation, not a token refresh --
+  anyone already connected before this change needs to sign out and
+  reconnect once, or the Crates screen's playlists grid stays empty (the
+  underlying 403 is swallowed by `loadMyPlaylists()`'s existing
+  silent-fail convention, matching how record bags treat an unresolvable
+  entry, so the empty-state copy explicitly suggests reconnecting rather
+  than leaving the cause unexplained).
+- **Restructured, not just moved.** `main.js`'s `renderBagChips()` /
+  `renderBagRail()` (built `<button class="bag-chip">` elements in a
+  horizontal scroller) were replaced with `renderCratesScreen()` /
+  `buildCrateCard()` (cover-art cards in a CSS grid, `.crate-grid`).
+  `selectBag()` gained a `showScreen('app')` at the end of a successful
+  switch (previously the rail stayed in place since it lived on the same
+  screen as the Wall); a new `selectPlaylist()` mirrors it. `performSearch()`
+  does the same. Progress/error messaging that used to go through
+  `wallPrompt` (invisible while the picker's own screen is showing, since
+  `wallPrompt` lives on `#screen-app`) now goes through a new
+  `#crates-status` element on the Crates screen itself.
+- **Record bags now load lazily too, on the Crates screen's first open,**
+  rather than eagerly at boot (`renderBagRail()` used to run right after
+  the Wall itself finished loading). Bag manifest JSON is cheap (six small
+  local files) so this barely changes load time, but keeps the loading
+  behaviour of all three sources (bags, playlists, search) consistent:
+  nothing about the picker is fetched until the user actually opens it.
+
+## Setup screen copy simplified (2026-07-12)
+
+Per explicit request: the tagline changed to "Listen to whole albums like
+the artist intended."; the why-bring-your-own-app explanation dropped its
+opening sentence ("Spotify no longer opens its API to independent apps, so
+Longplayur can't offer a normal log-in.") and now opens directly with
+"Create your own free Spotify app."; and the old step 01 ("Copy the
+redirect URI") was folded into step 01 ("Create a Spotify app") instead of
+standing alone, since copying the redirect URI is naturally part of the
+same trip to Spotify's dashboard rather than a separate step before it.
+The remaining steps renumbered down by one (redirect-URI-to-app is now
+step 02, client ID is step 03); `README.md`'s "First-run setup" list and
+`Docs/DESIGN-SPEC.md`'s copy deck were updated to match. The one cross-
+reference to the old step 01 ("paste the redirect URI you copied in step
+01") was reworded to "copied above" rather than a step number, since the
+redirect URI copy widget no longer has a step number of its own.
+
+## Dome duplicate covers, phone tile size, Past sessions overflow (2026-07-12)
+
+Three fixes to how the Wall's DomeGallery actually renders, found on the
+same live round of testing:
+
+- **Far fewer duplicate covers.** `gallery/`'s `segments` prop (the
+  dome's column count) was left at a fixed default (34 columns * 5 rows
+  = 170 slots) regardless of pool size -- a 40-album search pool tiled
+  into 170 slots meant most albums repeated roughly 4 times, confirmed
+  as visibly excessive on live testing even after the earlier
+  shuffled-full-passes fix (which only ever addressed adjacent-slot
+  duplicates within one lap, not the total repeat count). `segments` is
+  a legitimate configurable prop on the component, not something that
+  needed a `gallery/` rebuild to change: `js/wall.js`'s new
+  `segmentsForPool()` sizes it to the actual pool (one column per 5
+  images, DomeGallery's own fixed row-count-per-column, rounded up,
+  clamped between 4 and the original 34), so the dome only ever needs
+  enough duplicates to complete its last partial column rather than to
+  fill a fixed grid sized for the largest possible pool regardless of
+  how many albums are actually showing.
+- **Smaller album tiles on phones.** DomeGallery clamps its computed
+  radius (viewport basis * `fit`, naturally ~300-350px on a typical
+  phone width) up to a `minRadius` floor if that computed value comes in
+  smaller -- `mount.tsx`'s default (900px) is tuned for desktop, so on a
+  phone it was overriding the naturally smaller radius upward to 900px
+  regardless, forcing noticeably bigger tiles than the screen actually
+  called for. `js/wall.js`'s new `domeMinRadius()` uses a much lower
+  floor (280px, chosen to sit below the naturally computed radius for
+  essentially all phone widths) below the same 480px breakpoint
+  `styles.css` already uses elsewhere, so the naturally smaller,
+  viewport-appropriate radius passes through unclamped on a phone
+  instead of being forced up to the desktop value. Computed once at
+  mount time (pool switch or boot), not on live resize/rotation, since
+  the dome has no exposed prop-update path once mounted.
+- **Past sessions mini-covers strip.** `.session-strip` was a single
+  non-wrapping flex row relying on `overflow: hidden` to clip covers
+  that did not fit, on the stated assumption that clipping (never a
+  horizontal scrollbar) was an acceptable trade-off. Live testing found
+  covers visibly continuing past the right edge of a phone screen
+  regardless, pushing the row's own share button out of view without
+  horizontal scrolling. Changed to `flex-wrap: wrap` so every cover in a
+  session stays visible across as many rows as needed, removing the
+  `overflow: hidden` clipping entirely. The trailing `.session-thread`
+  bar (a 1px amber line filling the remaining space after the last
+  cover, meant to visually suggest a connecting thread) no longer made
+  sense once covers wrap onto multiple rows, so it was removed rather
+  than left to render oddly at the end of whichever row happens to be
+  last; `Docs/DESIGN-SPEC.md`'s Past sessions description was updated to
+  match.

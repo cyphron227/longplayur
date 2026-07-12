@@ -80,6 +80,7 @@
   <nav id="app-tabs" class="app-tabs" hidden aria-label="Longplayur sections">
     <svg class="mark mark--tabs" viewBox="0 0 100 100" aria-hidden="true"><use href="#mark-groove"/></svg>
     <button id="tab-wall" class="tab-btn" type="button">Now playing</button>
+    <button id="tab-crates" class="tab-btn" type="button">Crates</button>
     <button id="tab-past-sessions" class="tab-btn" type="button">Past sessions</button>
     <button id="tab-setup" class="tab-btn" type="button">Setup</button>
   </nav>
@@ -92,28 +93,13 @@
         <span class="wordmark">Longplayur</span>
       </header>
 
-      <p class="tagline">Whole albums, in order, on purpose.</p>
+      <p class="tagline">Listen to whole albums like the artist intended.</p>
 
-      <p class="why-byo">Spotify no longer opens its API to independent apps, so Longplayur can't offer a normal log-in. Instead you create your own free Spotify app. Five minutes, once. This page then runs entirely in your browser using it, and nothing about your listening ever leaves your machine.</p>
+      <p class="why-byo">Create your own free Spotify app. Five minutes, once. This page then runs entirely in your browser using it, and nothing about your listening ever leaves your machine.</p>
 
       <ol class="steps">
         <li class="step">
           <span class="step-num">01</span>
-          <div class="step-body">
-            <h2>Copy the redirect URI</h2>
-            <p>You will paste this into your Spotify app's settings in step 03.</p>
-            <div class="mono-well">
-              <code id="redirect-uri"></code>
-              <button id="copy-redirect-uri" class="icon-btn" type="button" aria-label="Copy redirect URI" title="Copy redirect URI">
-                <svg class="icon"><use href="#icon-copy"/></svg>
-                <span>Copy</span>
-              </button>
-            </div>
-          </div>
-        </li>
-        <hr class="step-rule">
-        <li class="step">
-          <span class="step-num">02</span>
           <div class="step-body">
             <h2>Create a Spotify app</h2>
             <p>This step needs a computer: the Spotify developer dashboard is not built for small screens.</p>
@@ -125,20 +111,29 @@
                 <span>Copy</span>
               </button>
             </div>
-            <p>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify developer dashboard</a> and create an app. Any name and description will do.</p>
+            <p>Copy this text to paste into Spotify's developer dashboard:</p>
+            <div class="mono-well">
+              <code id="redirect-uri"></code>
+              <button id="copy-redirect-uri" class="icon-btn" type="button" aria-label="Copy redirect URI" title="Copy redirect URI">
+                <svg class="icon"><use href="#icon-copy"/></svg>
+                <span>Copy</span>
+              </button>
+            </div>
+            <p>Log in using your Spotify account.</p>
+            <p>Create a new app in the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">dashboard</a>. Any name and description will do.</p>
+          </div>
+        </li>
+        <hr class="step-rule">
+        <li class="step">
+          <span class="step-num">02</span>
+          <div class="step-body">
+            <h2>Add the redirect URI to your app</h2>
+            <p>In your new app's settings, paste the redirect URI you copied above. It must match exactly.</p>
           </div>
         </li>
         <hr class="step-rule">
         <li class="step">
           <span class="step-num">03</span>
-          <div class="step-body">
-            <h2>Add the redirect URI to your app</h2>
-            <p>In your new app's settings, paste the redirect URI you copied in step 01. It must match exactly.</p>
-          </div>
-        </li>
-        <hr class="step-rule">
-        <li class="step">
-          <span class="step-num">04</span>
           <div class="step-body">
             <h2>Paste your client ID</h2>
             <p>Find it on your app's dashboard page.</p>
@@ -197,21 +192,9 @@
   <!-- Main app: the Wall, player bar. The groove mark lives in the tab
        bar above; sign out and the crackle toggle live on the Setup tab. -->
   <section id="screen-app" class="screen" hidden>
-    <form id="search-form" class="search-form" aria-label="Search for an artist or genre">
-      <div class="search-mode-toggle" role="radiogroup" aria-label="Search by">
-        <button type="button" id="search-mode-artist" class="search-mode-btn deadwax" aria-pressed="true">Artist</button>
-        <button type="button" id="search-mode-genre" class="search-mode-btn deadwax" aria-pressed="false">Genre</button>
-      </div>
-      <div class="search-input-row">
-        <input id="search-input" type="search" class="search-input" placeholder="Search by artist" aria-label="Search term" autocomplete="off" list="genre-suggestions">
-        <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
-          <svg class="icon"><use href="#icon-search"/></svg>
-        </button>
-      </div>
-      <datalist id="genre-suggestions"></datalist>
-    </form>
-
-    <nav id="bag-rail" class="bag-rail" aria-label="Record bags" hidden></nav>
+    <button id="crates-btn" class="crates-btn deadwax" type="button">
+      <span id="crates-btn-label">Your Record Bag</span>
+    </button>
 
     <p id="wall-prompt" class="wall-prompt"></p>
 
@@ -259,6 +242,43 @@
 
     <div id="crackle-hint" class="crackle-hint" hidden>CRACKLE ON &middot; TOGGLE IN SETUP</div>
     <div id="wake-confirmation" class="wake-confirmation deadwax" hidden role="status">Found this phone. Carrying on.</div>
+  </section>
+
+  <!-- Crates: choosing what's on the Wall -- your own pool, a search
+       result, a seed record bag, or one of your Spotify playlists. Its own
+       screen (rather than a rail above the Wall) so search and browsing
+       have room to breathe; selecting anything here returns to Now playing. -->
+  <section id="screen-crates" class="screen" hidden>
+    <div class="crates-body">
+      <button id="crates-your-bag-btn" class="crates-your-bag-btn deadwax" type="button">Your Record Bag</button>
+
+      <form id="search-form" class="search-form" aria-label="Search for an artist or genre">
+        <div class="search-mode-toggle" role="radiogroup" aria-label="Search by">
+          <button type="button" id="search-mode-artist" class="search-mode-btn deadwax" aria-pressed="true">Artist</button>
+          <button type="button" id="search-mode-genre" class="search-mode-btn deadwax" aria-pressed="false">Genre</button>
+        </div>
+        <div class="search-input-row">
+          <input id="search-input" type="search" class="search-input" placeholder="Search by artist" aria-label="Search term" autocomplete="off" list="genre-suggestions">
+          <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
+            <svg class="icon"><use href="#icon-search"/></svg>
+          </button>
+        </div>
+        <datalist id="genre-suggestions"></datalist>
+      </form>
+
+      <p id="crates-status" class="crate-status" aria-live="polite"></p>
+
+      <section class="crate-section">
+        <h2 class="crate-heading">Record bags</h2>
+        <div id="crate-bags-grid" class="crate-grid"></div>
+      </section>
+
+      <section class="crate-section">
+        <h2 class="crate-heading">Your playlists</h2>
+        <p id="crate-playlists-status" class="crate-status"></p>
+        <div id="crate-playlists-grid" class="crate-grid"></div>
+      </section>
+    </div>
   </section>
 
   <!-- Past sessions: the journal (not to be confused with record bags, the curated collections shown on the Wall) -->

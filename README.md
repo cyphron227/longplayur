@@ -44,10 +44,9 @@ Vercel needs no build command and no environment variables; it is a static site.
 
 ## First-run setup
 
-1. Copy the redirect URI Longplayur shows you (it is `location.origin + location.pathname`, so it changes if you move the deployment).
-2. Create a Spotify app at the [developer dashboard](https://developer.spotify.com/dashboard). Any name and description will do. This step needs a computer; on a phone, Longplayur offers a copyable link to send the page to one.
-3. Add the redirect URI you copied in step 1 to the app's settings. It must match exactly.
-4. Under your app's User Management, add your own Spotify account, since development-mode apps are capped at 5 allowlisted users, then paste the client ID into Longplayur and press Connect Spotify.
+1. Copy the redirect URI Longplayur shows you (it is `location.origin + location.pathname`, so it changes if you move the deployment), then log in and create a Spotify app at the [developer dashboard](https://developer.spotify.com/dashboard). Any name and description will do. This step needs a computer; on a phone, Longplayur offers a copyable link to send the page to one.
+2. Add the redirect URI you copied to the app's settings. It must match exactly.
+3. Under your app's User Management, add your own Spotify account, since development-mode apps are capped at 5 allowlisted users, then paste the client ID into Longplayur and press Connect Spotify.
 
 If something goes wrong, use the "Test connection" diagnostic on the setup screen: it runs a `GET /me` and a one-item top-tracks call and reports each as OK or a specific, actionable failure.
 
@@ -62,21 +61,35 @@ Longplayur uses vinyl language throughout the interface:
 | Runout groove | The end of an album |
 | A session | A listening session |
 | Past sessions | Your journal of past sessions |
-| A record bag | A curated album collection shown as a rail above the Wall |
+| A record bag | A curated album collection, chosen from the Crates screen |
+| Crates | The screen for choosing what's on the Wall -- your own pool, a record bag, a playlist, or a search |
 | Records nearby | A shelf of related albums for whatever is currently playing |
 | The Wall | The full zoomed-out view of your album history |
 | New session | Starting a fresh listening session |
 
-## Record bags
+## Crates: record bags, playlists, and search
 
-Above the Wall sits a rail of chips: "YOUR WALL" (your own pool) plus six
-seed bags shipped with Longplayur (`bags/*.json`) -- 90s US rap, soul
+A "Crates" tab sits alongside Now Playing, Past sessions, and Setup. It's
+where you choose what's on the Wall: a "Your Record Bag" button always
+returns to your own pool; below it, seed record bags and your own Spotify
+playlists each appear as cover-art cards, and a search field lets you pull
+in an artist's discography or a whole genre. Selecting anything crossfades
+the Wall and takes you straight to Now Playing.
+
+**Record bags** ship with Longplayur (`bags/*.json`) -- 90s US rap, soul
 essentials, Motown, trip hop, Britpop, and late-night jazz, each an
-original 15-to-25-album curation. Selecting one crossfades the Wall to
-that bag; the albums resolve to real Spotify album IDs via search the
-first time you open that bag, then stay cached. Anything you play from a
-bag records into Past sessions exactly like anything else, tagged with
-which bag it came from.
+original 15-to-25-album curation. The albums resolve to real Spotify album
+IDs via search the first time you open that bag, then stay cached.
+
+**Your Spotify playlists** (owned and followed) work the same way, needing
+the `playlist-read-private` and `playlist-read-collaborative` scopes --
+if you connected before this feature was added, sign out and reconnect
+once to grant them. A playlist's albums resolve without an extra search
+call (they're already on the playlist's own tracks) and re-resolve
+automatically if you edit the playlist later.
+
+Anything you play from a bag, playlist, or search result records into
+Past sessions exactly like anything else, tagged with where it came from.
 
 ## Records nearby
 
@@ -88,7 +101,7 @@ state if Deezer cannot be reached.
 
 ## Search
 
-A search field above the bag rail takes a free-text term plus an
+The search field on the Crates screen takes a free-text term plus an
 explicit Artist/Genre toggle. Artist mode pulls that one artist's own
 discography. Genre mode is a soft search: it combines Spotify's own exact
 genre tag search, a free-text Spotify search cross-checked against each
@@ -99,8 +112,7 @@ helping steer genre searches toward terms with real coverage: Deezer's
 genre list merged with real Spotify genre tags picked up from past
 searches, growing richer with use. Only full albums and EPs of 6 or more
 tracks are shown; singles and compilations are filtered out.
-A result replaces the Wall the same way a record bag does, with a
-dismissible chip to get back to your own wall.
+A result replaces the Wall the same way a record bag does.
 
 ## Privacy
 
@@ -150,6 +162,7 @@ js/
   spotify.js              API client, 429 handling
   albums.js               pool building, scoring, caching
   bags.js                 record bag manifest + lazy Spotify resolution
+  playlists.js            your Spotify playlists as a Wall source
   deezer.js               shared Deezer public API client (fetch + JSONP fallback)
   nearby.js               Records nearby, sourced from Deezer's public API
   search.js               search by artist or genre (Spotify + Deezer)

@@ -96,6 +96,7 @@ export function recordNeedleDrop(entry, { durationMs = null } = {}) {
     startedAt: now,
     durationMs,
     bagId: entry.bagId ?? null,
+    playlistId: entry.playlistId ?? null,
   });
 
   saveJournal(journal);

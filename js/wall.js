@@ -5,12 +5,44 @@
 //
 // Structural note: DomeGallery is a hemispheric dome with clamped vertical
 // tilt (unclamped horizontal spin), not a true full sphere, and it tiles a
-// fixed grid of slots by cyclically repeating the provided images -- so a
-// pool smaller than the slot count shows each album more than once. Both
-// are inherent to the component as fetched from the registry, not bugs in
-// this bridge. See KNOWN-DEVIATIONS.md.
+// grid of slots by cyclically repeating the provided images -- so a pool
+// smaller than the slot count shows some albums more than once. Both are
+// inherent to the component as fetched from the registry, not bugs in this
+// bridge. See KNOWN-DEVIATIONS.md.
 
 import { mountDomeGallery } from './dome-gallery.bundle.js';
+
+// DomeGallery's own `segments` prop was previously left at its fixed
+// default (34 columns) regardless of pool size, and each column always
+// holds exactly 5 rows (DomeGallery.tsx's evenYs/oddYs arrays) -- a
+// 34-column dome is 170 slots, so a 40-album pool repeated every album
+// roughly 4 times, confirmed as visibly excessive on live testing. Sizing
+// `segments` to the pool itself (one column per 5 images, rounded up)
+// means the dome only ever needs enough duplicates to complete its last
+// partial column, not to fill the whole fixed grid regardless of how many
+// albums are actually in the pool.
+const DOME_ROWS_PER_COLUMN = 5;
+const MIN_DOME_SEGMENTS = 4; // keeps the rotation math sane for a very small pool; not a duplicate-padding floor.
+const MAX_DOME_SEGMENTS = 34; // the component's original fixed default, kept as an upper bound.
+
+function segmentsForPool(imageCount) {
+  return Math.min(MAX_DOME_SEGMENTS, Math.max(MIN_DOME_SEGMENTS, Math.ceil(imageCount / DOME_ROWS_PER_COLUMN)));
+}
+
+// DomeGallery computes its own radius from the viewport (basis * fit, ~300
+// to 350px on a typical phone width) but then clamps it up to `minRadius`
+// if that basis-driven value is smaller -- mount.tsx's default (900px) is
+// tuned for desktop, so on a phone it was overriding the naturally smaller
+// radius upward to 900px regardless, forcing much bigger tiles than the
+// screen actually calls for. Below the same 480px phone breakpoint
+// styles.css already uses, use a floor low enough to let the naturally
+// computed radius through instead of overriding it up to the desktop one.
+const PHONE_MAX_WIDTH_PX = 480;
+const PHONE_MIN_RADIUS = 280;
+const DESKTOP_MIN_RADIUS = 900;
+function domeMinRadius() {
+  return window.innerWidth <= PHONE_MAX_WIDTH_PX ? PHONE_MIN_RADIUS : DESKTOP_MIN_RADIUS;
+}
 
 /**
  * @param {HTMLElement} viewportEl the clipping viewport
@@ -35,6 +67,8 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
 
   const mount = mountDomeGallery(containerEl, {
     images,
+    segments: segmentsForPool(images.length),
+    minRadius: domeMinRadius(),
     onImageClick: (src) => {
       const entry = bySrc.get(src);
       if (!entry) return;
