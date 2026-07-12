@@ -1,0 +1,20 @@
+{
+  "name": "Trip hop",
+  "blurb": "Bristol basslines and slow-motion beats for after dark.",
+  "albums": [
+    { "title": "Dummy", "artist": "Portishead" },
+    { "title": "Portishead", "artist": "Portishead" },
+    { "title": "Third", "artist": "Portishead" },
+    { "title": "Blue Lines", "artist": "Massive Attack" },
+    { "title": "Protection", "artist": "Massive Attack" },
+    { "title": "Mezzanine", "artist": "Massive Attack" },
+    { "title": "100th Window", "artist": "Massive Attack" },
+    { "title": "Maxinquaye", "artist": "Tricky" },
+    { "title": "Pre-Millennium Tension", "artist": "Tricky" },
+    { "title": "Endtroducing.....", "artist": "DJ Shadow" },
+    { "title": "Psyence Fiction", "artist": "UNKLE" },
+    { "title": "Post", "artist": "Björk" },
+    { "title": "Homogenic", "artist": "Björk" },
+    { "title": "Play", "artist": "Moby" }
+  ]
+}

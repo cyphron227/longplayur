@@ -14,6 +14,8 @@ import {
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './ending.js';
 import * as journal from './journal.js';
 import * as exporter from './exporter.js';
+import { loadBagManifest, resolveBag } from './bags.js';
+import { getRecordsNearby } from './nearby.js';
 
 // Strip the OAuth `code`/`state`/`error` from the address bar before anything else runs.
 const callbackParams = auth.consumeCallbackParams();
@@ -210,6 +212,9 @@ function describeSpotifyError(err) {
 const wallViewport = document.getElementById('wall-viewport');
 const wallContainer = document.getElementById('wall-container');
 const wallPrompt = document.getElementById('wall-prompt');
+const bagRail = document.getElementById('bag-rail');
+const nearbyShelf = document.getElementById('nearby-shelf');
+const playerNearby = document.getElementById('player-nearby');
 
 const playerBar = document.getElementById('player-bar');
 const playerArt = document.getElementById('player-art');
@@ -243,6 +248,18 @@ let currentSessionId = null;
 let ceremonyBusy = false;
 let runoutBusy = false;
 
+// Record bags (PRD F11): the user's own pool is always available to switch
+// back to ("YOUR WALL"); the seed bags resolve to real Spotify albums
+// lazily, the first time each is actually selected.
+let userWallPool = null;
+let activeBagId = null;
+let bagSwitchBusy = false;
+let bagManifestCache = null;
+
+function delay(ms) {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
 function renderWallDom(pool) {
   wallContainer.innerHTML = '';
   wallApi = initWall(wallViewport, wallContainer, pool, {
@@ -265,10 +282,101 @@ function renderWallDom(pool) {
       onPlay: () => handleNeedleDrop(entry),
     }),
   });
+}
+
+function setWallPrompt(pool) {
   const everDropped = localStorage.getItem(LS_EVER_DROPPED) === 'true';
-  wallPrompt.textContent = everDropped
-    ? `Your wall. ${pool.length} records. Tap one to drop the needle.`
-    : 'Drop the needle on something.';
+  if (activeBagId) {
+    wallPrompt.textContent = `${pool.length} records. Tap one to drop the needle.`;
+  } else {
+    wallPrompt.textContent = everDropped
+      ? `Your wall. ${pool.length} records. Tap one to drop the needle.`
+      : 'Drop the needle on something.';
+  }
+}
+
+/**
+ * Crossfades the Wall from whatever pool is currently mounted to a new one
+ * (DESIGN-SPEC §2a): the DomeGallery component has no way to swap its image
+ * set in place, so this tears the old mount down and remounts fresh. Any
+ * "now playing" hero cover is cleared first since its cell may not exist in
+ * the new pool at all; playback itself is untouched, so the music continues.
+ */
+async function switchWallPool(pool) {
+  if (bagSwitchBusy) return;
+  bagSwitchBusy = true;
+  try {
+    if (currentAlbumId) retireDisc(currentAlbumId);
+    wallContainer.classList.add('is-fading');
+    await delay(220);
+    if (wallApi) wallApi.destroy();
+    renderWallDom(pool);
+    setWallPrompt(pool);
+    requestAnimationFrame(() => wallContainer.classList.remove('is-fading'));
+  } finally {
+    bagSwitchBusy = false;
+  }
+}
+
+function renderBagChips(bags) {
+  bagRail.innerHTML = '';
+
+  const wallChip = document.createElement('button');
+  wallChip.type = 'button';
+  wallChip.className = 'bag-chip deadwax';
+  wallChip.textContent = 'YOUR WALL';
+  wallChip.setAttribute('aria-pressed', String(!activeBagId));
+  wallChip.addEventListener('click', () => selectBag(null));
+  bagRail.appendChild(wallChip);
+
+  for (const bag of bags) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'bag-chip deadwax';
+    chip.textContent = bag.name.toUpperCase();
+    chip.title = bag.blurb;
+    chip.setAttribute('aria-pressed', String(activeBagId === bag.id));
+    chip.addEventListener('click', () => selectBag(bag.id));
+    bagRail.appendChild(chip);
+  }
+}
+
+async function selectBag(bagId) {
+  if (bagId === activeBagId || bagSwitchBusy) return;
+
+  if (bagId === null) {
+    activeBagId = null;
+    renderBagChips(bagManifestCache || []);
+    if (userWallPool) await switchWallPool(userWallPool);
+    return;
+  }
+
+  const bag = (bagManifestCache || []).find((b) => b.id === bagId);
+  if (!bag) return;
+
+  wallPrompt.textContent = `${bag.name}. Pulling records from the shelf.`;
+  const pool = await resolveBag(bag);
+  if (pool.length === 0) {
+    wallPrompt.textContent = `Could not resolve any records in ${bag.name} right now.`;
+    return;
+  }
+  activeBagId = bagId;
+  renderBagChips(bagManifestCache || []);
+  await switchWallPool(pool);
+}
+
+async function renderBagRail() {
+  try {
+    bagManifestCache = await loadBagManifest();
+  } catch {
+    bagManifestCache = [];
+  }
+  if (bagManifestCache.length === 0) {
+    hide(bagRail);
+    return;
+  }
+  renderBagChips(bagManifestCache);
+  show(bagRail);
 }
 
 function renderJourneyThread() {
@@ -664,6 +772,57 @@ playerDeviceSwitch.addEventListener('click', async () => {
   openDeviceModal(devices, { isSwitch: true });
 });
 
+// ---------------------------------------------------------------------
+// Records nearby (PRD F10): a low shelf of related albums for whatever is
+// currently playing, sourced from Deezer. Hides itself with no error state
+// if nothing resolves, per edge case 10.
+// ---------------------------------------------------------------------
+
+let nearbyOpen = false;
+
+function renderNearbyShelf(shelf) {
+  nearbyShelf.innerHTML = '';
+  for (const entry of shelf) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'nearby-item';
+    if (entry.image) {
+      const img = document.createElement('img');
+      img.src = entry.image;
+      img.alt = '';
+      item.appendChild(img);
+    }
+    const caption = document.createElement('span');
+    caption.className = 'nearby-caption deadwax';
+    caption.textContent = entry.caption;
+    item.appendChild(caption);
+    item.addEventListener('click', () => {
+      closeNearbyShelf();
+      handleNeedleDrop(entry);
+    });
+    nearbyShelf.appendChild(item);
+  }
+}
+
+function closeNearbyShelf() {
+  nearbyOpen = false;
+  hide(nearbyShelf);
+}
+
+playerNearby.addEventListener('click', async () => {
+  if (nearbyOpen) {
+    closeNearbyShelf();
+    return;
+  }
+  if (!latestViewModel?.artistName) return;
+  const seedArtist = latestViewModel.artistName.split(',')[0].trim();
+  const shelf = await getRecordsNearby(seedArtist);
+  if (shelf.length === 0) return; // Deezer unreachable or nothing resolved: no error state.
+  renderNearbyShelf(shelf);
+  nearbyOpen = true;
+  show(nearbyShelf);
+});
+
 async function initPlaybackForApp() {
   try {
     await playback.initPlayback({
@@ -701,8 +860,12 @@ async function enterApp({ forceRefresh = false } = {}) {
       pool = await getAlbumPool();
     }
     showScreen('app');
+    userWallPool = pool;
+    activeBagId = null;
     renderWallDom(pool);
+    setWallPrompt(pool);
     announce(`Your wall. ${pool.length} records. Tap one to drop the needle.`);
+    renderBagRail();
     initPlaybackForApp();
   } catch (err) {
     if (err instanceof SparseHistoryError) {

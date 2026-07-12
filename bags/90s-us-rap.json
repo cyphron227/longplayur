@@ -1,0 +1,28 @@
+{
+  "name": "90s US rap",
+  "blurb": "East coast boom bap, West coast G-funk, and everything the decade argued about in between.",
+  "albums": [
+    { "title": "Illmatic", "artist": "Nas" },
+    { "title": "The Chronic", "artist": "Dr. Dre" },
+    { "title": "Ready to Die", "artist": "The Notorious B.I.G." },
+    { "title": "Doggystyle", "artist": "Snoop Dogg" },
+    { "title": "Enter the Wu-Tang (36 Chambers)", "artist": "Wu-Tang Clan" },
+    { "title": "Reasonable Doubt", "artist": "Jay-Z" },
+    { "title": "The Low End Theory", "artist": "A Tribe Called Quest" },
+    { "title": "Midnight Marauders", "artist": "A Tribe Called Quest" },
+    { "title": "Liquid Swords", "artist": "GZA" },
+    { "title": "Only Built 4 Cuban Linx...", "artist": "Raekwon" },
+    { "title": "It Was Written", "artist": "Nas" },
+    { "title": "All Eyez on Me", "artist": "2Pac" },
+    { "title": "Me Against the World", "artist": "2Pac" },
+    { "title": "Life After Death", "artist": "The Notorious B.I.G." },
+    { "title": "Black Sunday", "artist": "Cypress Hill" },
+    { "title": "Fear of a Black Planet", "artist": "Public Enemy" },
+    { "title": "De La Soul Is Dead", "artist": "De La Soul" },
+    { "title": "Mama Said Knock You Out", "artist": "LL Cool J" },
+    { "title": "The Infamous", "artist": "Mobb Deep" },
+    { "title": "Ironman", "artist": "Ghostface Killah" },
+    { "title": "Aquemini", "artist": "OutKast" },
+    { "title": "ATLiens", "artist": "OutKast" }
+  ]
+}

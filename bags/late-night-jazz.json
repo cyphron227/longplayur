@@ -1,0 +1,25 @@
+{
+  "name": "Late-night jazz",
+  "blurb": "Low light, brushed drums, and no reason to be anywhere else.",
+  "albums": [
+    { "title": "Kind of Blue", "artist": "Miles Davis" },
+    { "title": "In a Silent Way", "artist": "Miles Davis" },
+    { "title": "A Love Supreme", "artist": "John Coltrane" },
+    { "title": "Blue Train", "artist": "John Coltrane" },
+    { "title": "Ballads", "artist": "John Coltrane" },
+    { "title": "Moanin'", "artist": "Art Blakey and the Jazz Messengers" },
+    { "title": "Waltz for Debby", "artist": "Bill Evans" },
+    { "title": "Sunday at the Village Vanguard", "artist": "Bill Evans" },
+    { "title": "Getz/Gilberto", "artist": "Stan Getz" },
+    { "title": "Song for My Father", "artist": "Horace Silver" },
+    { "title": "Maiden Voyage", "artist": "Herbie Hancock" },
+    { "title": "Speak No Evil", "artist": "Wayne Shorter" },
+    { "title": "Somethin' Else", "artist": "Cannonball Adderley" },
+    { "title": "Mingus Ah Um", "artist": "Charles Mingus" },
+    { "title": "Time Out", "artist": "The Dave Brubeck Quartet" },
+    { "title": "Saxophone Colossus", "artist": "Sonny Rollins" },
+    { "title": "Chet Baker Sings", "artist": "Chet Baker" },
+    { "title": "Night Train", "artist": "Oscar Peterson Trio" },
+    { "title": "The Köln Concert", "artist": "Keith Jarrett" }
+  ]
+}

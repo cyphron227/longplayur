@@ -63,6 +63,62 @@ shelf"): `wallApi.zoomToFitAll()` still exists and still fires
 automatically from `runoutGroove()`'s atEdge case, but there is no longer
 a manual trigger for it in the UI.
 
+## Record bags (INCREMENT-01 Phase 2): full remount instead of an in-place pool swap
+
+DomeGallery (see above) has no API to change its `images` set on a mounted
+instance; the only way to show a different pool is to unmount the React
+root and mount a fresh one. `js/wall.js`'s `initWall()` return value gained
+a `destroy()` method (clears its thread-position poll interval and calls
+the compiled component's own `unmount()`); `js/main.js`'s `switchWallPool()`
+fades `#wall-container` to 0 opacity, tears the old mount down, mounts the
+new pool, then fades back in. This reads as a crossfade even though
+structurally it is closer to "hide, replace, reveal" -- there is no true
+cross-dissolve between the two pools' tile positions, since the new pool's
+layout is unrelated to the old one's.
+
+**"Camera snaps to whole rows and columns so no cover is ever cropped, at
+any viewport" (DESIGN-SPEC §2a) is treated as already satisfied**, not
+separately implemented: DomeGallery's own `fit`/`minRadius` sizing plus
+`maxVerticalRotationDeg: 0` (locked, see above) already keep a fixed 5-row
+band fully within the viewport with no vertical scroll possible, on any
+bag or the user's own wall. A bespoke row/column-snapping carousel was not
+built on top of it, since that would mean substantially reworking the
+forked component's drag/inertia model without the ability to test it in a
+real browser in this environment.
+
+Any currently-playing "now playing" hero cover is retired (not settled)
+before a bag switch, via the same `retireDisc()` used on sign-out, since
+its cell may not exist at all in the pool being switched to. Playback
+itself is untouched: only the visual disc/overlay is cleared, and the
+album keeps playing through Spotify exactly as before.
+
+## Records nearby (INCREMENT-01 Phase 2): needle-dropping an album that isn't on the current wall
+
+Both Records nearby (Deezer-sourced) and record-bag albums can be
+needle-dropped while the clicked album's cell does not exist on whatever
+pool is currently mounted on the Wall (nearby albums are never part of any
+mounted pool at all). `js/ceremony.js`'s `needleDrop()` originally
+returned early with no visible effect at all if `wallApi.getCellRect()`
+came back null, since the ceremony's cover animates from a real cell's
+screen position. It now falls back to a small rect at the viewport centre
+in that case, so the full ceremony still runs (disc, held breath, crackle)
+rather than the button silently doing nothing. Everything downstream
+(`recedeAllExcept`, `panToAlbum`, `enterRestingState`, `setCurrent`,
+`markPlayed`, `getNeighbors`) already degraded gracefully for an
+albumId absent from `wall.js`'s internal `byId` map before this change;
+the missing-cellRect case was the only actual gap. One consequence: an
+album finished this way always reports `atEdge: true` at runout (its
+`getNeighbors()` is empty, since it is not part of the ranked pool), so
+the wall zooms out to the full shelf afterwards rather than offering
+physical-neighbour choices, which was judged the more sensible fallback
+than picking arbitrary unrelated neighbours.
+
+The CSP's `script-src` and `connect-src` were extended to include
+`https://api.deezer.com` (needed for both the plain `fetch` attempt and
+the `<script src=...>` JSONP fallback). No Deezer-hosted images are ever
+used: album art always comes from the Spotify album the Deezer result
+resolves to, so `img-src` did not need to change.
+
 ## The Wall is now the real react-bits DomeGallery, not the flat spiral grid in DESIGN-SPEC §2
 
 Superseded by explicit direction from Yaron after initial ship, in two

@@ -1,0 +1,24 @@
+{
+  "name": "Motown",
+  "blurb": "Hitsville U.S.A., studio A, the sound of young America.",
+  "albums": [
+    { "title": "Where Did Our Love Go", "artist": "The Supremes" },
+    { "title": "I Hear a Symphony", "artist": "The Supremes" },
+    { "title": "What's Going On", "artist": "Marvin Gaye" },
+    { "title": "Here, My Dear", "artist": "Marvin Gaye" },
+    { "title": "Talking Book", "artist": "Stevie Wonder" },
+    { "title": "Innervisions", "artist": "Stevie Wonder" },
+    { "title": "Songs in the Key of Life", "artist": "Stevie Wonder" },
+    { "title": "Hotter than July", "artist": "Stevie Wonder" },
+    { "title": "Cloud Nine", "artist": "The Temptations" },
+    { "title": "All Directions", "artist": "The Temptations" },
+    { "title": "Psychedelic Shack", "artist": "The Temptations" },
+    { "title": "ABC", "artist": "The Jackson 5" },
+    { "title": "Third Album", "artist": "The Jackson 5" },
+    { "title": "Going to a Go-Go", "artist": "Smokey Robinson and the Miracles" },
+    { "title": "Diana Ross", "artist": "Diana Ross" },
+    { "title": "Dance Party", "artist": "Martha and the Vandellas" },
+    { "title": "Reach Out", "artist": "The Four Tops" },
+    { "title": "Everybody Needs Love", "artist": "Gladys Knight and the Pips" }
+  ]
+}

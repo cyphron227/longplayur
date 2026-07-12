@@ -1,0 +1,24 @@
+{
+  "name": "Britpop",
+  "blurb": "Guitars, terraces, and a fair amount of shouting about class.",
+  "albums": [
+    { "title": "Definitely Maybe", "artist": "Oasis" },
+    { "title": "(What's the Story) Morning Glory?", "artist": "Oasis" },
+    { "title": "Parklife", "artist": "Blur" },
+    { "title": "The Great Escape", "artist": "Blur" },
+    { "title": "Blur", "artist": "Blur" },
+    { "title": "Different Class", "artist": "Pulp" },
+    { "title": "His 'n' Hers", "artist": "Pulp" },
+    { "title": "Elastica", "artist": "Elastica" },
+    { "title": "I Should Coco", "artist": "Supergrass" },
+    { "title": "In It for the Money", "artist": "Supergrass" },
+    { "title": "Urban Hymns", "artist": "The Verve" },
+    { "title": "A Northern Soul", "artist": "The Verve" },
+    { "title": "Moseley Shoals", "artist": "Ocean Colour Scene" },
+    { "title": "Dog Man Star", "artist": "Suede" },
+    { "title": "Suede", "artist": "Suede" },
+    { "title": "Coming Up", "artist": "Suede" },
+    { "title": "Tellin' Stories", "artist": "The Charlatans" },
+    { "title": "Some Friendly", "artist": "The Charlatans" }
+  ]
+}

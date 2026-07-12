@@ -431,7 +431,45 @@ button { cursor: pointer; }
    the gallery lays itself out and injects its own <style> tag, so this
    just needs to fill the viewport. State classes below (is-played etc.)
    are applied by wall.js onto the gallery's own .item__image tiles. */
-#wall-container { position: absolute; inset: 0; }
+#wall-container {
+  position: absolute;
+  inset: 0;
+  opacity: 1;
+  transition: opacity var(--dur-breath) var(--ease);
+}
+/* Bag switch crossfade (DESIGN-SPEC §2a): the mount is torn down and
+   remounted with the new pool while this is at 0, see switchWallPool()
+   in js/main.js. */
+#wall-container.is-fading { opacity: 0; }
+
+/* -------------------- Bag rail -------------------- */
+
+/* [hidden] override needed: display:flex below has equal CSS specificity to
+   the UA stylesheet's [hidden]{display:none} and author-origin wins ties,
+   so without this the rail would flash visible-but-empty before the bag
+   manifest loads (same underlying issue as .screen[hidden] above). */
+.bag-rail[hidden] { display: none; }
+.bag-rail {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 10px 20px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.bag-chip {
+  flex: 0 0 auto;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--bone-dim);
+  padding: 6px 10px;
+  min-height: 32px;
+  white-space: nowrap;
+  transition: color var(--dur-touch) var(--ease), border-color var(--dur-touch) var(--ease);
+}
+.bag-chip:hover { color: var(--bone); border-color: var(--bone-dim); }
+.bag-chip[aria-pressed="true"] { color: var(--obsidian); background: var(--amber); border-color: var(--amber); }
 
 .item__image.is-current { opacity: 1; }
 .item__image.is-played { box-shadow: 0 0 0 2px var(--amber); }
@@ -557,6 +595,38 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
      with fixed durations, not this app's --dur-* tokens, so they do not
      collapse under reduced motion. Accepted trade-off of using the
      upstream component largely as-is; see KNOWN-DEVIATIONS.md. */
+}
+
+/* -------------------- Records nearby -------------------- */
+
+.nearby-shelf[hidden] { display: none; }
+.nearby-shelf {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+  padding: 12px 20px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-top: 1px solid var(--line);
+  background: var(--obsidian-2);
+}
+.nearby-item {
+  flex: 0 0 auto;
+  width: 96px;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+}
+.nearby-item img { width: 96px; height: 96px; border-radius: 2px; object-fit: cover; display: block; }
+.nearby-item:hover img { filter: brightness(1.08); }
+.nearby-caption {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: normal;
 }
 
 /* -------------------- Player bar -------------------- */

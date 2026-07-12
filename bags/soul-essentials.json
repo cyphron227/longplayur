@@ -1,0 +1,25 @@
+{
+  "name": "Soul essentials",
+  "blurb": "The records that taught everyone else how to sing like they meant it.",
+  "albums": [
+    { "title": "What's Going On", "artist": "Marvin Gaye" },
+    { "title": "Let's Get It On", "artist": "Marvin Gaye" },
+    { "title": "Innervisions", "artist": "Stevie Wonder" },
+    { "title": "Songs in the Key of Life", "artist": "Stevie Wonder" },
+    { "title": "Talking Book", "artist": "Stevie Wonder" },
+    { "title": "I Never Loved a Man the Way I Love You", "artist": "Aretha Franklin" },
+    { "title": "Lady Soul", "artist": "Aretha Franklin" },
+    { "title": "Hot Buttered Soul", "artist": "Isaac Hayes" },
+    { "title": "There's a Riot Goin' On", "artist": "Sly and the Family Stone" },
+    { "title": "Curtis", "artist": "Curtis Mayfield" },
+    { "title": "Superfly", "artist": "Curtis Mayfield" },
+    { "title": "Call Me", "artist": "Al Green" },
+    { "title": "Back to Black", "artist": "Amy Winehouse" },
+    { "title": "Voodoo", "artist": "D'Angelo" },
+    { "title": "Brown Sugar", "artist": "D'Angelo" },
+    { "title": "Baduizm", "artist": "Erykah Badu" },
+    { "title": "Mama's Gun", "artist": "Erykah Badu" },
+    { "title": "The Miseducation of Lauryn Hill", "artist": "Lauryn Hill" },
+    { "title": "Young, Gifted and Black", "artist": "Aretha Franklin" }
+  ]
+}

@@ -346,8 +346,16 @@ export async function needleDrop(entry, ctx) {
   }
 
   const layer = ensureLayer(wallViewportEl);
-  const cellRect = wallApi.getCellRect(entry.id);
-  if (!cellRect) return;
+  // Records nearby (PRD F10) and bag-rail albums can be needle-dropped while
+  // they are not the currently-mounted wall's pool, so there may be no cell
+  // to animate from; fall back to a small rect at the viewport centre so the
+  // ceremony still runs in full rather than silently doing nothing.
+  const cellRect = wallApi.getCellRect(entry.id) || {
+    x: wallViewportEl.clientWidth / 2 - 60,
+    y: wallViewportEl.clientHeight / 2 - 60,
+    width: 120,
+    height: 120,
+  };
 
   wallApi.recedeAllExcept(entry.id);
   wallApi.panToAlbum(entry.id, { animate: true });
