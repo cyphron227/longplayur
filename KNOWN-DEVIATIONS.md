@@ -165,6 +165,30 @@ takes an explicit `mode` ('artist' | 'genre') argument, chosen via a new
 Artist/Genre toggle next to the search field (`main.js`'s `searchMode`
 state, defaulting to 'artist'), rather than guessed.
 
+With the mode no longer guessed, a fourth issue surfaced -- genuine genre
+terms still came back empty even in explicit genre mode: "jungle" and
+"britpop" both returned nothing, confirmed live. Spotify's exact
+`genre:"..."` tag filter turns out to be too sparse for a lot of real
+genre vocabulary on its own; it either has the tag or it doesn't, with no
+fuzziness. `searchByGenre()` was rewritten into a "soft search" combining
+three sources instead of relying on the tag filter alone: (1) the existing
+exact `genre:"..."` tag search, kept since it sometimes works; (2) a
+plain free-text Spotify artist search, kept only where the returned
+artist's own `.genres` array softly overlaps the query as a substring in
+either direction; (3) Deezer's own public genre taxonomy (`GET /genre`
+then `GET /genre/{id}/artists`) -- the same keyless API "Records nearby"
+already uses -- whose coarser buckets (e.g. "Rap/Hip Hop" covers "uk hip
+hop", "Soul & Funk" covers "jungle"-adjacent soul terms) catch genre words
+Spotify's own tag search misses entirely, with each Deezer artist name
+resolved back to a real Spotify artist via the same search call. The
+three sources are deduplicated by artist ID and ranked in that order
+(exact tag first), capped at 15 artists total before any album data is
+fetched, since each artist costs up to 2 paginated requests. The shared
+Deezer fetch-with-JSONP-fallback logic was pulled out of `nearby.js` into
+a new `js/deezer.js` module so both features use the same tested client
+rather than duplicating it. `POOL_TARGET` was also lowered from 100 to 40
+per explicit request, applying to both artist and genre mode.
+
 ## Liner notes removed, native share added (INCREMENT-01 Phase 3)
 
 Liner notes are gone entirely: `journal.js`'s `setLinerNote()` export, the

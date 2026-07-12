@@ -7,8 +7,23 @@
 //
 // Only albums, and EPs of 6 or more tracks, are kept: singles shorter than
 // that and compilations are filtered out, per explicit request.
+//
+// Genre mode is a "soft" search combining three sources, because Spotify's
+// exact genre:"..." tag filter alone is too brittle for a lot of real genre
+// terms in practice (confirmed live: "jungle" and "britpop" both returned
+// nothing, while "soul" returned the band Soul II Soul instead of soul
+// records). The three sources, most to least confident:
+//   1. Spotify's exact genre:"..." tag search (kept -- sometimes works).
+//   2. A plain free-text Spotify artist search, kept only where the artist's
+//      own .genres tags softly match the query (substring either direction).
+//   3. Deezer's own, coarser genre taxonomy (e.g. "Soul & Funk", "Rap/Hip
+//      Hop") -- the same public, keyless API "Records nearby" already uses
+//      -- whose member artists are resolved back to Spotify by name.
+// Results are deduplicated and ranked in that order, then capped before
+// fetching any album data (each artist costs up to 2 paginated requests).
 
 import { apiFetch } from './spotify.js';
+import { deezerFetch } from './deezer.js';
 
 const MAX_ARTISTS_GENRE = 10;
 // GET /artists/{id}/albums caps `limit` at 10 (not 50, as most other list
@@ -18,7 +33,12 @@ const MAX_ARTISTS_GENRE = 10;
 // much latency, since both requests for a given artist fire in parallel.
 const ALBUMS_PAGE_LIMIT = 10;
 const ALBUMS_PAGES_PER_ARTIST = 2;
-const POOL_TARGET = 100;
+const POOL_TARGET = 40;
+// Cap on how many candidate artists (across all three genre sources
+// combined) actually get their discographies fetched, so a broad soft
+// match doesn't balloon into dozens of parallel album requests.
+const MAX_ARTISTS_FOR_ALBUMS = 15;
+const DEEZER_GENRE_ARTIST_LIMIT = 10;
 
 function pickImage(images) {
   if (!Array.isArray(images) || images.length === 0) return null;
@@ -47,6 +67,22 @@ function toEntry(album, rank) {
     releaseDate: album.release_date || null,
     rank,
   };
+}
+
+function normalize(s) {
+  return (s || '').trim().toLowerCase();
+}
+
+/** True if the query and one of the artist's own genre tags overlap as
+ * substrings in either direction ("uk hip hop" query vs "uk hip hop" tag,
+ * or a broader tag like "hip hop" containing a narrower query). */
+function genreSoftMatches(genres, query) {
+  const q = normalize(query);
+  if (!q) return false;
+  return (genres || []).some((g) => {
+    const gg = normalize(g);
+    return gg && (gg.includes(q) || q.includes(gg));
+  });
 }
 
 /** @returns {Promise<{items: Array, failed: boolean}>} failed distinguishes
@@ -83,6 +119,58 @@ async function searchArtists(q, limit) {
   }
 }
 
+// Deezer's genre list is a small, static taxonomy (a few dozen broad
+// buckets) -- fetched once and cached for the tab's lifetime, same pattern
+// as ceremony.js's artistGenreCache.
+let deezerGenreListPromise = null;
+function getDeezerGenreList() {
+  if (!deezerGenreListPromise) {
+    deezerGenreListPromise = deezerFetch('/genre').catch(() => null);
+  }
+  return deezerGenreListPromise;
+}
+
+/** Finds the closest-matching Deezer genre bucket for the query, pulls its
+ * member artists, and resolves each one back to a real Spotify artist by
+ * name. Deezer's own genre names are coarse ("Soul & Funk", "Rap/Hip Hop"),
+ * so this catches terms Spotify's exact tag search misses entirely.
+ * @returns {Promise<{items: Array, failed: boolean}>} */
+async function deezerGenreArtists(query) {
+  try {
+    const genreList = await getDeezerGenreList();
+    const genres = (genreList?.data || []).filter((g) => g && g.id !== 0); // id 0 is Deezer's "All genres" bucket.
+    if (genres.length === 0) return { items: [], failed: genreList === null };
+
+    const q = normalize(query);
+    const matches = genres.filter((g) => {
+      const name = normalize(g.name);
+      return name && (name === q || name.includes(q) || q.includes(name));
+    });
+    if (matches.length === 0) return { items: [], failed: false };
+
+    // Prefer the bucket whose name length is closest to the query -- the
+    // least "extra" unrelated genre swept in alongside the match.
+    matches.sort((a, b) => Math.abs(a.name.length - q.length) - Math.abs(b.name.length - q.length));
+    const best = matches[0];
+
+    const artistsData = await deezerFetch(`/genre/${best.id}/artists`);
+    const deezerArtists = (artistsData?.data || []).slice(0, DEEZER_GENRE_ARTIST_LIMIT);
+    if (deezerArtists.length === 0) return { items: [], failed: false };
+
+    const resolved = await Promise.all(
+      deezerArtists.map((da) =>
+        searchArtists(da.name, 1)
+          .then((r) => r.items?.[0] || null)
+          .catch(() => null)
+      )
+    );
+    return { items: resolved.filter(Boolean), failed: false };
+  } catch (err) {
+    console.error('[search] Deezer genre lookup failed:', err);
+    return { items: [], failed: true };
+  }
+}
+
 function poolFromAlbumLists(albumLists) {
   const seen = new Set();
   const pool = [];
@@ -105,14 +193,42 @@ async function searchByArtist(query) {
   return { pool: poolFromAlbumLists([albums.items]), failed: albums.failed };
 }
 
-/** Several artists tagged with the genre, each contributing a few albums,
- * forming a wall for that genre rather than any one artist's catalogue. */
+/** Several artists softly matched to the genre from three sources (exact
+ * Spotify tag, free-text Spotify search cross-checked against the artist's
+ * own genre tags, and Deezer's broader taxonomy), each contributing a few
+ * albums, forming a wall for that genre rather than any one artist's
+ * catalogue. */
 async function searchByGenre(query) {
-  const artists = await searchArtists(`genre:"${query}"`, MAX_ARTISTS_GENRE);
-  if (artists.failed) return { pool: [], failed: true };
-  if (artists.items.length === 0) return { pool: [], failed: false };
+  const [tagResult, freeResult, deezerResult] = await Promise.all([
+    searchArtists(`genre:"${query}"`, MAX_ARTISTS_GENRE),
+    searchArtists(query, MAX_ARTISTS_GENRE),
+    deezerGenreArtists(query),
+  ]);
 
-  const albumLists = await Promise.all(artists.items.map((a) => albumsForArtist(a.id)));
+  // Rank 0 = exact tag match (most confident), 1 = free-text softly matched
+  // against its own genre tags, 2 = resolved via Deezer's broader taxonomy.
+  // A Map preserves insertion order, so inserting in rank order also keeps
+  // the final candidate list rank-sorted with no separate sort step.
+  const candidates = new Map();
+  tagResult.items.forEach((a) => {
+    if (!candidates.has(a.id)) candidates.set(a.id, a);
+  });
+  freeResult.items
+    .filter((a) => genreSoftMatches(a.genres, query))
+    .forEach((a) => {
+      if (!candidates.has(a.id)) candidates.set(a.id, a);
+    });
+  deezerResult.items.forEach((a) => {
+    if (!candidates.has(a.id)) candidates.set(a.id, a);
+  });
+
+  if (candidates.size === 0) {
+    const allFailed = tagResult.failed && freeResult.failed && deezerResult.failed;
+    return { pool: [], failed: allFailed };
+  }
+
+  const artistList = Array.from(candidates.values()).slice(0, MAX_ARTISTS_FOR_ALBUMS);
+  const albumLists = await Promise.all(artistList.map((a) => albumsForArtist(a.id)));
   const anyFailed = albumLists.every((r) => r.failed); // every request failing, not just one artist coming up short.
   return { pool: poolFromAlbumLists(albumLists.map((r) => r.items)), failed: anyFailed };
 }
@@ -127,9 +243,9 @@ async function searchByGenre(query) {
  *   never fell through to genre mode in practice. The caller now asks for
  *   one explicitly (see the mode toggle next to the search field).
  * @returns {Promise<{pool: Array, failed: boolean}>} pool is pool-shaped
- *   entries (same shape as albums.js/bags.js produce). failed means the
- *   Spotify requests themselves broke (check the browser console for the
- *   logged error) -- distinct from a genuine, successful zero-result search.
+ *   entries (same shape as albums.js/bags.js produce). failed means every
+ *   underlying request broke (check the browser console for the logged
+ *   error) -- distinct from a genuine, successful zero-result search.
  */
 export async function searchAlbums(query, mode) {
   const trimmed = query.trim();

@@ -4,72 +4,18 @@
 // own top album), then mapped back to real Spotify album IDs via search so
 // the shelf can needle-drop like anything else on the Wall.
 //
-// Deezer does not send CORS headers on most endpoints, so a plain fetch is
-// tried first (works when it works) and a JSONP fallback is used only if
-// that fails, per Docs/CLAUDE.md's security rules: a randomised callback
-// name, the injected <script> removed after use, and a 10s timeout. If
-// Deezer cannot be reached at all, this resolves to an empty list rather
-// than throwing, so the caller can hide the shelf with no error state
-// (PRD F10 / edge case 10). See KNOWN-DEVIATIONS.md.
+// deezer.js handles the actual Deezer requests (plain fetch first, JSONP
+// fallback) -- shared with search.js's genre browsing. If Deezer cannot be
+// reached at all, this resolves to an empty list rather than throwing, so
+// the caller can hide the shelf with no error state (PRD F10 / edge case
+// 10). See KNOWN-DEVIATIONS.md.
 
 import { apiFetch } from './spotify.js';
+import { deezerFetch } from './deezer.js';
 
-const DEEZER_BASE = 'https://api.deezer.com';
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, PRD F10.
 const LS_CACHE_PREFIX = 'lp_nearby_';
-const JSONP_TIMEOUT_MS = 10000;
 const SHELF_SIZE = 6;
-
-function jsonpFetch(url) {
-  return new Promise((resolve, reject) => {
-    const callbackName = `lpJsonp${Date.now()}${Math.random().toString(36).slice(2)}`;
-    const script = document.createElement('script');
-    let settled = false;
-
-    const cleanup = () => {
-      delete window[callbackName];
-      script.remove();
-    };
-
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new Error('jsonp_timeout'));
-    }, JSONP_TIMEOUT_MS);
-
-    window[callbackName] = (data) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      cleanup();
-      resolve(data);
-    };
-
-    script.onerror = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      cleanup();
-      reject(new Error('jsonp_script_error'));
-    };
-
-    const sep = url.includes('?') ? '&' : '?';
-    script.src = `${url}${sep}output=jsonp&callback=${callbackName}`;
-    document.head.appendChild(script);
-  });
-}
-
-async function deezerFetch(path) {
-  const url = `${DEEZER_BASE}${path}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`deezer_${res.status}`);
-    return await res.json();
-  } catch {
-    return jsonpFetch(url);
-  }
-}
 
 function pickImage(images) {
   if (!Array.isArray(images) || images.length === 0) return null;

@@ -90,12 +90,14 @@ state if Deezer cannot be reached.
 
 A search field above the bag rail takes a free-text term plus an
 explicit Artist/Genre toggle. Artist mode pulls that one artist's own
-discography; genre mode finds several artists tagged with that genre and
-pulls a few albums from each. Only full albums and EPs of 6 or more
-tracks are shown; singles and compilations are filtered out. A result
-replaces the Wall the same way a record bag does, with a dismissible chip
-to get back
-to your own wall.
+discography. Genre mode is a soft search: it combines Spotify's own exact
+genre tag search, a free-text Spotify search cross-checked against each
+artist's own genre tags, and Deezer's broader public genre taxonomy (the
+same free source Records nearby uses) so real-world genre terms Spotify's
+exact tag filter misses still turn up something. Only full albums and EPs
+of 6 or more tracks are shown; singles and compilations are filtered out.
+A result replaces the Wall the same way a record bag does, with a
+dismissible chip to get back to your own wall.
 
 ## Privacy
 
@@ -145,8 +147,9 @@ js/
   spotify.js              API client, 429 handling
   albums.js               pool building, scoring, caching
   bags.js                 record bag manifest + lazy Spotify resolution
+  deezer.js               shared Deezer public API client (fetch + JSONP fallback)
   nearby.js               Records nearby, sourced from Deezer's public API
-  search.js               search by artist or genre (Spotify's own API)
+  search.js               search by artist or genre (Spotify + Deezer)
   wall.js                 bridges the dome gallery to the app's needle-drop/journal API
   dome-gallery.bundle.js  build output of gallery/ (React dome gallery), do not hand-edit
   playback.js             Web Playback SDK + Spotify Connect fallback, output switcher
