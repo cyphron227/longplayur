@@ -44,7 +44,7 @@ Vercel needs no build command and no environment variables; it is a static site.
 
 ## First-run setup
 
-1. Copy the redirect URI Longplayur shows you (it is `location.origin + location.pathname`, so it changes if you move the deployment), then log in and create a Spotify app at the [developer dashboard](https://developer.spotify.com/dashboard). Any name and description will do. This step needs a computer; on a phone, Longplayur offers a copyable link to send the page to one.
+1. Copy the redirect URI Longplayur shows you (it is `location.origin + location.pathname`, so it changes if you move the deployment), then log in and create a Spotify app at the [developer dashboard](https://developer.spotify.com/dashboard). Any name and description will do. This step needs a computer: the dashboard is not built for small screens.
 2. Add the redirect URI you copied to the app's settings. It must match exactly.
 3. Under your app's User Management, add your own Spotify account, since development-mode apps are capped at 5 allowlisted users, then paste the client ID into Longplayur and press Connect Spotify.
 
@@ -61,15 +61,14 @@ Longplayur uses vinyl language throughout the interface:
 | Runout groove | The end of an album |
 | A session | A listening session |
 | Past sessions | Your journal of past sessions |
-| A record bag | A curated album collection, chosen from the Crates screen |
-| Crates | The screen for choosing what's on the Wall -- your own pool, a record bag, a playlist, or a search |
+| A record bag | A curated album collection, chosen from the Record bags screen |
 | Records nearby | A shelf of related albums for whatever is currently playing |
 | The Wall | The full zoomed-out view of your album history |
 | New session | Starting a fresh listening session |
 
-## Crates: record bags, playlists, and search
+## Record bags, playlists, and search
 
-A "Crates" tab sits alongside Now Playing, Past sessions, and Setup. It's
+A "Record bags" tab sits alongside Now Playing, Past sessions, and Setup. It's
 where you choose what's on the Wall: a "Your Record Bag" button always
 returns to your own pool; below it, seed record bags and your own Spotify
 playlists each appear as cover-art cards, and a search field lets you pull
@@ -101,7 +100,7 @@ state if Deezer cannot be reached.
 
 ## Search
 
-The search field on the Crates screen takes a free-text term plus an
+The search field on the Record bags screen takes a free-text term plus an
 explicit Artist/Genre toggle. Artist mode pulls that one artist's own
 discography. Genre mode is a soft search: it combines Spotify's own exact
 genre tag search, a free-text Spotify search cross-checked against each

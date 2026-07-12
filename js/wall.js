@@ -29,19 +29,32 @@ function segmentsForPool(imageCount) {
   return Math.min(MAX_DOME_SEGMENTS, Math.max(MIN_DOME_SEGMENTS, Math.ceil(imageCount / DOME_ROWS_PER_COLUMN)));
 }
 
-// DomeGallery computes its own radius from the viewport (basis * fit, ~300
-// to 350px on a typical phone width) but then clamps it up to `minRadius`
-// if that basis-driven value is smaller -- mount.tsx's default (900px) is
-// tuned for desktop, so on a phone it was overriding the naturally smaller
-// radius upward to 900px regardless, forcing much bigger tiles than the
-// screen actually calls for. Below the same 480px phone breakpoint
-// styles.css already uses, use a floor low enough to let the naturally
-// computed radius through instead of overriding it up to the desktop one.
+// DomeGallery's own CSS derives each tile's on-screen width as
+// (radius * PI) / segments (--item-width in DomeGallery.css). A *fixed*
+// minRadius, independent of segments, means tile size is inversely
+// proportional to segments -- so once segments started varying with pool
+// size (above), a small record bag (few segments) rendered its tiles
+// enormous (confirmed live: "huge, only 2 on screen"), while a large pool
+// like the user's own wall (many segments) rendered them small. Both were
+// the same underlying bug. Radius now scales WITH segments, solving for
+// the radius that keeps each tile's width close to a fixed target
+// regardless of how many segments the pool needed, so record bags, search
+// results, and the full wall all render comparably sized tiles: smaller
+// deliberately on phone, matching the two explicit "too big" / "too
+// small" corrections already made on that side.
 const PHONE_MAX_WIDTH_PX = 480;
-const PHONE_MIN_RADIUS = 280;
-const DESKTOP_MIN_RADIUS = 900;
-function domeMinRadius() {
-  return window.innerWidth <= PHONE_MAX_WIDTH_PX ? PHONE_MIN_RADIUS : DESKTOP_MIN_RADIUS;
+const DESKTOP_TARGET_TILE_PX = 90; // close to the original fixed setup's own effective tile size (900px radius / 34 segments * PI =~ 83px), which was never reported as wrong on desktop.
+const PHONE_TARGET_TILE_PX = 55;
+// Purely defensive against a pathological near-zero radius; MIN_DOME_SEGMENTS
+// already keeps the formula-driven value sane (70px on the smallest phone
+// case) well above this, so this floor should never actually bind.
+const ABSOLUTE_MIN_RADIUS = 50;
+const ABSOLUTE_MAX_RADIUS = 1000; // ceiling matching the original desktop default's order of magnitude.
+
+function domeRadiusForSegments(segments) {
+  const targetTilePx = window.innerWidth <= PHONE_MAX_WIDTH_PX ? PHONE_TARGET_TILE_PX : DESKTOP_TARGET_TILE_PX;
+  const solvedRadius = Math.round((targetTilePx * segments) / Math.PI);
+  return Math.min(ABSOLUTE_MAX_RADIUS, Math.max(ABSOLUTE_MIN_RADIUS, solvedRadius));
 }
 
 /**
@@ -65,10 +78,11 @@ export function initWall(viewportEl, containerEl, pool, handlers) {
     .filter((entry) => entry.image)
     .map((entry) => ({ src: entry.image, alt: `${entry.name} by ${entry.artist}` }));
 
+  const domeSegments = segmentsForPool(images.length);
   const mount = mountDomeGallery(containerEl, {
     images,
-    segments: segmentsForPool(images.length),
-    minRadius: domeMinRadius(),
+    segments: domeSegments,
+    minRadius: domeRadiusForSegments(domeSegments),
     onImageClick: (src) => {
       const entry = bySrc.get(src);
       if (!entry) return;

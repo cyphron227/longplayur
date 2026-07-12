@@ -879,6 +879,11 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   /* No room next to the progress bar on a phone; the times matter more. */
   .player-device { display: none; }
 
+  /* Less chrome above the Wall so more of a short phone viewport goes to
+     the gallery itself. */
+  .crates-btn { margin-top: 6px; padding: 5px 12px; min-height: 28px; }
+  .wall-prompt { padding: 6px 16px; font-size: 14px; }
+
   /* Title on its own line if the actions don't fit beside it (see the
      header's flex-wrap above); this is the fallback, not the common case. */
   .past-sessions-header h1 { font-size: 20px; }
@@ -893,6 +898,21 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
     bottom: 0;
     z-index: 40;
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  /* Taking the player bar out of flex flow above means #wall-viewport's
+     own flex:1 1 auto no longer reserves room for it, so it was growing
+     to the full remaining height including the area now hidden behind the
+     fixed bar. DomeGallery centres its content within whatever height it
+     measures, so it was framing itself for a taller viewport than is
+     actually visible, leaving a visible gap above the dome. A bottom
+     margin -- not padding, which the gallery's own inset:0 mount would
+     ignore -- genuinely shrinks the flex item itself, so DomeGallery
+     measures (and centres within) only the space that is actually visible
+     above the player bar. ~140px matches the player bar's own height
+     (art row + controls row + padding), already used the same way by
+     .crackle-hint's positioning below. */
+  .wall-viewport {
+    margin-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
   }
   .crackle-hint {
     position: fixed;

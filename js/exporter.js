@@ -122,7 +122,7 @@ function drawFrame(ctx, deadwaxText) {
   ctx.fillStyle = '#DCD7CB';
   ctx.font = '400 56px "DM Serif Display"';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText('A session, played in full.', MARGIN, MARGIN + 56);
+  ctx.fillText('Albums, played in full.', MARGIN, MARGIN + 56);
 
   const hairlineY = CANVAS_H - MARGIN - 40;
   ctx.strokeStyle = 'rgba(220,215,203,0.14)';

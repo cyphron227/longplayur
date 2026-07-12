@@ -843,3 +843,58 @@ same live round of testing:
   than left to render oddly at the end of whichever row happens to be
   last; `Docs/DESIGN-SPEC.md`'s Past sessions description was updated to
   match.
+
+## Dome tile size: the real fix (segments-aware radius) (2026-07-12)
+
+The previous entry's `minRadius` correction (a fixed 550px floor on
+phone) was itself wrong, confirmed live almost immediately: record bags
+other than the user's own pool started rendering "huge, only 2 on
+screen." Root cause was a coupling between that entry's two changes that
+went unnoticed until live testing on a genuinely small pool: DomeGallery
+derives each tile's on-screen width as `(radius * PI) / segments`
+(`--item-width`, `DomeGallery.css`). `segmentsForPool()` correctly varies
+`segments` with pool size (fewer segments for a small record bag), but
+`minRadius` was left as a *fixed* value independent of segments -- so for
+a small bag (few segments), the same radius divided by a smaller number
+produced a much larger tile, while a large pool (the user's own wall, many
+segments) produced smaller tiles. Both symptoms (bags "huge", phone tiles
+"too small" on a big pool) were the same bug from opposite ends.
+
+`wall.js`'s `domeRadiusForSegments()` replaces the fixed floor: it solves
+for the radius that keeps tile width at a fixed target (90px desktop,
+55px phone -- the desktop figure chosen to match the original always-900px
+setup's own effective tile size, ~83px, since desktop tile size was never
+reported as wrong) regardless of how many segments a given pool needed,
+so a small record bag, a search result, and the full wall now all render
+comparably sized tiles. `ABSOLUTE_MIN_RADIUS` was dropped from 200 to 50,
+since 200 would have clobbered the formula's own correct output for the
+smallest phone case (70px, `MIN_DOME_SEGMENTS`'s floor of 4 segments) --
+`MIN_DOME_SEGMENTS` already keeps the formula-driven radius sane on its
+own, so this floor is now purely defensive against a pathological
+near-zero value rather than a real constraint.
+
+Honestly: none of this was verified against a live browser or a real
+phone in this environment (no way to render the actual dome), only worked
+out from the component's own documented CSS formula and confirmed-live bug
+reports from the two prior rounds. Further live testing may still need
+one more adjustment to the two target pixel values.
+
+## Small copy/UX changes, per explicit request (2026-07-12)
+
+- Share card headline changed from "A session, played in full." to
+  "Albums, played in full." (`js/exporter.js`).
+- The "Crates" tab/screen renamed to "Record bags" throughout user-facing
+  text (`index.html`, `README.md`, `Docs/PRD.md`, `Docs/DESIGN-SPEC.md`).
+  Internal identifiers (`tabCrates`, `renderCratesScreen()`,
+  `#screen-crates`, etc., `js/main.js`) were left as plain internal names
+  rather than renamed to match, per `Docs/CLAUDE.md`'s convention that
+  internal names stay plain regardless of user-facing vocabulary.
+- The Setup screen's "Send this page to your computer" copyable-link
+  well (`#send-to-computer`, shown only on mobile user agents) removed
+  entirely, along with its `main.js` wiring (`isMobileDevice()`,
+  `copyPageUrlBtn`) -- flagged as visually duplicating the redirect-URI
+  copy well directly below it in the same step. `README.md`'s "First-run
+  setup" list updated to drop the now-false claim that Longplayur offers
+  a copyable link on mobile. `Docs/PRD.md`'s F2 scope list was also found
+  stale while making this pass (missing the `playlist-read-*` scopes
+  added earlier the same day) and corrected.

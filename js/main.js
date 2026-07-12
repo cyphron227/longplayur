@@ -88,36 +88,6 @@ redirectUriEl.textContent = auth.getRedirectUri();
 clientIdInput.value = auth.getClientId();
 updateConnectButtonState();
 
-// Step 02 (create the app) has to happen on the Spotify developer dashboard,
-// which is unusable on a small screen. On a phone/tablet, offer a copyable
-// link to this exact page so the rest of setup can continue on a computer.
-const sendToComputerWell = document.getElementById('send-to-computer');
-const sendToComputerLabel = document.getElementById('send-to-computer-label');
-const sendToComputerUrl = document.getElementById('send-to-computer-url');
-const copyPageUrlBtn = document.getElementById('copy-page-url');
-
-function isMobileDevice() {
-  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-
-if (isMobileDevice()) {
-  sendToComputerUrl.textContent = window.location.href;
-  show(sendToComputerWell);
-  show(sendToComputerLabel);
-}
-
-copyPageUrlBtn?.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(window.location.href);
-    const label = copyPageUrlBtn.querySelector('span');
-    const original = label.textContent;
-    label.textContent = 'Copied';
-    setTimeout(() => { label.textContent = original; }, 1500);
-  } catch {
-    // Clipboard API unavailable: the URL is already selectable as plain text.
-  }
-});
-
 clientIdInput.addEventListener('input', () => {
   hide(clientIdError);
   updateConnectButtonState();
@@ -762,7 +732,7 @@ btnNewSession.addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------
-// Top tab navigation (Now playing / Crates / Past sessions / Setup), shown once connected
+// Top tab navigation (Now playing / Record bags / Past sessions / Setup), shown once connected
 // ---------------------------------------------------------------------
 
 tabWall.addEventListener('click', () => showScreen('app'));

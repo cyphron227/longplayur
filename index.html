@@ -80,7 +80,7 @@
   <nav id="app-tabs" class="app-tabs" hidden aria-label="Longplayur sections">
     <svg class="mark mark--tabs" viewBox="0 0 100 100" aria-hidden="true"><use href="#mark-groove"/></svg>
     <button id="tab-wall" class="tab-btn" type="button">Now playing</button>
-    <button id="tab-crates" class="tab-btn" type="button">Crates</button>
+    <button id="tab-crates" class="tab-btn" type="button">Record bags</button>
     <button id="tab-past-sessions" class="tab-btn" type="button">Past sessions</button>
     <button id="tab-setup" class="tab-btn" type="button">Setup</button>
   </nav>
@@ -103,14 +103,6 @@
           <div class="step-body">
             <h2>Create a Spotify app</h2>
             <p>This step needs a computer: the Spotify developer dashboard is not built for small screens.</p>
-            <p id="send-to-computer-label" class="field-hint" hidden>Send this page to your computer:</p>
-            <div id="send-to-computer" class="mono-well" hidden>
-              <code id="send-to-computer-url"></code>
-              <button id="copy-page-url" class="icon-btn" type="button" aria-label="Copy this page's link" title="Copy this page's link">
-                <svg class="icon"><use href="#icon-copy"/></svg>
-                <span>Copy</span>
-              </button>
-            </div>
             <p>Copy this text to paste into Spotify's developer dashboard:</p>
             <div class="mono-well">
               <code id="redirect-uri"></code>
@@ -244,7 +236,7 @@
     <div id="wake-confirmation" class="wake-confirmation deadwax" hidden role="status">Found this phone. Carrying on.</div>
   </section>
 
-  <!-- Crates: choosing what's on the Wall -- your own pool, a search
+  <!-- Record bags screen: choosing what's on the Wall -- your own pool, a search
        result, a seed record bag, or one of your Spotify playlists. Its own
        screen (rather than a rail above the Wall) so search and browsing
        have room to breathe; selecting anything here returns to Now playing. -->
