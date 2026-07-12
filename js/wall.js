@@ -21,8 +21,30 @@ import { mountDomeGallery } from './dome-gallery.bundle.js';
 // means the dome only ever needs enough duplicates to complete its last
 // partial column, not to fill the whole fixed grid regardless of how many
 // albums are actually in the pool.
+//
+// That reasoning had a real cost only discovered once individual tile
+// size was fixed separately (below): a LOW segment count doesn't just
+// mean fewer, wider tiles -- because tile width and dome radius are both
+// solved from segments (below), a small record bag's dome ended up with
+// a genuinely small radius too. Wrapping normal-sized tiles around a
+// small-radius sphere means each tile occupies a much larger share of the
+// sphere's own circumference, which is what was actually causing tiles to
+// visibly overlap/cross each other -- confirmed live ("dome size is too
+// small... need to cover a bigger ball") after the tile-size fix made
+// individual tiles look right but didn't fix the sphere itself.
+// MIN_DOME_SEGMENTS is raised to 24 to match the segment count "Your
+// Record Bag" (a pool of ~100+ albums) naturally computes to and which
+// was confirmed live to look right, so essentially every record bag,
+// search result, and playlist now gets the same dome size regardless of
+// how few albums it has. This does mean more repetition for a small pool
+// (more slots need filling from fewer images) than the original,
+// duplicate-minimising intent of sizing segments to the pool -- but that
+// trade is safe now that buildItems() in gallery/src/DomeGallery.tsx
+// separately guarantees no two spatially-adjacent tiles repeat the same
+// cover, so the extra repeats are spread around the dome rather than
+// clustered together.
 const DOME_ROWS_PER_COLUMN = 5;
-const MIN_DOME_SEGMENTS = 4; // keeps the rotation math sane for a very small pool; not a duplicate-padding floor.
+const MIN_DOME_SEGMENTS = 24;
 const MAX_DOME_SEGMENTS = 34; // the component's original fixed default, kept as an upper bound.
 
 function segmentsForPool(imageCount) {

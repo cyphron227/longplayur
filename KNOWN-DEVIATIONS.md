@@ -1015,3 +1015,30 @@ phone), but is a real, deliberate simplification worth knowing about if
 a genuinely very short viewport (e.g. a landscape phone) turns out to
 clip the dome. Rebuilt via `cd gallery && npm run build`; confirmed the
 built module still exports only `mountDomeGallery`.
+
+## Tile-size fix, part 3: the sphere itself was too small (2026-07-12)
+
+Reported live a third time, after part 2 fixed individual tile size:
+"individual size is better but dome size is too small so the albums
+overlap and cross each other... need to cover a bigger ball." Both tile
+width and dome radius are solved from the same `segments` value
+(`domeRadiusForSegments()`), so a low segment count (the whole point of
+sizing segments to a small pool, originally) meant a genuinely small
+radius too -- wrapping normal-sized tiles around a small-radius sphere
+means each tile occupies a much larger share of the sphere's own
+circumference, which is what was actually causing the overlap, distinct
+from both earlier tile-size bugs.
+
+`MIN_DOME_SEGMENTS` raised from 4 to 24 in `js/wall.js` -- matching the
+segment count "Your Record Bag" (~100+ albums) naturally computes to and
+which was confirmed live, across every round of this fix, to be the one
+configuration that actually looks right. Essentially every record bag,
+search result, and playlist now gets the same dome size regardless of
+how few albums it has, trading away most of the original "fewer segments
+for a small pool means fewer duplicate slots to fill" intent -- but that
+trade is safe now, since the spatial-adjacency fix (two entries up)
+separately guarantees no two neighbouring tiles ever repeat the same
+cover regardless of how much repetition the pool needs overall. Verified
+by simulation: zero adjacent-duplicate conflicts across 100 independent
+builds each for pools of 10, 18, and 25 images filling a 120-slot (24
+segment) dome.
