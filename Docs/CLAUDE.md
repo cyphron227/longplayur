@@ -35,7 +35,7 @@ ES modules (`type="module"`). Each module exports a small explicit surface; no g
 3a. **Threat model note:** tokens live in localStorage, so the primary risk is XSS. That is why rule 2 and the CSP are absolute, and why the only third-party script is Spotify's SDK (which cannot be SRI-pinned as Spotify rotates it; documented risk, accepted).
 3b. **Links and referrers:** every external link gets `rel="noopener noreferrer"`. Add `<meta name="referrer" content="no-referrer">`. The OAuth `code` is stripped from the URL via `history.replaceState` before anything else runs.
 4. **Storage:** localStorage keys prefixed `lp_`. Tokens in `lp_tokens`. Journal is versioned (`v` field) with a migration stub. Never store anything a third party could use beyond the user's own browser.
-5. **No telemetry.** No analytics, no external requests beyond Spotify, Google Fonts, and the SDK. State this in the README.
+5. **Telemetry.** Vercel Web Analytics (same-origin, `/_vercel/insights/*`, no CSP change needed) and Google Analytics (GA4, `www.googletagmanager.com` / `www.google-analytics.com`) are in use, added per explicit request; see `KNOWN-DEVIATIONS.md` for when and why this superseded the original no-analytics stance. State this plainly in the README rather than leaving a stale "no analytics" claim.
 6. **OAuth hygiene:** `state` parameter used and verified. Auth errors from the callback are displayed, never silently retried in a loop.
 
 ## Code conventions

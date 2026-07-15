@@ -164,7 +164,7 @@ Crackle on/off · New session · Past sessions · Sign out. No settings page.
 12. A playlist resolves to zero playable albums (empty, or everything filtered out as a single/compilation): explain on the Record bags screen's status line the same way, rather than switching to an empty Wall.
 
 ## Non-goals (v1)
-No accounts, no server, no analytics, no payments (development-mode terms forbid commercial use), no social features, no playlist support, no free-tier Spotify support, no mobile app.
+No accounts, no server, no payments (development-mode terms forbid commercial use), no social features, no free-tier Spotify support, no mobile app. (Playlist support and site analytics were both added after v1; see F13 and `KNOWN-DEVIATIONS.md`.)
 
 ## Success criteria
 - A stranger with Premium completes setup and reaches their first needle drop in under 6 minutes.

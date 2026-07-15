@@ -115,9 +115,10 @@ A result replaces the Wall the same way a record bag does.
 
 ## Privacy
 
-- No accounts, no server, no analytics, no telemetry.
+- No accounts, no server.
+- This deployment uses Vercel Web Analytics and Google Analytics (GA4) to see page views and traffic. Neither sees your Spotify listening history, your client ID, or anything else this app stores locally -- they only see that the page was visited, same as any other website with analytics. If you deploy your own copy, both are entirely optional: remove the `<script>` tags for either (or both) in `index.html`, and their CSP entries alongside them, and no analytics data leaves your instance at all.
 - Your Spotify client ID, tokens, cached album pool, journal, and a small cache of genre names picked up from past searches (used only to power the genre autocomplete) live only in your browser's local storage.
-- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby and genre search only, and only artist/album/genre metadata -- never your listening history), and to your own self-hosted copy of this site.
+- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby and genre search only, and only artist/album/genre metadata -- never your listening history), to Google Analytics (`www.googletagmanager.com`, `www.google-analytics.com`) and Vercel Analytics (same-origin, no separate domain), and to your own self-hosted copy of this site.
 - Signing out clears your Spotify session tokens but keeps your client ID and your past sessions, so you are not re-typing your client ID or losing your listening history every time.
 
 ## Limitations, honestly

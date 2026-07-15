@@ -2,13 +2,30 @@
 <html lang="en-GB">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://sdk.scdn.co https://api.deezer.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://api.deezer.com; img-src 'self' https://*.scdn.co data:; style-src 'self'; font-src 'self'; frame-src https://sdk.scdn.co">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://sdk.scdn.co https://api.deezer.com https://www.googletagmanager.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://api.deezer.com https://www.google-analytics.com https://www.googletagmanager.com; img-src 'self' https://*.scdn.co data:; style-src 'self'; font-src 'self'; frame-src https://sdk.scdn.co">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Longplayur &middot; whole albums, in order, on purpose</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="js/dome-gallery.bundle.css">
+
+<!-- Vercel Web Analytics: same-origin (/_vercel/insights/*), proxied through
+     this deployment's own domain, so no CSP change is needed for it. -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+
+<!-- Google Analytics (GA4). Only third-party analytics in this app; see
+     the Privacy section of README.md for what that means for you. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-HR6M9B0135"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() { dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-HR6M9B0135');
+</script>
 </head>
 <body>
 
