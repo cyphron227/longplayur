@@ -282,6 +282,15 @@
         <div id="crate-bags-grid" class="crate-grid"></div>
       </section>
 
+      <!-- New arrivals (INCREMENT-02 Phase 1): latest releases from artists
+           the user follows. Hidden entirely (not shown empty/broken) if
+           GET /me/following fails or the user follows nobody, matching
+           Records nearby's own silent-hide convention. -->
+      <section id="crate-newarrivals-section" class="crate-section" hidden>
+        <h2 class="crate-heading">New arrivals</h2>
+        <div id="crate-newarrivals-grid" class="crate-grid"></div>
+      </section>
+
       <section class="crate-section">
         <h2 class="crate-heading">Your playlists</h2>
         <p id="crate-playlists-status" class="crate-status"></p>

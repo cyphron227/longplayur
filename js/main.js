@@ -16,6 +16,7 @@ import * as journal from './journal.js';
 import * as exporter from './exporter.js';
 import { loadBagManifest, resolveBag } from './bags.js';
 import { loadMyPlaylists, resolvePlaylist } from './playlists.js';
+import { getNewArrivals } from './newarrivals.js';
 import { getRecordsNearby } from './nearby.js';
 import { searchAlbums, getGenreSuggestions } from './search.js';
 
@@ -190,6 +191,8 @@ const cratesBtn = document.getElementById('crates-btn');
 const cratesBtnLabel = document.getElementById('crates-btn-label');
 const cratesYourBagBtn = document.getElementById('crates-your-bag-btn');
 const crateBagsGrid = document.getElementById('crate-bags-grid');
+const crateNewArrivalsSection = document.getElementById('crate-newarrivals-section');
+const crateNewArrivalsGrid = document.getElementById('crate-newarrivals-grid');
 const cratePlaylistsGrid = document.getElementById('crate-playlists-grid');
 const cratePlaylistsStatus = document.getElementById('crate-playlists-status');
 const nearbyShelf = document.getElementById('nearby-shelf');
@@ -239,9 +242,11 @@ let userWallPool = null;
 let activeBagId = null;
 let activePlaylistId = null;
 let activeSearchQuery = null; // { query, mode: 'artist'|'genre' } | null
+let activeNewArrivals = false;
 let bagSwitchBusy = false;
 let bagManifestCache = null;
 let playlistManifestCache = null; // null until the Crates screen has been opened at least once
+let newArrivalsPool = null; // last resolved New arrivals pool, kept for selectNewArrivals()
 
 function delay(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -283,6 +288,7 @@ function currentSourceLabel() {
     const playlist = (playlistManifestCache || []).find((p) => p.id === activePlaylistId);
     return playlist ? playlist.name : 'Playlist';
   }
+  if (activeNewArrivals) return 'New arrivals';
   return 'Your Record Bag';
 }
 
@@ -292,7 +298,7 @@ function updateCratesBtnLabel() {
 
 function setWallPrompt(pool) {
   const everDropped = localStorage.getItem(LS_EVER_DROPPED) === 'true';
-  if (activeSearchQuery || activeBagId || activePlaylistId) {
+  if (activeSearchQuery || activeBagId || activePlaylistId || activeNewArrivals) {
     wallPrompt.textContent = `${pool.length} records. Tap one to drop the needle.`;
   } else {
     wallPrompt.textContent = everDropped
@@ -454,7 +460,7 @@ function renderPlaylistCards() {
  * API call, so they're only fetched the first time this screen is opened,
  * not eagerly at boot. */
 async function renderCratesScreen() {
-  cratesYourBagBtn.setAttribute('aria-pressed', String(!activeBagId && !activePlaylistId && !activeSearchQuery));
+  cratesYourBagBtn.setAttribute('aria-pressed', String(!activeBagId && !activePlaylistId && !activeSearchQuery && !activeNewArrivals));
 
   if (!bagManifestCache) {
     try {
@@ -468,6 +474,8 @@ async function renderCratesScreen() {
     const bagsToLoad = (bagManifestCache || []).filter((bag) => cardsNeedingPreview.has(bag.id));
     loadBagPreviews(bagsToLoad, cardsNeedingPreview); // not awaited: the screen shouldn't block on a cold cache resolving several bags.
   }
+
+  loadNewArrivalsCard(); // not awaited: the screen shouldn't block on a followed-artists fetch (may itself be stale-refreshing).
 
   if (!playlistManifestCache) {
     cratePlaylistsStatus.textContent = 'Loading your playlists.';
@@ -486,14 +494,61 @@ async function renderCratesScreen() {
   renderPlaylistCards();
 }
 
+/** Resolves (or retrieves the cached) New arrivals pool and shows/hides its
+ * card accordingly -- hidden entirely, not shown empty or broken, if
+ * GET /me/following failed or the user follows nobody with a recent
+ * release (Records nearby's own convention, PRD edge case 10). Refreshes
+ * itself on every visit to this screen if the cache has gone stale
+ * (newarrivals.js's own 6h TTL), so this can simply be called unconditionally. */
+async function loadNewArrivalsCard() {
+  const { pool } = await getNewArrivals();
+  if (pool.length === 0) {
+    newArrivalsPool = null;
+    if (crateNewArrivalsSection) crateNewArrivalsSection.hidden = true;
+    return;
+  }
+  newArrivalsPool = pool;
+  if (crateNewArrivalsSection) crateNewArrivalsSection.hidden = false;
+  renderNewArrivalsCard();
+}
+
+function renderNewArrivalsCard() {
+  if (!crateNewArrivalsGrid || !newArrivalsPool) return;
+  crateNewArrivalsGrid.innerHTML = '';
+  const images = newArrivalsPool.map((entry) => entry.image).filter(Boolean).slice(0, BAG_PREVIEW_COUNT);
+  crateNewArrivalsGrid.appendChild(buildCrateCard({
+    label: 'New arrivals',
+    sublabel: `${newArrivalsPool.length} latest releases`,
+    title: 'The latest release from each artist you follow',
+    images,
+    pressed: activeNewArrivals,
+    onClick: () => selectNewArrivals(),
+  }));
+}
+
+async function selectNewArrivals() {
+  if (activeNewArrivals && !activeSearchQuery && !activeBagId && !activePlaylistId) { showScreen('app'); return; }
+  if (bagSwitchBusy || !newArrivalsPool || newArrivalsPool.length === 0) return;
+
+  cratesStatus.textContent = 'New arrivals. Pulling records from the shelf.';
+  activeBagId = null;
+  activePlaylistId = null;
+  activeSearchQuery = null;
+  activeNewArrivals = true;
+  await switchWallPool(newArrivalsPool);
+  cratesStatus.textContent = '';
+  showScreen('app');
+}
+
 async function selectBag(bagId) {
-  if (bagId === activeBagId && !activeSearchQuery && !activePlaylistId) { showScreen('app'); return; }
+  if (bagId === activeBagId && !activeSearchQuery && !activePlaylistId && !activeNewArrivals) { showScreen('app'); return; }
   if (bagSwitchBusy) return;
 
   if (bagId === null) {
     activeBagId = null;
     activePlaylistId = null;
     activeSearchQuery = null;
+    activeNewArrivals = false;
     if (userWallPool) await switchWallPool(userWallPool);
     showScreen('app');
     return;
@@ -512,12 +567,13 @@ async function selectBag(bagId) {
   activeBagId = bagId;
   activePlaylistId = null;
   activeSearchQuery = null;
+  activeNewArrivals = false;
   await switchWallPool(pool);
   showScreen('app');
 }
 
 async function selectPlaylist(playlistId) {
-  if (playlistId === activePlaylistId && !activeSearchQuery && !activeBagId) { showScreen('app'); return; }
+  if (playlistId === activePlaylistId && !activeSearchQuery && !activeBagId && !activeNewArrivals) { showScreen('app'); return; }
   if (bagSwitchBusy) return;
 
   const playlist = (playlistManifestCache || []).find((p) => p.id === playlistId);
@@ -533,6 +589,7 @@ async function selectPlaylist(playlistId) {
   activePlaylistId = playlistId;
   activeBagId = null;
   activeSearchQuery = null;
+  activeNewArrivals = false;
   await switchWallPool(pool);
   showScreen('app');
 }
@@ -615,6 +672,7 @@ async function performSearch(query) {
   cratesStatus.textContent = '';
   activeBagId = null;
   activePlaylistId = null;
+  activeNewArrivals = false;
   activeSearchQuery = { query: trimmed, mode };
   await switchWallPool(pool);
   showScreen('app');

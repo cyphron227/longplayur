@@ -139,6 +139,21 @@ export function getArtist(artistId) {
   return apiFetch(`/artists/${artistId}`);
 }
 
+/** The user's own followed artists (needs the user-follow-read scope).
+ * Cursor-paginated (GET /me/following?type=artist), unlike the offset-based
+ * endpoints above -- the response nests items/next one level down under
+ * `.artists`, so this can't reuse getSavedAlbums()'s loop as-is. */
+export async function getFollowedArtists(maxPages = 4) {
+  const artists = [];
+  let url = '/me/following?type=artist&limit=50';
+  for (let page = 0; page < maxPages && url; page += 1) {
+    const data = await apiFetch(url);
+    artists.push(...(data?.artists?.items || []));
+    url = data?.artists?.next ? data.artists.next.replace('https://api.spotify.com/v1', '') : null;
+  }
+  return artists;
+}
+
 export function getPlaybackState() {
   return apiFetch('/me/player');
 }

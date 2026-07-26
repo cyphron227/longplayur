@@ -5,6 +5,64 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## INCREMENT-02 Phase 1: New arrivals (2026-07-26)
+
+A fourth Record bags source (`js/newarrivals.js`): the latest wanted release
+(real album, or a 6+ track EP Spotify files as a single) from each artist
+the user follows on Spotify, newest first.
+
+- **New scope.** `GET /me/following?type=artist` needs `user-follow-read`,
+  added to `js/auth.js`'s `SCOPES`. Per the standing convention for every
+  scope addition so far, this only takes effect on a fresh authorisation --
+  anyone already connected needs to sign out and reconnect once, or the
+  card simply never appears (its own failure path already hides it rather
+  than showing an explanatory error, so this is silent unless the user
+  reads this file or the console).
+- **Cursor pagination, not offset.** `GET /me/following` paginates via an
+  `after` cursor nested one level down (`data.artists.next`,
+  `data.artists.items`), unlike every other paginated endpoint this app
+  already calls (`getSavedAlbums()`, `getMyPlaylists()`), which return
+  `items`/`next` directly on the response body. `spotify.js`'s new
+  `getFollowedArtists()` follows the same "walk `.next` until absent, capped
+  at `maxPages`" shape as those two, just one level deeper.
+- **Per-artist latest release** reuses `search.js`'s already-confirmed
+  Spotify constraint on `GET /artists/{id}/albums` (`limit` capped at 10,
+  not the 50 most list endpoints allow -- discovered live, see that file's
+  own deviation entry) rather than re-guessing it: two pages of 10 per
+  artist, filtered to real albums or 6+ track EPs, sorted by release date,
+  keeping only the newest. Every artist's lookup goes through
+  `mapWithConcurrency()` (concurrency 4, matching `search.js`'s
+  `ALBUMS_FETCH_CONCURRENCY`) from this module's first commit rather than
+  after a live 429, per explicit instruction.
+- **Caching.** Resolved pool cached in `localStorage['lp_new_arrivals']`
+  keyed by a `builtAt` timestamp; a visit to the Record bags screen
+  refreshes it once it is more than 6 hours stale. That interval is a
+  starting guess (matching the journal's own 6h session-inactivity window
+  for no stronger reason than consistency), not a tuned value, pending real
+  usage. A transient `GET /me/following` failure serves the last-known
+  cache rather than blanking the card, if one exists.
+- **Hides itself entirely** (no error state, no empty card) if
+  `GET /me/following` fails outright, or the user follows nobody, or none
+  of their followed artists have a release passing the album/EP filter --
+  matching Records nearby's own silent-hide convention (PRD edge case 10)
+  rather than the loud "Search failed" pattern used for an explicit user
+  action like search.
+- **`newArrival: true`** is tagged onto every entry (mirroring `bagId`/
+  `playlistId` on bag/playlist entries) so a later feature -- Runout
+  groove's "Unplayed in this bag" vs "Unplayed on your Wall" distinction
+  (INCREMENT-03 Phase 3) -- can tell a New-arrivals-sourced pool apart from
+  the user's own Wall, even though nothing in this phase's UI needs it yet.
+  No journal-level tag (no `bagId`/`playlistId`-style field recorded against
+  played entries) was added, since Phase 1's own spec doesn't ask for one
+  and the existing journal schema has no natural third slot for it without
+  a migration this phase doesn't otherwise need.
+- **UI**: a new "New arrivals" section on the Record bags screen, reusing
+  `buildCrateCard()`'s existing card pattern (a single card showing a 3x3
+  preview grid of up to 9 covers, same as a record bag's own preview) and
+  the same selection-preview to needle-drop flow as every other source --
+  no new interaction code. Selecting it, like a bag or playlist, is
+  mutually exclusive with the other three sources.
+
 ## Selection preview polish, search, autoplay prevention, tile shuffling (2026-07-12)
 
 A round of fixes and additions on top of the selection-preview flow above:
