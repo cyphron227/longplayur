@@ -60,7 +60,7 @@ There is exactly ONE grid in the app: the Wall. This removes all tapestry/wall s
 ### 2a. The Record bags screen
 Choosing what's on the Wall is its own screen/tab ("Record bags"), not a rail on the Wall itself, so browsing and search have room to breathe -- a single small entry-point button on the Wall (labelled with whatever source is currently loaded, "Your Record Bag" by default) opens it. "Your Record Bag" (the user's own pool) is a dedicated button at the top; below it, the six seed record bags and the user's own Spotify playlists each render as cover-art cards in their own grid. Selecting anything crossfades the whole Wall (`--dur-breath`) to that source's own spiral layout and returns to the Now Playing tab; the camera always snaps to whole rows and columns on any switch, at any viewport, so no cover is ever cropped, letterboxing with obsidian where the aspect ratio does not divide evenly. A record bag or playlist is a curated/live list of albums, not a listening session: playing from one records normally into Past sessions, tagged with which bag or playlist it came from.
 
-A search field also sits on the Record bags screen: an Artist/Genre toggle (a pair of pills, one always pressed; Artist is the default), then the text input and search icon. The mode is chosen explicitly, not guessed -- Spotify's artist search is fuzzy enough that almost any genre-like word also matches some real, if obscure, artist (e.g. "soul" matching the band Soul II Soul), so an earlier "try artist, fall back to genre" auto-detect essentially never actually reached genre mode. A result crossfades the Wall the same way a bag does and returns to Now Playing. Only real albums, and EPs of 6 or more tracks, are shown -- singles shorter than that and compilations are filtered out. Artist mode resolves to that one artist's own discography. Genre mode is a soft search combining several sources, since Spotify's exact `genre:` tag filter alone proved too sparse for real genre terms (e.g. "jungle" and "britpop" both returned nothing live): the exact `genre:` tag search, a free-text Spotify artist search kept only where the artist's own genre tags word-overlap the query (word-level, not raw substring -- a raw substring check let "britpop" wrongly match an artist merely tagged "pop"), and Deezer's broader public genre taxonomy (the same source Records nearby uses) with member artists resolved back to Spotify by name -- deduplicated, ranked, and capped at 15 artists before fetching albums. If all three come back empty, the free-text results are used unfiltered as a last resort rather than showing nothing. The search field also offers an autocomplete of genre names while Genre mode is active: Deezer's live taxonomy merged with real Spotify genre tags harvested from past searches, growing richer with use since Spotify has no working "list every genre" endpoint left to call directly.
+A search field also sits on the Record bags screen: a plain text input plus a search icon, resolving to the single best-matching artist's own discography. A result crossfades the Wall the same way a bag does and returns to Now Playing. Only real albums, and EPs of 6 or more tracks, are shown -- singles shorter than that and compilations are filtered out. Genre search (an Artist/Genre mode toggle, a multi-source "soft search" across Spotify's genre tags and Deezer's genre taxonomy) was built, then removed entirely: live testing found it returning wrong results for real genre terms ("African music" and "Brazilian" both matched generically popular, unrelated artists via its own last-resort unfiltered fallback). See `KNOWN-DEVIATIONS.md` for the full history.
 
 Within the Wall, a pool smaller than the dome's slot count is filled with independently shuffled full passes of the pool rather than a straight repeat, so the same album cannot reappear until every other album has had its turn, and even then in a different order -- avoiding visible duplicates within any one glance across the dome.
 
@@ -148,13 +148,12 @@ Selecting an album
 - Play button aria-label: "Play {album}"
 - Dismiss: "Find something else"
 
-Search
-- Mode toggle: "Artist" / "Genre" (Artist is the default)
-- Placeholder: "Search by artist" / "Search by genre"
+Search (artist only; genre search was removed, see KNOWN-DEVIATIONS.md)
+- Placeholder: "Search by artist"
 - Searching: "Searching for "{query}"."
 - No results: "No albums found for "{query}". Only full albums and EPs of 6 or more tracks are shown."
 - Failed (the request itself broke, not a genuine empty result): "Search failed. Check your connection and try again."
-- Result prompt: "Artist: {query}. {N} records. Tap one to drop the needle." / "Genre: {query}. {N} records. Tap one to drop the needle."
+- Result prompt: "Artist: {query}. {N} records. Tap one to drop the needle."
 
 Errors
 - 403 top tracks: "Spotify refused (403). In your app's settings on the developer dashboard, add your own Spotify account under User Management, then try again."

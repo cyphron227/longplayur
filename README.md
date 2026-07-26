@@ -156,18 +156,19 @@ state if Deezer cannot be reached.
 
 ## Search
 
-The search field on the Record bags screen takes a free-text term plus an
-explicit Artist/Genre toggle. Artist mode pulls that one artist's own
-discography. Genre mode is a soft search: it combines Spotify's own exact
-genre tag search, a free-text Spotify search cross-checked against each
-artist's own genre tags, and Deezer's broader public genre taxonomy (the
-same free source Records nearby uses) so real-world genre terms Spotify's
-exact tag filter misses still turn up something, with an autocomplete
-helping steer genre searches toward terms with real coverage: Deezer's
-genre list merged with real Spotify genre tags picked up from past
-searches, growing richer with use. Only full albums and EPs of 6 or more
-tracks are shown; singles and compilations are filtered out.
-A result replaces the Wall the same way a record bag does.
+The search field on the Record bags screen takes a free-text artist name
+and pulls that artist's own discography. Only full albums and EPs of 6 or
+more tracks are shown; singles and compilations are filtered out. A result
+replaces the Wall the same way a record bag does.
+
+Genre search existed for a while (an Artist/Genre toggle, combining
+several sources to work around Spotify's own sparse genre tags) and was
+removed entirely: live testing found it returning wrong results for real
+genre terms, matching "African music" and "Brazilian" to generically
+popular, unrelated artists rather than anything actually related. Fixing
+its several earlier bugs never addressed that fundamental problem, so it
+was cut rather than patched again; see `KNOWN-DEVIATIONS.md` for the
+history.
 
 ## Privacy
 

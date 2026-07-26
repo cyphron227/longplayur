@@ -5,6 +5,62 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Genre search removed entirely, per explicit request (2026-07-26)
+
+Reported live: searching by genre for "African music" and "Brazilian"
+both returned generically popular, unrelated artists (Michael Jackson,
+Taylor Swift) rather than anything genuinely related. Per explicit
+instruction, genre search is removed from the app entirely rather than
+patched a further time; only artist search remains.
+
+This is the fourth live bug this feature had, and it was the same root
+cause every time it went wrong: `searchByGenre()`'s own last-resort tier,
+added specifically so a niche term like "jungle" (no exact tag, no
+genre-tag overlap, no matching Deezer bucket) still returned *something*
+rather than nothing, falls back to the plain free-text Spotify
+artist-search results **unfiltered**. For a broad regional or descriptive
+term with no real Spotify artist-name match at all ("African music",
+"Brazilian"), that free-text search still returns *some* artists back
+(Spotify's search is fuzzy and rarely returns literally zero results for
+a plausible-looking query), just not remotely related ones -- there was no
+further check catching this, since by design this tier trusts whatever
+free-text search finds once every more precise source has failed. Earlier
+fixes (see the search.js entries below) narrowed how *often* this
+fallback tier fired and tightened the tiers *above* it, but never removed
+the fundamentally unsound fallback itself, which is why the same shape of
+bug kept resurfacing for different query terms.
+
+- **`js/search.js`** was reduced to its `searchByArtist()` path only:
+  `searchAlbums(query)` now takes no mode argument at all.
+  `searchByGenre()`, `deezerGenreArtists()`, `getDeezerGenreList()`,
+  `getGenreSuggestions()`, the genre-tag soft-matching helpers
+  (`phraseSoftMatches()`, `genreSoftMatches()`, `tokenize()`), and the
+  Spotify-genre-vocabulary harvesting into `localStorage['lp_genre_vocab']`
+  (`harvestGenres()`) are all gone, along with every constant that only
+  existed to tune them (`MAX_ARTISTS_GENRE`, `MAX_ARTISTS_FOR_ALBUMS`,
+  `DEEZER_GENRE_ARTIST_LIMIT`, `MIN_CANDIDATES_BEFORE_DEEZER`,
+  `RESOLVE_CONCURRENCY`). `search.js` no longer imports `deezer.js` at
+  all -- Deezer is still used elsewhere (Records nearby, `nearby.js`), just
+  no longer here.
+- **UI**: the Artist/Genre mode toggle (`.search-mode-toggle`, a pair of
+  pressed/unpressed pills) and the genre-name `<datalist>` autocomplete are
+  both removed from the Record bags screen's search form; the field is now
+  a single artist-name input with a fixed placeholder. `main.js` lost
+  `searchMode` state, `setSearchMode()`, `populateGenreSuggestions()`, and
+  `clearGenreSuggestions()`; `activeSearchQuery` no longer carries a
+  `mode`, and its label on the Crates entry-point button and wall prompt
+  is unconditionally "Artist: {query}".
+- **Stale `localStorage['lp_genre_vocab']`** from any earlier build that
+  had genre search is left alone rather than actively cleared -- it is now
+  simply unused and inert, and adding a one-time migration purely to
+  delete a small, harmless, orphaned key was judged not worth the
+  complexity.
+- **Docs updated to match**: `Docs/PRD.md` F12, `Docs/DESIGN-SPEC.md` §2a
+  and its copy deck, and `README.md`'s Search section all now describe
+  artist-only search, each also stating plainly that genre search existed
+  and was removed (not just silently rewritten as if it never happened),
+  per the honesty rule.
+
 ## Two bugs from the previous round, found live (2026-07-26)
 
 ### Flip rows didn't play: the ceremony was rendering inside a hidden container

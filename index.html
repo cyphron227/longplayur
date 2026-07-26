@@ -312,18 +312,17 @@
     <div class="crates-body">
       <button id="crates-your-bag-btn" class="crates-your-bag-btn deadwax" type="button">Your Record Bag</button>
 
-      <form id="search-form" class="search-form" aria-label="Search for an artist or genre">
-        <div class="search-mode-toggle" role="radiogroup" aria-label="Search by">
-          <button type="button" id="search-mode-artist" class="search-mode-btn deadwax" aria-pressed="true">Artist</button>
-          <button type="button" id="search-mode-genre" class="search-mode-btn deadwax" aria-pressed="false">Genre</button>
-        </div>
+      <!-- Genre search removed entirely: live testing found it returning
+           wrong results for real genre terms ("African music", "Brazilian"
+           both matched generically popular, unrelated artists). See
+           search.js and KNOWN-DEVIATIONS.md. -->
+      <form id="search-form" class="search-form" aria-label="Search for an artist">
         <div class="search-input-row">
-          <input id="search-input" type="search" class="search-input" placeholder="Search by artist" aria-label="Search term" autocomplete="off" list="genre-suggestions">
+          <input id="search-input" type="search" class="search-input" placeholder="Search by artist" aria-label="Search term" autocomplete="off">
           <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
             <svg class="icon"><use href="#icon-search"/></svg>
           </button>
         </div>
-        <datalist id="genre-suggestions"></datalist>
       </form>
 
       <p id="crates-status" class="crate-status" aria-live="polite"></p>

@@ -3,7 +3,9 @@
 // tried first (works when it works) and a JSONP fallback is used only if
 // that fails, per Docs/CLAUDE.md's security rules: a randomised callback
 // name, the injected <script> removed after use, and a 10s timeout.
-// Shared by nearby.js (related artists) and search.js (genre browsing).
+// Used by nearby.js (related artists). Previously also shared by search.js's
+// genre browsing, removed after live testing found it returning wrong
+// results for real genre terms; see search.js's own header comment.
 
 const DEEZER_BASE = 'https://api.deezer.com';
 const JSONP_TIMEOUT_MS = 10000;

@@ -5,10 +5,9 @@
 // the shelf can needle-drop like anything else on the Wall.
 //
 // deezer.js handles the actual Deezer requests (plain fetch first, JSONP
-// fallback) -- shared with search.js's genre browsing. If Deezer cannot be
-// reached at all, this resolves to an empty list rather than throwing, so
-// the caller can hide the shelf with no error state (PRD F10 / edge case
-// 10). See KNOWN-DEVIATIONS.md.
+// fallback). If Deezer cannot be reached at all, this resolves to an empty
+// list rather than throwing, so the caller can hide the shelf with no
+// error state (PRD F10 / edge case 10). See KNOWN-DEVIATIONS.md.
 
 import { apiFetch } from './spotify.js';
 import { deezerFetch } from './deezer.js';

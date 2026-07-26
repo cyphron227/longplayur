@@ -18,7 +18,7 @@ import { loadBagManifest, resolveBag } from './bags.js';
 import { loadMyPlaylists, resolvePlaylist } from './playlists.js';
 import { getNewArrivals } from './newarrivals.js';
 import { getRecordsNearby } from './nearby.js';
-import { searchAlbums, getGenreSuggestions } from './search.js';
+import { searchAlbums } from './search.js';
 import * as flip from './flip.js';
 import { gatherRunoutContext, buildRunoutGrid } from './runout.js';
 
@@ -257,7 +257,7 @@ let runoutBusy = false;
 let userWallPool = null;
 let activeBagId = null;
 let activePlaylistId = null;
-let activeSearchQuery = null; // { query, mode: 'artist'|'genre' } | null
+let activeSearchQuery = null; // { query } | null
 let activeNewArrivals = false;
 let bagSwitchBusy = false;
 let bagManifestCache = null;
@@ -294,10 +294,7 @@ function renderWallDom(pool) {
 /** Label for whatever source is currently on the Wall -- shown on the
  * Crates-screen entry point button and used to build the wall prompt. */
 function currentSourceLabel() {
-  if (activeSearchQuery) {
-    const label = activeSearchQuery.mode === 'artist' ? 'Artist' : 'Genre';
-    return `${label}: ${activeSearchQuery.query}`;
-  }
+  if (activeSearchQuery) return `Artist: ${activeSearchQuery.query}`;
   if (activeBagId) {
     const bag = (bagManifestCache || []).find((b) => b.id === activeBagId);
     return bag ? bag.name : 'Record bag';
@@ -648,66 +645,25 @@ tabCrates.addEventListener('click', openCrates);
 cratesYourBagBtn?.addEventListener('click', () => selectBag(null));
 
 // ---------------------------------------------------------------------
-// Search: by artist or genre, chosen explicitly via the mode toggle
-// rather than guessed -- Spotify's artist search is fuzzy enough that
-// almost any genre-like word also matches some real, if obscure, artist
-// (e.g. "soul" matching the band Soul II Soul), so a "try artist, fall
-// back to genre" guess essentially never actually reached genre mode.
-// Lives on the Crates screen alongside record bags and playlists, and
-// shares the same switchWallPool() crossfade they use.
+// Search: by artist only. Genre search was removed entirely (it used to
+// live here as a mode toggle alongside this) after live testing found it
+// returning wrong results for real genre terms -- "African music" and
+// "Brazilian" both came back with generically popular, unrelated artists.
+// See search.js's own header comment and KNOWN-DEVIATIONS.md for the full
+// history. Lives on the Crates screen alongside record bags and playlists,
+// and shares the same switchWallPool() crossfade they use.
 // ---------------------------------------------------------------------
 
 const searchForm = document.getElementById('search-form');
 const searchInput = document.getElementById('search-input');
-const searchModeArtistBtn = document.getElementById('search-mode-artist');
-const searchModeGenreBtn = document.getElementById('search-mode-genre');
-const genreSuggestionsList = document.getElementById('genre-suggestions');
-
-let searchMode = 'artist';
-
-// The datalist only holds genre names, and only while Genre mode is
-// active, so Artist mode doesn't offer genre words as suggestions.
-// Sourced from Deezer's real genre list (search.js's getGenreSuggestions())
-// rather than a hand-written list, so every suggestion is a term this
-// app's own genre search can actually resolve.
-function clearGenreSuggestions() {
-  if (genreSuggestionsList) genreSuggestionsList.textContent = '';
-}
-
-async function populateGenreSuggestions() {
-  if (!genreSuggestionsList) return;
-  const genres = await getGenreSuggestions();
-  if (searchMode !== 'genre') return; // mode may have changed back while this was in flight.
-  genreSuggestionsList.textContent = '';
-  genres.forEach((name) => {
-    const option = document.createElement('option');
-    option.value = name;
-    genreSuggestionsList.appendChild(option);
-  });
-}
-
-function setSearchMode(mode) {
-  searchMode = mode;
-  searchModeArtistBtn.setAttribute('aria-pressed', String(mode === 'artist'));
-  searchModeGenreBtn.setAttribute('aria-pressed', String(mode === 'genre'));
-  searchInput.placeholder = mode === 'artist' ? 'Search by artist' : 'Search by genre';
-  if (mode === 'genre') {
-    populateGenreSuggestions();
-  } else {
-    clearGenreSuggestions();
-  }
-}
-searchModeArtistBtn?.addEventListener('click', () => setSearchMode('artist'));
-searchModeGenreBtn?.addEventListener('click', () => setSearchMode('genre'));
 
 async function performSearch(query) {
   if (bagSwitchBusy) return;
   const trimmed = query.trim();
   if (!trimmed) return;
 
-  const mode = searchMode;
   cratesStatus.textContent = `Searching for "${trimmed}".`;
-  const { pool, failed } = await searchAlbums(trimmed, mode);
+  const { pool, failed } = await searchAlbums(trimmed);
   if (pool.length === 0) {
     cratesStatus.textContent = failed
       ? `Search failed. Check your connection and try again.`
@@ -718,7 +674,7 @@ async function performSearch(query) {
   activeBagId = null;
   activePlaylistId = null;
   activeNewArrivals = false;
-  activeSearchQuery = { query: trimmed, mode };
+  activeSearchQuery = { query: trimmed };
   await switchWallPool(pool);
   showScreen('app');
 }
