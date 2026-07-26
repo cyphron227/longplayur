@@ -65,30 +65,80 @@ Longplayur uses vinyl language throughout the interface:
 | Records nearby | A shelf of related albums for whatever is currently playing |
 | The Wall | The full zoomed-out view of your album history |
 | New session | Starting a fresh listening session |
+| Flip | The searchable list view of the Wall, alongside the spinning dome (Spin) |
+| Shelves | The Record bags screen's grouped rows: your record bags, by mood, by decade, New arrivals, your playlists |
+| Runout groove | Also the name of the screen offering nine directions for what to play next, once an album ends |
 
-## Record bags, playlists, and search
+## Record bags, playlists, search, and New arrivals
 
 A "Record bags" tab sits alongside Now Playing, Past sessions, and Setup. It's
-where you choose what's on the Wall: a "Your Record Bag" button always
-returns to your own pool; below it, seed record bags and your own Spotify
-playlists each appear as cover-art cards, and a search field lets you pull
-in an artist's discography or a whole genre. Selecting anything crossfades
-the Wall and takes you straight to Now Playing.
+where you choose what's on the Wall, grouped into shelves like a real
+shop: a "Your Record Bag" button always returns to your own pool; below
+it, "Your record bags", "By mood", and "By decade" each scroll
+horizontally, then New arrivals (if you follow any artists) and your own
+Spotify playlists. A search field lets you pull in an artist's discography
+or a whole genre. Selecting anything crossfades the Wall and takes you
+straight to Now Playing.
 
-**Record bags** ship with Longplayur (`bags/*.json`) -- 90s US rap, soul
-essentials, Motown, trip hop, Britpop, and late-night jazz, each an
-original 15-to-25-album curation. The albums resolve to real Spotify album
-IDs via search the first time you open that bag, then stay cached.
+**Record bags** ship with Longplayur (`bags/*.json`) -- six original seed
+bags (90s US rap, soul essentials, Motown, trip hop, Britpop, late-night
+jazz), plus four mood bags (Sunday morning, Headphones on, Driving, Rainy
+day) and four decade bags (the 60s, 70s, 90s, and 2020s), a first draft not
+yet vetted the way the original six were. Each is an original 15-to-25
+album curation; albums resolve to real Spotify album IDs via search the
+first time you open that bag, then stay cached.
+
+**New arrivals** is a fourth source: the latest album or EP from each
+artist you follow on Spotify, refreshed every few hours. It needs the
+`user-follow-read` scope, and hides itself entirely if you follow nobody
+or Spotify can't be reached, rather than showing an empty card.
 
 **Your Spotify playlists** (owned and followed) work the same way, needing
-the `playlist-read-private` and `playlist-read-collaborative` scopes --
-if you connected before this feature was added, sign out and reconnect
-once to grant them. A playlist's albums resolve without an extra search
-call (they're already on the playlist's own tracks) and re-resolve
-automatically if you edit the playlist later.
+the `playlist-read-private` and `playlist-read-collaborative` scopes.
+A playlist's albums resolve without an extra search call (they're already
+on the playlist's own tracks) and re-resolve automatically if you edit the
+playlist later.
 
-Anything you play from a bag, playlist, or search result records into
-Past sessions exactly like anything else, tagged with where it came from.
+If you connected before New arrivals or playlists were added, sign out and
+reconnect once to grant their scopes.
+
+Anything you play from a bag, playlist, search result, or New arrivals
+records into Past sessions exactly like anything else, tagged with where
+it came from.
+
+## Flip: find in your crate
+
+The dome (Spin) is for browsing by feel. Flip, a toggle at the top of Now
+Playing, swaps it for a real, searchable, sortable list over the same
+pool: a text search, and sort chips for artist A-to-Z, genre, recently
+played, or unplayed only, with sticky group headers. Tapping a row plays
+it exactly like tapping a cover on the dome. Your last-used mode and sort
+choice are remembered.
+
+## Runout groove: nine ways to go next
+
+When an album ends, Longplayur no longer jumps straight to the whole wall.
+Instead it offers up to nine honestly-labelled directions, each grounded
+in something the app can actually check: more from this artist, the same
+genre or year from your own wall, a Deezer-related album, a keeper from
+your crate (or, failing that, anything you've played before), an unplayed
+pick from whatever bag or playlist you're in, a new arrival, a deliberate
+left turn into a different genre, and playing it again. If fewer than nine
+can be honestly filled for a given album, the grid simply shows fewer --
+never a duplicate or invented pick. "Browse the full wall instead" is
+still there if you'd rather zoom out yourself.
+
+## Past sessions: tags, streaks, and credits
+
+Each played album in an expanded session can be marked keeper, spin again,
+or pass; a keeper nudges that album to resurface a little more often on
+the Wall, a pass a little less. Two or more consecutive days with a
+needle drop shows as a small streak badge under the Past sessions header.
+And on the selection preview (tap a cover before pressing Play), a
+collapsed "Credits" line, closed by default, looks up producer/engineer/
+performer credits from MusicBrainz -- a second, free, keyless source, since
+Spotify's own API has none. Not every release has this data; when it
+doesn't, the line simply says so.
 
 ## Records nearby
 
@@ -117,8 +167,8 @@ A result replaces the Wall the same way a record bag does.
 
 - No accounts, no server.
 - This deployment uses Vercel Web Analytics and Google Analytics (GA4) to see page views and traffic. Neither sees your Spotify listening history, your client ID, or anything else this app stores locally -- they only see that the page was visited, same as any other website with analytics. If you deploy your own copy, both are entirely optional: remove the `<script>` tags for either (or both) in `index.html`, and their CSP entries alongside them, and no analytics data leaves your instance at all.
-- Your Spotify client ID, tokens, cached album pool, journal, and a small cache of genre names picked up from past searches (used only to power the genre autocomplete) live only in your browser's local storage.
-- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby and genre search only, and only artist/album/genre metadata -- never your listening history), to Google Analytics (`www.googletagmanager.com`, `www.google-analytics.com`) and Vercel Analytics (same-origin, no separate domain), and to your own self-hosted copy of this site.
+- Your Spotify client ID, tokens, cached album pool, journal (including any keeper/spin-again/pass tags), New arrivals cache, and small caches of genre names and MusicBrainz credits picked up from past use live only in your browser's local storage.
+- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby, genre search, and Runout groove's related-album direction, and only artist/album/genre metadata -- never your listening history), to MusicBrainz's public API (`musicbrainz.org`, for album credits only, looked up by artist and title, never your listening history), to Google Analytics (`www.googletagmanager.com`, `www.google-analytics.com`) and Vercel Analytics (same-origin, no separate domain), and to your own self-hosted copy of this site.
 - Signing out clears your Spotify session tokens but keeps your client ID and your past sessions, so you are not re-typing your client ID or losing your listening history every time.
 
 ## Limitations, honestly
@@ -129,6 +179,8 @@ A result replaces the Wall the same way a record bag does.
 - End-of-album detection is a heuristic (see `js/ending.js` and `tests.html`). It is unit-tested against 8+ cases per playback path, but has not yet been exercised against a real Spotify account by an automated agent; see `KNOWN-DEVIATIONS.md`.
 - The album disc's centre label is a flat colour rather than a true sample of the album art's dominant edge colour, to avoid a second canvas/CORS dependency inside the persistent per-cell SVG.
 - The Android "Wake Spotify" flow, the output switcher, and native share have not been exercised on a real device by an automated agent; see `KNOWN-DEVIATIONS.md`.
+- Album credits (MusicBrainz) only cover release-level relationships, not the per-track credits MusicBrainz often records instead; and no other-server "Community Wax" (shared ratings across users) exists or is planned without its own separate architecture decision -- see `Docs/PRD.md`'s "Deferred: Community Wax" section.
+- The eight mood and decade record bags (`bags/sunday-morning.json` and similar) are a first draft, assembled from general knowledge rather than vetted the way the original six were; review before relying on them.
 
 ## Development
 
@@ -149,29 +201,39 @@ inlined), which `js/wall.js` imports like any other static module. The
 built bundle is committed, so cloning the repo and running `npx serve .` is
 enough unless you're changing the gallery itself.
 
-Open `tests.html` in a browser (or via the local server above) to run the pure-function test suite: both end-of-album detection functions in `js/ending.js`, covering skips, pauses, scrubs, repeat, device switches, and context changes.
+Open `tests.html` in a browser (or via the local server above) to run the
+pure-function test suite: end-of-album detection (`js/ending.js`, skips,
+pauses, scrubs, repeat, device switches, context changes), the listening
+streak (`js/journal.js`'s `streakDays()`), Flip's filter/sort/grouping
+(`js/flip.js`), and Runout groove's direction-selection logic
+(`js/runout.js`'s `buildRunoutGrid()`, including a sparse pool that can't
+fill all nine directions).
 
 ```
 index.html      screens, SVG icon sprite, the groove brand mark
 styles.css      design tokens, layout, ceremony choreography CSS
 gallery/        isolated Vite build for the Wall's dome gallery (see above)
-bags/           seed record bag definitions (name, blurb, album/artist pairs)
+bags/           record bag definitions (name, blurb, category, album/artist pairs)
 js/
   main.js                 boot, screen routing, event wiring
   auth.js                 OAuth 2.0 PKCE, token refresh
   spotify.js              API client, 429 handling
-  albums.js               pool building, scoring, caching
+  albums.js               pool building, scoring (incl. personal-tag weighting), caching
   bags.js                 record bag manifest + lazy Spotify resolution
   playlists.js            your Spotify playlists as a Wall source
+  newarrivals.js          New arrivals: latest releases from followed artists
   deezer.js               shared Deezer public API client (fetch + JSONP fallback)
   nearby.js               Records nearby, sourced from Deezer's public API
+  musicbrainz.js          album credits from MusicBrainz's public API
   search.js               search by artist or genre (Spotify + Deezer)
+  flip.js                 Flip: filter/sort over the mounted Wall pool
+  runout.js               Runout groove: the nine end-of-album directions
   wall.js                 bridges the dome gallery to the app's needle-drop/journal API
   dome-gallery.bundle.js  build output of gallery/ (React dome gallery), do not hand-edit
   playback.js             Web Playback SDK + Spotify Connect fallback, output switcher
   ending.js               end-of-album detection (pure functions)
-  ceremony.js             needle drop, crackle (Web Audio), tonearm arc, runout groove
-  journal.js              Past sessions storage (versioned, migrates forward)
+  ceremony.js             needle drop, crackle (Web Audio), tonearm arc, runout groove visual
+  journal.js              Past sessions storage (versioned, migrates forward), streaks, tags
   exporter.js             the share card (canvas, native share + download)
   ui.js                   DOM helpers, escaping, aria-live announcer
 ```
