@@ -5,6 +5,137 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## INCREMENT-03 Phase 3: Runout groove (2026-07-26)
+
+A new screen (`#screen-runout`, reached only from `handleRunout()`, never
+the tab bar) replaces the immediate zoom-to-the-whole-wall as the default
+next step after an album finishes: up to nine honestly-labelled directions,
+each mapping to something checkable, never padded with a duplicate or
+invented pick when fewer than nine can be honestly filled.
+
+- **`js/runout.js` splits pure selection from impure gathering**, the same
+  shape `flip.js` established in Phase 1: `buildRunoutGrid(context)` is a
+  pure function (unit-tested in `tests.html`, 8 new assertions covering a
+  fully-populated context filling all nine in order, a sparse pool
+  shrinking to just "Play it again" with no padding, the "Played
+  before"/"From your crate" fallback, and the "in this bag"/"on your Wall"
+  label split) and `gatherRunoutContext()` is the async counterpart doing
+  the actual (bounded) network calls and journal/pool reads.
+- **Tapping a cell calls `handleSelectAlbum()` (the preview-first flow),
+  not the direct `needleDrop()` path Records nearby's shelf actually uses.**
+  The instruction's own wording says a cell "calls selectAlbum() exactly as
+  Records nearby's shelf already does" -- but Records nearby's shelf
+  (`main.js`'s `playerNearby` click handler) calls `handleNeedleDrop()` /
+  `ceremony.needleDrop()` (the direct, no-preview path), not `selectAlbum()`,
+  confirmed by reading that handler directly. The mockup this phase is
+  meant to treat as the literal layout/interaction reference states the
+  opposite, explicitly: its own footnote reads "Tapping a cell opens the
+  *same selection preview* used everywhere else on the Wall... Play or find
+  something else, so this screen introduces one new layout, not a new
+  interaction pattern" -- and Phase 1's Flip rows already established
+  `handleSelectAlbum()` as that "everywhere else" default for a new list
+  UI's rows. Per the honesty rule, the mockup's own explicit statement (and
+  consistency with Flip) won out over the phase instruction's incorrect
+  description of Records nearby's current behaviour: Runout cells call
+  `handleSelectAlbum()`. The one genuinely shared piece, exactly as
+  instructed, is the fallback rect: both `needleDrop()` and `selectAlbum()`
+  already fall back to a viewport-centre rect when `wallApi.getCellRect()`
+  returns null (an album not present in whatever pool is currently
+  mounted, the common case for a Runout pick), so nothing needed to change
+  there at all.
+- **Switching screens before running the ceremony.** A Runout cell's click
+  handler calls `showScreen('app')` before `handleSelectAlbum()`, since the
+  ceremony operates on `wallViewport`/`wallApi` (invisible while
+  `#screen-runout` is showing) -- exactly like Flip rows needed no extra
+  interaction code, just an extra `showScreen('app')` first so there is
+  somewhere for the ceremony to actually animate into.
+- **Finding the just-finished album's own data: `pendingEntry`, not
+  `wallApi.getEntry()`.** `wallApi.getEntry()` only knows about whatever
+  pool is currently mounted, which does not reliably include an album
+  played from Records nearby, or from a previous Runout screen -- exactly
+  the kind of pick Runout groove itself produces most often. `pendingEntry`
+  (set at the top of both `handleNeedleDrop()`/`handleSelectAlbum()` and
+  never cleared) reliably holds the full entry for whatever is currently
+  playing regardless of pool membership, so `handleRunout()` reads that
+  instead, with a defensive `pendingEntry.id === finishedId` check and a
+  fallback to the always-available `zoomToFitAll()` in the (not normally
+  reachable) case it somehow doesn't match.
+- **`ceremony.js`'s `runoutGroove()` demoted, not removed**, per explicit
+  instruction: it now only plays the visual completion (arc, pulse,
+  crackle, settling the hero cover). The physical-neighbour wake-ripple and
+  the automatic `zoomToFitAll()` at the wall's edge, both previously inside
+  this function, are gone from the *default* path but not deleted:
+  `wallApi.zoomToFitAll()` is unchanged and is exactly what "Browse the full
+  wall instead" calls, and `wallApi.getNeighbors()`/`getCellEl()` (only ever
+  called by the old wake-ripple block) are left defined in `wall.js`,
+  simply unreferenced now -- stated here plainly as a real, if unusual,
+  choice (most code with no remaining caller would normally just be
+  deleted) rather than silent dead code, precisely because the instruction
+  explicitly asked that nothing existing be removed here, only demoted.
+- **The nine directions' data sources**, each against the "never invented,
+  always checkable" rule:
+  1. *More from this artist*: `GET /artists/{id}/albums`, same two-pages-of-
+     10 pagination and album/EP filter `search.js` established (its own
+     `limit=10` cap is a confirmed Spotify constraint, not re-guessed).
+  2. *Same genre* / 8. *A left turn*: both read genre off the *current wall
+     pool*, resolved via `ceremony.js`'s existing per-artist genre cache
+     (the same one the selection preview and Flip's genre sort already
+     share) -- deduplicated by artist id, bounded concurrency (4), often
+     entirely free if the pool has already been browsed.
+  3. *Same year*: `releaseDate` already on every pool entry, no fetch.
+  4. *Related*: `nearby.js`'s existing `getRecordsNearby()`, unchanged, no
+     new Deezer client.
+  5. *From your crate* / *Played before*: two new `journal.js` exports,
+     `keeperEntriesNewestFirst()` and `playedEntriesNewestFirst()`,
+     reconstructing lightweight pool-shaped entries directly from journal
+     data (`{id, name, artist, image}`, already stored on every entry) --
+     deliberately not requiring that album to be present in any
+     currently-mounted pool, since a keeper or a past play very often
+     isn't. `hasEntryTagSupport()` (`loadJournal().v >= 4`) is the actual
+     feature-detection the instruction asks for; in this build it is
+     always true (both increments shipped together), but the check is
+     real, not a stub, and would correctly fall through to "Played before"
+     against an older, un-migrated journal.
+  6. *Unplayed in this bag/on your Wall*: `poolSourceType` is computed in
+     `main.js` from the same `activeBagId`/`activePlaylistId`/
+     `activeSearchQuery`/`activeNewArrivals` flags the Crates screen
+     already tracks (`'own'` only when none are set), rather than
+     inspecting pool entries' own `bagId`/`playlistId` fields -- simpler,
+     and already the authoritative source of "what is mounted right now".
+     Search results and New arrivals both fold into the generic `'other'`
+     bucket alongside bags/playlists (the instruction only names two
+     outcomes, bag/playlist vs "your own Wall, no bag/playlist origin"; a
+     third, more specific label for search/New-arrivals-origin pools was
+     not asked for and would have been invented).
+  7. *New arrival*: `newarrivals.js`'s `getCachedNewArrivalsPool()` --
+     already built in INCREMENT-02 Phase 1 specifically for this kind of
+     synchronous, no-network feature check -- rather than a fresh
+     `getNewArrivals()` call, keeping this direction's cost at zero new
+     requests.
+  8. See row 2 above. `ADJACENT_GENRE_PAIRS` is a small, explicit,
+     hand-picked list (soul/motown, hip hop/trap, house/techno, etc.),
+     stated plainly as a first-pass guess, not a real taxonomy, per
+     explicit instruction. Styled with the `--ember` accent (`wildcard:
+     true`), not amber, matching the mockup.
+  9. *Play it again* / *A past favourite*: prefers a keeper-tagged album
+     not already used by an earlier direction (most often direction 5);
+     falls back to the just-finished album itself otherwise. Always fills,
+     so the grid can never come back genuinely empty as long as `finished`
+     itself is a real entry, which it always is.
+- **`source: 'runout'`** is a new, purely additive `journal.js` entry field
+  (no `CURRENT_VERSION` bump, matching `bagId`/`playlistId`'s own original,
+  un-migrated addition rather than Phase 2's tag-field bump, since there is
+  no existing data to transform either way) -- recorded *alongside*, not
+  instead of, whatever `bagId`/`playlistId` a pick's own entry data already
+  carries, since those describe what the album's data is from and `source`
+  describes how the choice was made, two independent facts.
+- **Network cost**: as the instruction states outright, at most two
+  genuinely new calls per runout event (the artist lookup for direction 1,
+  Deezer's already-throttled call for direction 4 via `nearby.js`);
+  directions 2, 3, 5, 6, 7, 8, and 9 are pool/journal/cache reads with no
+  new request of their own. A materially different risk profile from
+  INCREMENT-02, which was mostly new API surface.
+
 ## INCREMENT-03 Phase 2: Shelves (2026-07-26)
 
 The Record bags screen's flat lists are now grouped into labelled shelf

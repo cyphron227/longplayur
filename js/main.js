@@ -8,7 +8,7 @@ import { announce, show, hide, escapeHtml, formatDuration, formatRunningTime, fo
 import { initWall } from './wall.js';
 import * as playback from './playback.js';
 import {
-  needleDrop, selectAlbum, runoutGroove, runoutPrompt, updateTonearmProgress, retireDisc,
+  needleDrop, selectAlbum, runoutGroove, updateTonearmProgress, retireDisc,
   isCrackleEnabled, toggleCrackle, settleActiveOverlay, cancelSelectionPreview
 } from './ceremony.js';
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './ending.js';
@@ -20,6 +20,7 @@ import { getNewArrivals } from './newarrivals.js';
 import { getRecordsNearby } from './nearby.js';
 import { searchAlbums, getGenreSuggestions } from './search.js';
 import * as flip from './flip.js';
+import { gatherRunoutContext, buildRunoutGrid } from './runout.js';
 
 // Strip the OAuth `code`/`state`/`error` from the address bar before anything else runs.
 const callbackParams = auth.consumeCallbackParams();
@@ -42,6 +43,10 @@ const screens = {
   app: document.getElementById('screen-app'),
   crates: document.getElementById('screen-crates'),
   pastSessions: document.getElementById('screen-past-sessions'),
+  // Runout groove (INCREMENT-03 Phase 3): reached only from end-of-album,
+  // deliberately absent from tabsByScreen below since it has no tab of its
+  // own (not reachable from the tab bar).
+  runout: document.getElementById('screen-runout'),
 };
 
 // Tabs only apply to the four screens reachable once connected; 'loading'
@@ -975,10 +980,118 @@ async function handleSelectAlbum(entry) {
   }
 }
 
+// ---------------------------------------------------------------------
+// Runout groove (INCREMENT-03 Phase 3): the default next step after an
+// album finishes, replacing the old immediate zoomToFitAll(). Reached only
+// from here, never from the tab bar; "Browse the full wall instead" is the
+// one manual way back to the original, unchanged behaviour.
+// ---------------------------------------------------------------------
+
+const runoutSourceCover = document.getElementById('runout-source-cover');
+const runoutSourceName = document.getElementById('runout-source-name');
+const runoutSourceDeadwax = document.getElementById('runout-source-deadwax');
+const runoutStatus = document.getElementById('runout-status');
+const runoutGridEl = document.getElementById('runout-grid');
+const runoutBrowseWallBtn = document.getElementById('runout-browse-wall');
+
+function runoutSourceDeadwaxLine(entry) {
+  const year = (entry.releaseDate || '').slice(0, 4);
+  const parts = [entry.artist, year, entry.totalTracks ? `${entry.totalTracks} tracks` : null].filter(Boolean);
+  return parts.join(' · ');
+}
+
+function buildRunoutCell({ direction, entry, wildcard }) {
+  const cell = document.createElement('button');
+  cell.type = 'button';
+  cell.className = 'runout-cell' + (wildcard ? ' wildcard' : '');
+
+  const cover = document.createElement('img');
+  cover.className = 'runout-cell-cover';
+  cover.alt = '';
+  if (entry.image) cover.src = entry.image;
+  cell.appendChild(cover);
+
+  const label = document.createElement('div');
+  label.className = 'runout-label';
+  const dir = document.createElement('div');
+  dir.className = 'runout-direction';
+  dir.textContent = direction;
+  const pick = document.createElement('div');
+  pick.className = 'runout-pick';
+  pick.textContent = entry.name;
+  const artist = document.createElement('div');
+  artist.className = 'runout-artist';
+  artist.textContent = entry.artist;
+  label.append(dir, pick, artist);
+  cell.appendChild(label);
+
+  cell.addEventListener('click', () => {
+    // The ceremony needs the Wall visible to animate into (it operates on
+    // wallApi/wallViewport, which #screen-runout doesn't show) -- switch
+    // back to Now Playing first, exactly as if this cover had been tapped
+    // there. Everything downstream is the Wall's ordinary selection flow;
+    // this is a new entry point into it, not new interaction code.
+    showScreen('app');
+    // Tags this play as chosen from Runout, alongside (not instead of)
+    // whatever bagId/playlistId the entry's own data already carries.
+    handleSelectAlbum({ ...entry, source: 'runout' });
+  });
+
+  return cell;
+}
+
+/** Gathers this album's nine (or fewer) directions and renders them, per
+ * the fallback rule: never padded, shrinks to however many can be honestly
+ * filled. Direction 9 always fills, so this never renders a genuinely
+ * empty grid in practice, but the empty-state copy exists defensively. */
+async function showRunoutScreen(finishedEntry) {
+  runoutSourceCover.src = finishedEntry.image || '';
+  runoutSourceName.textContent = finishedEntry.name;
+  runoutSourceDeadwax.textContent = runoutSourceDeadwaxLine(finishedEntry);
+  runoutGridEl.innerHTML = '';
+  runoutStatus.textContent = 'Pulling a few more records from the shelf.';
+  showScreen('runout');
+
+  const poolSourceType = (activeBagId || activePlaylistId || activeSearchQuery || activeNewArrivals) ? 'other' : 'own';
+
+  let cells = [];
+  try {
+    const context = await gatherRunoutContext(finishedEntry, { currentPool: currentWallPool, poolSourceType });
+    cells = buildRunoutGrid(context);
+  } catch (err) {
+    console.error('[runout] failed to build the runout grid:', err);
+  }
+
+  runoutStatus.textContent = '';
+  if (cells.length === 0) {
+    // Not expected in practice ("Play it again" always fills), but a
+    // genuine error above (e.g. every network call failing at once) could
+    // still leave this empty; degrade honestly rather than showing a blank
+    // grid with no explanation.
+    runoutStatus.textContent = 'Nothing to suggest right now.';
+    return;
+  }
+
+  announce("The session isn't over. Choose the next record.");
+  cells.forEach((cell) => runoutGridEl.appendChild(buildRunoutCell(cell)));
+}
+
+runoutBrowseWallBtn?.addEventListener('click', () => {
+  showScreen('app');
+  wallApi?.zoomToFitAll({ animate: true });
+});
+
 async function handleRunout() {
   if (runoutBusy || !currentAlbumId) return;
   runoutBusy = true;
   const finishedId = currentAlbumId;
+  // pendingEntry (set at the top of handleNeedleDrop()/handleSelectAlbum())
+  // still holds the full entry for whatever just finished, regardless of
+  // whether that album is present in whatever pool is currently mounted
+  // (e.g. it was dropped from Records nearby, or from this very screen on
+  // a previous runout) -- more reliable than wallApi.getEntry(), which only
+  // knows about the currently-mounted pool's own membership.
+  const finishedEntry = pendingEntry && pendingEntry.id === finishedId ? pendingEntry : null;
   currentAlbumId = null;
   try {
     // Explicitly pause: Spotify's own account-level Autoplay setting (if
@@ -986,9 +1099,15 @@ async function handleRunout() {
     // unrelated the moment the album's context runs out, which defeats
     // the "you must choose the next record" experience this app is for.
     await playback.togglePlayPause(true).catch(() => {});
-    const { atEdge } = await runoutGroove(finishedId, { wallApi });
-    wallPrompt.textContent = runoutPrompt(atEdge);
-    announce(runoutPrompt(atEdge));
+    await runoutGroove(finishedId, { wallApi });
+    if (finishedEntry) {
+      await showRunoutScreen(finishedEntry);
+    } else {
+      // Should not normally happen -- every played album's entry is known
+      // via pendingEntry -- but degrade to the always-available fallback
+      // rather than show a Runout screen with nothing to build it from.
+      wallApi.zoomToFitAll({ animate: true });
+    }
   } finally {
     runoutBusy = false;
   }

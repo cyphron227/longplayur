@@ -20,6 +20,7 @@
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './js/ending.js';
 import { streakDays } from './js/journal.js';
 import { filterPool, sortPool, groupKeyFor, UNKNOWN_GENRE, SORT_MODES } from './js/flip.js';
+import { buildRunoutGrid } from './js/runout.js';
 
 const results = document.getElementById('results');
 let passCount = 0;
@@ -286,6 +287,103 @@ group('flip.groupKeyFor: alpha groups by the artist\'s first letter, genre by ge
 assert(groupKeyFor(FLIP_POOL[0], SORT_MODES.ALPHA) === 'F', 'Fleetwood Mac groups under F');
 assert(groupKeyFor(FLIP_POOL[3], SORT_MODES.GENRE) === UNKNOWN_GENRE, 'an entry with no resolved genre groups under Unknown, never invented');
 assert(groupKeyFor(FLIP_POOL[0], SORT_MODES.RECENT) === null, 'recent/unplayed have no natural sticky-header grouping');
+
+// ---------- Runout groove: buildRunoutGrid (pure direction-selection logic) ----------
+const RUNOUT_FINISHED = {
+  id: 'f1', name: 'Dummy', artist: 'Portishead', artistId: 'artist-portishead',
+  image: 'img-f1', releaseDate: '1994-08-22', totalTracks: 11, genre: 'trip hop',
+};
+
+const RUNOUT_FULL_CONTEXT = {
+  finished: RUNOUT_FINISHED,
+  artistOtherAlbums: [{ id: 'a-other1', name: 'Third', artist: 'Portishead', image: 'img-a1' }],
+  poolWithGenre: [
+    { id: 'p-genre', name: 'Blue Lines', artist: 'Massive Attack', genre: 'trip hop', releaseDate: '1991-04-08' },
+    { id: 'p-year', name: 'Illmatic', artist: 'Nas', genre: 'hip hop', releaseDate: '1994-04-19' },
+    { id: 'p-leftturn', name: 'Zombie', artist: 'Fela Kuti', genre: 'afrobeat', releaseDate: '1976-01-01' },
+  ],
+  related: [{ id: 'p-related', name: 'Untrue', artist: 'Burial', image: 'img-related' }],
+  journalPicks: {
+    hasTagSchema: true,
+    keeperEntries: [{ id: 'p-keeper', name: 'Voodoo', artist: "D'Angelo", image: 'img-keeper' }],
+    playedEntries: [{ id: 'p-played', name: 'Some Played Album', artist: 'X', image: 'img-played' }],
+  },
+  poolSource: { type: 'own', pool: [{ id: 'p-unplayed', name: 'Homogenic', artist: 'Björk', image: 'img-unplayed' }] },
+  newArrivalsPool: [{ id: 'p-arrival', name: 'New Thing', artist: 'Someone', image: 'img-arrival' }],
+  playedIds: new Set(),
+};
+
+group('buildRunoutGrid: a fully-populated context fills all 9 directions, in order');
+{
+  const cells = buildRunoutGrid(RUNOUT_FULL_CONTEXT);
+  const directions = cells.map((c) => c.direction);
+  assert(cells.length === 9, `all 9 directions honestly fillable -> 9 cells (got ${cells.length})`);
+  assert(
+    eq(directions, [
+      'More from this artist', 'Same genre', 'Same year, 1994', 'Related', 'From your crate',
+      'Unplayed on your Wall', 'New arrival', 'A left turn', 'Play it again',
+    ]),
+    'directions appear in the fixed 1-9 order'
+  );
+  assert(cells[7].wildcard === true, 'direction 8 (a left turn) is flagged wildcard for the ember-accent styling');
+  assert(cells.slice(0, 7).concat(cells[8]).every((c) => c.wildcard === false), 'every other direction is not a wildcard');
+  // Direction 9 falls back to "Play it again" here because the only
+  // keeper-tagged album was already used by direction 5 ("From your
+  // crate") -- confirms the used-id de-duplication between 5 and 9.
+  assert(cells[8].entry.id === RUNOUT_FINISHED.id, 'direction 9 replays the finished album itself once its one keeper was already used by direction 5');
+}
+
+group('buildRunoutGrid: a sparse pool that cannot fill all 9 shrinks, never pads');
+{
+  const sparseFinished = {
+    id: 'sf1', name: 'Solo Album', artist: 'Obscure Artist', artistId: 'artist-obscure',
+    image: null, releaseDate: null, totalTracks: 8, genre: null,
+  };
+  const cells = buildRunoutGrid({
+    finished: sparseFinished,
+    artistOtherAlbums: [],
+    poolWithGenre: [],
+    related: [],
+    journalPicks: { hasTagSchema: false, keeperEntries: [], playedEntries: [] },
+    poolSource: { type: 'own', pool: [] },
+    newArrivalsPool: null,
+    playedIds: new Set(),
+  });
+  assert(cells.length === 1, `nothing else fillable (no genre, no year, no artist/related/journal/pool/arrivals data) -> only "Play it again" (got ${cells.length})`);
+  assert(cells[0].direction === 'Play it again' && cells[0].entry.id === sparseFinished.id, 'the one surviving cell replays the finished album itself, not a duplicate or invented pick');
+}
+
+group('buildRunoutGrid: "Played before" is the fallback when the tag schema does not exist or has nothing tagged');
+{
+  const cells = buildRunoutGrid({
+    finished: RUNOUT_FINISHED,
+    artistOtherAlbums: [],
+    poolWithGenre: [],
+    related: [],
+    journalPicks: { hasTagSchema: false, keeperEntries: [], playedEntries: [{ id: 'p-played2', name: 'X', artist: 'Y', image: null }] },
+    poolSource: { type: 'other', pool: [] },
+    newArrivalsPool: null,
+    playedIds: new Set(),
+  });
+  const directions = cells.map((c) => c.direction);
+  assert(directions.includes('Played before'), 'falls back to "Played before" rather than "From your crate" when hasTagSchema is false');
+  assert(!directions.includes('From your crate'), 'never claims "From your crate" without an actual keeper-tagged album');
+}
+
+group('buildRunoutGrid: direction 6 labels "Unplayed in this bag" for any non-own pool origin');
+{
+  const cells = buildRunoutGrid({
+    finished: RUNOUT_FINISHED,
+    artistOtherAlbums: [],
+    poolWithGenre: [],
+    related: [],
+    journalPicks: { hasTagSchema: false, keeperEntries: [], playedEntries: [] },
+    poolSource: { type: 'other', pool: [{ id: 'p-unplayed2', name: 'Y', artist: 'Z', image: null }] },
+    newArrivalsPool: null,
+    playedIds: new Set(),
+  });
+  assert(cells.some((c) => c.direction === 'Unplayed in this bag' && c.entry.id === 'p-unplayed2'), 'a bag/playlist/search/new-arrivals-origin pool labels its unplayed pick "in this bag", not "on your Wall"');
+}
 
 // ---------- summary ----------
 

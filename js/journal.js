@@ -109,6 +109,15 @@ export function recordNeedleDrop(entry, { durationMs = null } = {}) {
     durationMs,
     bagId: entry.bagId ?? null,
     playlistId: entry.playlistId ?? null,
+    // 'runout' when chosen from the Runout groove screen (INCREMENT-03
+    // Phase 3), alongside (not instead of) bagId/playlistId -- an entry
+    // picked there can still carry its own bagId/playlistId if its data
+    // happened to come from a curated pool, so this records *how the
+    // choice was made*, independent of *what the album's data is from*.
+    // No CURRENT_VERSION bump: purely additive, same as bagId/playlistId's
+    // own original, un-migrated addition -- an entry recorded before this
+    // shipped simply has no `source`, nothing to transform.
+    source: entry.source ?? null,
     tag: null,
   });
 
@@ -247,6 +256,54 @@ export function streakDays(sessions) {
  * that don't already have a `sessions` array in hand. */
 export function currentStreakDays() {
   return streakDays(loadJournal().sessions);
+}
+
+/** Whether the currently-stored journal supports the per-entry personal
+ * tag (INCREMENT-02 Phase 2, schema v4). Runout groove (INCREMENT-03 Phase
+ * 3) feature-detects with this rather than assuming that increment shipped,
+ * per explicit instruction -- a schema check, distinct from whether any
+ * album has actually been tagged yet (see keeperEntriesNewestFirst()). */
+export function hasEntryTagSupport() {
+  return loadJournal().v >= 4;
+}
+
+/** Every album ever played, reconstructed as a lightweight pool-shaped
+ * entry ({id, name, artist, image} -- a journal entry already carries
+ * enough of an album's own data to stand in as a real, checkable pick
+ * without that album needing to be present in whatever pool is currently
+ * mounted), most recently played first, deduplicated by album (a replayed
+ * album keeps only its latest occurrence). Used by runout.js's "Played
+ * before" direction.
+ * @returns {Array<{id: string, name: string, artist: string, image: string|null}>}
+ */
+export function playedEntriesNewestFirst() {
+  const journal = loadJournal();
+  const byAlbum = new Map();
+  for (const session of journal.sessions) {
+    for (const entry of session.entries) {
+      byAlbum.set(entry.albumId, entry);
+    }
+  }
+  return Array.from(byAlbum.values())
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .map((e) => ({ id: e.albumId, name: e.name, artist: e.artist, image: e.image }));
+}
+
+/** Same shape and ordering as playedEntriesNewestFirst(), filtered to
+ * keeper-tagged plays only. Used by runout.js's "From your crate" and "A
+ * past favourite" directions. */
+export function keeperEntriesNewestFirst() {
+  const journal = loadJournal();
+  const byAlbum = new Map();
+  for (const session of journal.sessions) {
+    for (const entry of session.entries) {
+      if (entry.tag !== ENTRY_TAGS.KEEPER) continue;
+      byAlbum.set(entry.albumId, entry);
+    }
+  }
+  return Array.from(byAlbum.values())
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .map((e) => ({ id: e.albumId, name: e.name, artist: e.artist, image: e.image }));
 }
 
 /**

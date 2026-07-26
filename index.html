@@ -380,6 +380,30 @@
     </div>
   </section>
 
+  <!-- Runout groove (INCREMENT-03 Phase 3): reached only from end-of-album,
+       never from the tab bar. Nine honestly-labelled directions, replacing
+       the immediate zoom-to-the-whole-wall as the default next step;
+       "Browse the full wall instead" reaches that unchanged original
+       behaviour (wallApi.zoomToFitAll()) on demand rather than automatically. -->
+  <section id="screen-runout" class="screen" hidden aria-label="Runout groove: choose the next record">
+    <div class="runout-body">
+      <div class="runout-source">
+        <img id="runout-source-cover" class="runout-source-cover" alt="">
+        <div class="runout-source-meta">
+          <div class="runout-source-label">Just finished</div>
+          <div id="runout-source-name" class="runout-source-name"></div>
+          <div id="runout-source-deadwax" class="runout-source-deadwax deadwax"></div>
+        </div>
+      </div>
+
+      <p id="runout-status" class="runout-status" aria-live="polite"></p>
+
+      <div id="runout-grid" class="runout-grid"></div>
+
+      <button id="runout-browse-wall" class="link-btn runout-browse-wall" type="button">Browse the full wall instead</button>
+    </div>
+  </section>
+
   <!-- Past sessions: the journal (not to be confused with record bags, the curated collections shown on the Wall) -->
   <section id="screen-past-sessions" class="screen" hidden>
     <header class="past-sessions-header">

@@ -688,9 +688,17 @@ export async function needleDrop(entry, ctx) {
 // ---------------------------------------------------------------------
 
 /**
- * Plays the runout-groove sequence once the album has finished, and
- * returns the set of neighbour choices (with an `atEdge` flag) for the
- * caller to render into the wall prompt.
+ * Plays the runout-groove sequence once the album has finished: the arc
+ * completing, its two pulses, the runout crackle, and settling the "now
+ * playing" hero cover back into its cell. Purely the visual completion --
+ * choosing what happens next used to live here too (physical-neighbour
+ * wake-ripple, zoom-to-fit-all at the wall's edge), but INCREMENT-03 Phase
+ * 3's Runout groove screen is now that default next step instead, built
+ * from richer data than physical dome adjacency (see js/runout.js and
+ * main.js's handleRunout()). Nothing about the old neighbour-choice
+ * mechanism was deleted -- wallApi.getNeighbors()/zoomToFitAll() are both
+ * still exactly as they were, only no longer called automatically from
+ * here (see KNOWN-DEVIATIONS.md).
  * @param {string} albumId
  * @param {{wallApi: object}} ctx
  */
@@ -724,26 +732,13 @@ export async function runoutGroove(albumId, ctx) {
     await settleActiveOverlay(wallApi, { animate: !reduced });
   }
 
-  const neighbors = wallApi.getNeighbors(albumId);
-  const unplayed = neighbors.filter((n) => !n.played);
-  const atEdge = unplayed.length < 2;
-
-  if (atEdge) {
-    wallApi.zoomToFitAll({ animate: true });
-  } else if (!reduced) {
-    // Single wake ripple outward from the centre, then rest (no looping animation).
-    unplayed.forEach((n, i) => {
-      const el = wallApi.getCellEl(n.entry.id);
-      if (!el) return;
-      setTimeout(() => el.classList.add('is-woken'), i * TIMINGS.runoutRippleStaggerMs);
-    });
-  }
-
   stopCrackle();
-
-  return { neighbors, unplayed, atEdge };
 }
 
+/** Retained for the "browse the full wall instead" path (js/runout.js's
+ * screen still reaches wallApi.zoomToFitAll() directly, unchanged, for
+ * that link) and any other caller wanting the original PRD-copy-deck
+ * wording; no longer called by the default runout flow itself. */
 export function runoutPrompt(atEdge) {
   return atEdge
     ? "You've reached the edge of the wall. Pick from the shelf."

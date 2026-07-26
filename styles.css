@@ -729,6 +729,87 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   color: var(--bone-dim);
 }
 
+/* -------------------- Runout groove -------------------- */
+/* INCREMENT-03 Phase 3. Reached only from end-of-album; a deliberate
+   exception to "the page never scrolls" (same reasoning as Setup/Crates/
+   Past sessions), since a sparse-pool 4-6 cell grid and a full 9-cell one
+   need to both fit comfortably without their own separate layouts. */
+
+#screen-runout { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.runout-body { max-width: 720px; margin: 0 auto; padding: 24px 20px 40px; }
+
+.runout-source {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--obsidian-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  margin-bottom: 24px;
+}
+.runout-source-cover { width: 56px; height: 56px; border-radius: 2px; object-fit: cover; flex: 0 0 auto; background: var(--vinyl); }
+.runout-source-meta { min-width: 0; flex: 1 1 auto; }
+.runout-source-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--moss);
+  margin-bottom: 4px;
+}
+.runout-source-name { font-family: var(--font-serif); font-size: 18px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runout-source-deadwax { font-size: 10px; }
+
+.runout-status { color: var(--bone-dim); font-size: 14px; text-align: center; padding: 16px 0; margin: 0; }
+
+.runout-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.runout-cell {
+  background: none;
+  padding: 0;
+  text-align: left;
+  position: relative;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  color: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: border-color var(--dur-touch) var(--ease), transform var(--dur-touch) var(--ease);
+}
+.runout-cell:hover, .runout-cell:focus-visible { border-color: var(--amber); transform: translateY(-2px); }
+.runout-cell-cover { aspect-ratio: 1; width: 100%; display: block; object-fit: cover; background: var(--vinyl); }
+.runout-label {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 8px 8px 10px;
+  background: linear-gradient(to top, rgba(11,11,12,0.92), rgba(11,11,12,0));
+}
+.runout-direction {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 3px;
+}
+/* A left turn (direction 8) is styled with the ember accent, not amber --
+   the one deliberately different-looking cell, matching the mockup. */
+.runout-cell.wildcard .runout-direction { color: var(--ember); }
+.runout-pick { font-size: 12px; font-weight: 500; line-height: 1.25; color: var(--bone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runout-artist { font-size: 10px; color: var(--bone-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.runout-browse-wall { display: block; margin: 24px auto 0; text-align: center; }
+
+@media (max-width: 480px) {
+  .runout-grid { gap: 8px; }
+  .runout-label { padding: 6px 6px 8px; }
+}
+
 /* -------------------- Ceremony overlay -------------------- */
 
 .ceremony-layer {
