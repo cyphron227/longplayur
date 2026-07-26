@@ -14,12 +14,18 @@
 import { getPrimaryGenre } from './ceremony.js';
 
 // Genre resolution goes through a bounded concurrency pool from its first
-// commit (per the hard constraint on every new loop of API calls), even
-// though in practice it usually costs nothing: getPrimaryGenre() is the
-// same cache the ceremony's own selection preview already fills in as
-// albums are viewed, so a pool of already-browsed albums resolves
-// instantly, and only genuinely new artist ids trigger a request.
-const GENRE_RESOLVE_CONCURRENCY = 4;
+// commit (per the hard constraint on every new loop of API calls). Kept
+// deliberately lower than this codebase's usual 4 (search.js, bags.js):
+// getPrimaryGenre() now falls back to a MusicBrainz lookup by name for
+// most artists (Spotify's own genre field having been observed live to
+// come back empty for most/all artists post-launch, see
+// KNOWN-DEVIATIONS.md), and MusicBrainz's own public-API courtesy guidance
+// is roughly 1 request/second -- a genuinely new artist id often costs two
+// MusicBrainz requests now (search, then genres), not zero, so a lower
+// concurrency spreads a whole pool's worth of them out rather than
+// bursting. Already-resolved artists (persisted to localStorage, 30 days)
+// still resolve instantly regardless of this limit.
+const GENRE_RESOLVE_CONCURRENCY = 2;
 
 async function mapWithConcurrency(items, limit, fn) {
   const results = new Array(items.length);
@@ -122,10 +128,20 @@ export function groupKeyFor(entry, mode) {
  * @returns {Promise<Array>}
  */
 export async function resolveGenres(pool) {
-  const artistIds = Array.from(new Set(pool.map((e) => e.artistId).filter(Boolean)));
+  // getPrimaryGenre()'s MusicBrainz fallback searches by name, not
+  // Spotify artist id, so a name is captured here too -- the first one
+  // seen for a given artistId, on the assumption that is consistent for
+  // the same underlying Spotify artist within one pool.
+  const nameByArtistId = new Map();
+  for (const entry of pool) {
+    if (entry.artistId && !nameByArtistId.has(entry.artistId)) {
+      nameByArtistId.set(entry.artistId, (entry.artist || '').split(',')[0].trim());
+    }
+  }
+  const artistIds = Array.from(nameByArtistId.keys());
   const genreByArtistId = new Map();
   await mapWithConcurrency(artistIds, GENRE_RESOLVE_CONCURRENCY, async (artistId) => {
-    genreByArtistId.set(artistId, await getPrimaryGenre(artistId));
+    genreByArtistId.set(artistId, await getPrimaryGenre(artistId, nameByArtistId.get(artistId)));
   });
   return pool.map((entry) => ({ ...entry, genre: entry.artistId ? genreByArtistId.get(entry.artistId) || null : null }));
 }

@@ -5,7 +5,7 @@
 import { prefersReducedMotion, formatDuration } from './ui.js';
 import * as playback from './playback.js';
 import { getArtist } from './spotify.js';
-import { getAlbumCredits } from './musicbrainz.js';
+import { getAlbumCredits, getArtistGenre } from './musicbrainz.js';
 
 export const TIMINGS = Object.freeze({
   recedeMs: 600, // 0 -> 600: other covers recede; camera pans; cover scales to 1.6
@@ -384,16 +384,67 @@ function deadwaxLine(entry, context) {
 
 // Genre lives on the artist, not the album -- Spotify's album response
 // never populates one of its own -- so this is a second, small request
-// alongside prepareAlbum(). Cached per artist for the tab's lifetime since
-// a wall full of the same artist's albums shouldn't refetch it each time,
-// and coverage is patchy enough (many artists have no genres at all) that
-// failing quietly and falling back to the release year is the honest
+// alongside prepareAlbum(). Cached per artist for the tab's lifetime (and,
+// below, persisted to localStorage) since a wall full of the same artist's
+// albums shouldn't refetch it each time, and coverage is patchy enough
+// that failing quietly and falling back to the release year is the honest
 // default rather than leaving a blank line.
 const artistGenreCache = new Map();
 
-async function fetchPrimaryGenre(artistId) {
+// Post-launch addition: Spotify's own GET /artists/{id} `genres` array has
+// been observed live to come back empty for most/all artists now, not just
+// the "patchy coverage" originally assumed above (not documented anywhere
+// by Spotify, and not independently verifiable against a live account in
+// this build environment -- an inference from this app's own live
+// behaviour, per the honesty rule, not a confirmed API change). Genre by
+// artist NAME via MusicBrainz (musicbrainz.js's getArtistGenre(), a real
+// first-class field there) is the fallback, tried only when Spotify's own
+// comes back empty, so a working Spotify response is never overridden.
+const LS_ARTIST_GENRE_CACHE = 'lp_artist_genre_cache';
+const ARTIST_GENRE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // genre for a given artist essentially never changes; matches musicbrainz.js's own credits cache TTL.
+const ARTIST_GENRE_CACHE_MAX = 1000;
+
+function loadPersistedGenreCache() {
+  try {
+    const raw = localStorage.getItem(LS_ARTIST_GENRE_CACHE);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function readPersistedGenre(artistId) {
+  const cache = loadPersistedGenreCache();
+  const entry = cache[artistId];
+  if (!entry || Date.now() - entry.at >= ARTIST_GENRE_CACHE_TTL_MS) return undefined;
+  return entry.genre; // may itself be null (a confirmed miss from a prior session, worth caching too).
+}
+
+function writePersistedGenre(artistId, genre) {
+  try {
+    const cache = loadPersistedGenreCache();
+    if (!(artistId in cache) && Object.keys(cache).length >= ARTIST_GENRE_CACHE_MAX) return; // simplest correct cap: stop adding once full, keep what's already learned.
+    cache[artistId] = { genre, at: Date.now() };
+    localStorage.setItem(LS_ARTIST_GENRE_CACHE, JSON.stringify(cache));
+  } catch {
+    // localStorage full/unavailable: resolves again next session.
+  }
+}
+
+/** @param {string} artistId @param {string} [artistName] needed only for
+ * the MusicBrainz fallback, which has no relationship to a Spotify id and
+ * must search by name instead. */
+async function fetchPrimaryGenre(artistId, artistName) {
   if (!artistId) return null;
   if (artistGenreCache.has(artistId)) return artistGenreCache.get(artistId);
+
+  const persisted = readPersistedGenre(artistId);
+  if (persisted !== undefined) {
+    artistGenreCache.set(artistId, persisted);
+    return persisted;
+  }
+
   let genre = null;
   try {
     const artist = await getArtist(artistId);
@@ -401,15 +452,24 @@ async function fetchPrimaryGenre(artistId) {
   } catch {
     genre = null;
   }
+
+  if (!genre && artistName) {
+    genre = await getArtistGenre(artistName).catch(() => null);
+  }
+
   artistGenreCache.set(artistId, genre);
+  writePersistedGenre(artistId, genre);
   return genre;
 }
 
 /** Exposed so other modules needing an artist's primary genre (flip.js's
- * genre sort/filter, INCREMENT-03 Phase 1) reuse this same cache instead of
- * fetching and caching it a second time. */
-export async function getPrimaryGenre(artistId) {
-  return fetchPrimaryGenre(artistId);
+ * genre sort/filter, runout.js's genre-based directions) reuse this same
+ * cache instead of fetching and caching it a second time.
+ * @param {string} artistId
+ * @param {string} [artistName] pass this whenever known -- see
+ *   fetchPrimaryGenre() above for why. */
+export async function getPrimaryGenre(artistId, artistName) {
+  return fetchPrimaryGenre(artistId, artistName);
 }
 
 // ---------------------------------------------------------------------
@@ -862,7 +922,7 @@ export async function selectAlbum(entry, ctx) {
 
   Promise.all([
     playback.prepareAlbum(entry).catch(() => null),
-    fetchPrimaryGenre(entry.artistId),
+    fetchPrimaryGenre(entry.artistId, (entry.artist || '').split(',')[0].trim()),
   ]).then(([context, genre]) => {
     const line = text.querySelector('.preview-description');
     if (line) line.textContent = descriptionLine(entry, context, genre);

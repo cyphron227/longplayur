@@ -47,7 +47,11 @@ export const ADJACENT_GENRE_PAIRS = [
 
 const ARTIST_ALBUMS_PAGE_LIMIT = 10; // GET /artists/{id}/albums caps `limit` at 10; see search.js's own deviation entry.
 const ARTIST_ALBUMS_PAGES = 2;
-const GENRE_RESOLVE_CONCURRENCY = 4;
+// Kept lower than this codebase's usual 4 (search.js, bags.js): a
+// genuinely new artist id now often costs two MusicBrainz requests (not
+// zero) via getPrimaryGenre()'s fallback -- see flip.js's matching
+// constant and KNOWN-DEVIATIONS.md for the full reasoning.
+const GENRE_RESOLVE_CONCURRENCY = 2;
 
 function pickImage(images) {
   if (!Array.isArray(images) || images.length === 0) return null;
@@ -113,10 +117,18 @@ async function otherAlbumsForArtist(artistId, excludeAlbumId) {
  * cache (the same one the selection preview and flip.js's genre sort/filter
  * already share), deduplicated by artist id, bounded concurrency. */
 async function resolvePoolGenres(pool) {
-  const artistIds = Array.from(new Set(pool.map((e) => e.artistId).filter(Boolean)));
+  // getPrimaryGenre()'s MusicBrainz fallback searches by name, not
+  // Spotify artist id -- the first name seen for a given artistId is used.
+  const nameByArtistId = new Map();
+  for (const entry of pool) {
+    if (entry.artistId && !nameByArtistId.has(entry.artistId)) {
+      nameByArtistId.set(entry.artistId, (entry.artist || '').split(',')[0].trim());
+    }
+  }
+  const artistIds = Array.from(nameByArtistId.keys());
   const genreByArtistId = new Map();
   await mapWithConcurrency(artistIds, GENRE_RESOLVE_CONCURRENCY, async (artistId) => {
-    genreByArtistId.set(artistId, await getPrimaryGenre(artistId));
+    genreByArtistId.set(artistId, await getPrimaryGenre(artistId, nameByArtistId.get(artistId)));
   });
   return pool.map((entry) => ({ ...entry, genre: entry.artistId ? genreByArtistId.get(entry.artistId) || null : null }));
 }
@@ -139,7 +151,7 @@ export async function gatherRunoutContext(finishedEntry, { currentPool, poolSour
   const seedArtist = (finishedEntry.artist || '').split(',')[0].trim();
 
   const [finishedGenre, artistOtherAlbums, poolWithGenre, related] = await Promise.all([
-    getPrimaryGenre(finishedEntry.artistId),
+    getPrimaryGenre(finishedEntry.artistId, seedArtist),
     otherAlbumsForArtist(finishedEntry.artistId, finishedEntry.id),
     resolvePoolGenres(currentPool || []),
     seedArtist ? getRecordsNearby(seedArtist) : Promise.resolve([]),

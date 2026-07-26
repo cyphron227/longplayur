@@ -166,3 +166,95 @@ export async function getAlbumCredits({ artist, title }) {
     return { credits: null, failed: true };
   }
 }
+
+// ---------------------------------------------------------------------
+// Artist genre (added post-launch): a fallback genre source for
+// ceremony.js's fetchPrimaryGenre(), used when Spotify's own
+// GET /artists/{id} response has an empty `genres` array -- observed live
+// to now be the common case for most/all artists rather than the
+// exception it was when the selection preview's description line was
+// first built (not documented anywhere by Spotify, and not independently
+// verifiable against a live account in this build environment; stated
+// here as an inference from this app's own live behaviour, per the
+// honesty rule, not as a confirmed Spotify API change). Deezer was
+// considered and rejected as this fallback: its public API has no
+// per-artist genre field to query directly, only editorial genre-to-
+// artist buckets (`/genre/{id}/artists`), which would need brute-forcing
+// every bucket to check membership for an arbitrary artist. MusicBrainz's
+// artist entity has a real, first-class `genres` field instead (community-
+// tagged, each with a vote count), fetched here the same best-effort,
+// confidence-gated way as getAlbumCredits() above.
+// ---------------------------------------------------------------------
+
+const LS_GENRE_CACHE_PREFIX = 'lp_mbgenre_';
+
+/** The best artist match for a name, or null if nothing meets
+ * MIN_CONFIDENCE_SCORE plus a normalised name match. */
+async function findArtist(name) {
+  const q = encodeURIComponent(`artist:"${name}"`);
+  const data = await mbFetch(`/artist/?query=${q}&limit=5`);
+  const candidates = data?.artists || [];
+  const wantedName = normalize(name);
+  const best = candidates.find((a) => (a.score ?? 0) >= MIN_CONFIDENCE_SCORE && normalize(a.name) === wantedName);
+  return best || null;
+}
+
+/** The artist's highest-voted genre tag, or null if MusicBrainz has none
+ * recorded for them -- common and expected, not an error. */
+async function findArtistGenre(artistMbid) {
+  const data = await mbFetch(`/artist/${artistMbid}?inc=genres`);
+  const genres = (data?.genres || []).slice().sort((a, b) => (b.count || 0) - (a.count || 0));
+  return genres[0]?.name || null;
+}
+
+function genreCacheKey(name) {
+  return `${LS_GENRE_CACHE_PREFIX}${normalize(name)}`;
+}
+
+function getCachedGenre(name) {
+  try {
+    const raw = localStorage.getItem(genreCacheKey(name));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (!parsed || Date.now() - parsed.builtAt >= CACHE_TTL_MS) return undefined;
+    return parsed.genre; // may itself be null (a confirmed miss, also worth caching).
+  } catch {
+    return undefined;
+  }
+}
+
+function setCachedGenre(name, genre) {
+  try {
+    localStorage.setItem(genreCacheKey(name), JSON.stringify({ builtAt: Date.now(), genre }));
+  } catch {
+    // localStorage full/unavailable: resolves again next time.
+  }
+}
+
+/**
+ * A best-effort primary genre for an artist, by name (MusicBrainz has no
+ * relationship to a Spotify artist id, so this always searches by name,
+ * the same way getAlbumCredits() searches releases by artist+title).
+ * @param {string} artistName
+ * @returns {Promise<string|null>} null for an honest miss (no confident
+ *   artist match, or a match with no genre tags recorded) -- never a guess.
+ */
+export async function getArtistGenre(artistName) {
+  if (!artistName) return null;
+  const cached = getCachedGenre(artistName);
+  if (cached !== undefined) return cached;
+
+  try {
+    const artist = await findArtist(artistName);
+    if (!artist) {
+      setCachedGenre(artistName, null);
+      return null;
+    }
+    const genre = await findArtistGenre(artist.id);
+    setCachedGenre(artistName, genre);
+    return genre;
+  } catch (err) {
+    console.error('[musicbrainz] artist genre lookup failed:', err);
+    return null; // not cached: a transient failure should retry next time, not stick as a permanent miss.
+  }
+}

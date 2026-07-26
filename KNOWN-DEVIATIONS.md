@@ -5,6 +5,94 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Genre resolution: MusicBrainz fallback, persistent cache, automated (2026-07-26)
+
+Reported live, post-launch, against the real deployment: every genre in
+Flip's genre sort/filter and Runout groove's genre-based directions showed
+as "Unknown". Root cause, inferred rather than confirmed (this build
+environment has no live Spotify session to verify it against directly, so
+this is stated as an inference from the app's own live behaviour, per the
+honesty rule, not a documented Spotify change): `GET /artists/{id}`'s
+`genres` array appears to be coming back empty for most or all artists now.
+When this app's selection-preview description line and genre features were
+first built, the comment above `fetchPrimaryGenre()` already anticipated
+"coverage is patchy" and built in a fallback to the release year -- but
+"patchy" is a different situation from "effectively always empty", which
+is what real usage surfaced.
+
+- **MusicBrainz as a second genre source**, the same free, keyless API
+  already used for album credits (INCREMENT-02 Phase 4). `js/musicbrainz.js`
+  gained `getArtistGenre(artistName)`: search MusicBrainz for the artist by
+  name (confidence-gated exactly like `getAlbumCredits()`'s release-group
+  match: relevance score >= 90 AND a normalised exact name match, or treated
+  as not found), then read that artist's own first-class `genres` field
+  (community-tagged, each with a vote count) and take the highest-voted
+  one. **Deezer was considered and rejected** as this fallback: its public
+  API has no per-artist genre field to query directly, only editorial
+  genre-to-artist buckets (`/genre/{id}/artists`, the same one
+  `search.js`'s genre search already reads in the other direction), which
+  would need brute-forcing every bucket to check an arbitrary artist's
+  membership -- not a real per-artist lookup the way MusicBrainz's `genres`
+  field is.
+- **`ceremony.js`'s `fetchPrimaryGenre()`/`getPrimaryGenre()` now take an
+  optional artist name**, used only for the MusicBrainz fallback (which has
+  no relationship to a Spotify artist id and must search by name) and only
+  tried when Spotify's own `genres[0]` comes back empty, so a working
+  Spotify response is never second-guessed. Every caller (`selectAlbum()`,
+  `flip.js`'s `resolveGenres()`, `runout.js`'s `resolvePoolGenres()` and
+  `gatherRunoutContext()`) was updated to pass the artist's name through
+  (the first name on a possibly-multi-artist credit, matching the existing
+  pattern already used for Records nearby's seed artist).
+- **A genuinely new persistent cache** (`localStorage['lp_artist_genre_cache']`,
+  keyed by Spotify artist id, 30-day TTL matching `musicbrainz.js`'s own
+  credits cache, capped at 1000 entries via the same "stop adding once
+  full" rule `search.js`'s genre-vocabulary harvest already uses) sits
+  alongside the existing in-memory `artistGenreCache` Map. Before this, an
+  artist's genre was refetched every tab session; now it is resolved once
+  per artist, ever, which matters a great deal now that a genuinely new
+  artist typically costs two MusicBrainz requests (search, then genres) on
+  top of the always-failing Spotify one, not zero.
+- **Automated, not just cached**: `main.js`'s `onWallPoolChanged()` now
+  kicks off `flip.resolveGenres()` for the newly-mounted pool immediately
+  in the background (via a new shared `ensurePoolGenresResolving()` guard
+  against starting it twice for the same pool), rather than waiting for the
+  listener to open Flip first. By the time Flip or a Runout event actually
+  needs genre data, most of the pool's artists are typically already
+  resolved. This is a real, deliberate increase in background MusicBrainz
+  traffic (up to roughly one pool's worth of unique artists' worth of
+  requests, once, per pool mount) -- judged acceptable specifically because
+  of three things together: (1) it is bounded, sequential-ish concurrency,
+  not a burst (see below); (2) it is paid once per artist ever, not once
+  per session, once the persistent cache above is warm; and (3) every user
+  runs their own instance against their own IP (this app's whole
+  architecture premise, restated in `README.md`'s "Why you need your own
+  Spotify app" section), so this traffic is naturally spread across many
+  real users rather than one shared backend hammering MusicBrainz. Stated
+  plainly as a real trade-off, not a free lunch.
+- **Concurrency lowered from 4 to 2** in both `flip.js`'s and `runout.js`'s
+  pool-genre-resolution loops (their shared constant, `GENRE_RESOLVE_CONCURRENCY`),
+  specifically because of the point above: this codebase's usual
+  concurrency of 4 was sized for Spotify requests, and MusicBrainz's own
+  public-API courtesy guidance (roughly 1 request/second) is tighter than
+  Spotify's -- a genuinely new artist id now typically costs two sequential
+  MusicBrainz requests, not one Spotify request, so the same concurrency
+  number would have doubled the effective request rate against the
+  tighter-limited API.
+- **Verified against mocked network responses** (this environment still has
+  no live Spotify or MusicBrainz access): with Spotify's own artist call
+  failing (simulated here by having no auth session at all, which fails the
+  same way an empty `genres` array does from this function's point of view)
+  and MusicBrainz's endpoints intercepted, `getPrimaryGenre()` correctly
+  falls through to the MusicBrainz result, sorts by vote count (a
+  lower-count "electronic" tag was correctly passed over for a
+  higher-count "trip hop" one), caches it to both the in-memory Map and
+  localStorage, and a second call for the same artist returns instantly
+  without hitting either mock again. A separate check confirmed a
+  low-score, name-mismatched MusicBrainz candidate is rejected (returns
+  `null`) rather than guessed at, matching `getAlbumCredits()`'s existing
+  confidence-gating behaviour. Not, and cannot be in this environment,
+  verified against MusicBrainz's actual live artist-genre data.
+
 ## INCREMENT-03 Phase 3: Runout groove (2026-07-26)
 
 A new screen (`#screen-runout`, reached only from `handleRunout()`, never

@@ -115,6 +115,12 @@ played, or unplayed only, with sticky group headers. Tapping a row plays
 it exactly like tapping a cover on the dome. Your last-used mode and sort
 choice are remembered.
 
+Genre resolves automatically in the background as soon as a pool is
+mounted, from Spotify's own artist data first and MusicBrainz second
+(Spotify's own genre field has been observed to come back empty for most
+artists in practice); resolved genres are cached in your browser for 30
+days, so this cost is paid once per artist, not once per visit.
+
 ## Runout groove: nine ways to go next
 
 When an album ends, Longplayur no longer jumps straight to the whole wall.

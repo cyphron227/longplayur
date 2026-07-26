@@ -755,13 +755,37 @@ let flipQuery = '';
 let flipGenrePool = null; // currentWallPool, augmented with .genre, once resolved; null until resolveGenres() finishes for this pool.
 let flipGenrePoolFor = null; // which pool (by reference) flipGenrePool was resolved from, so a pool switch invalidates it.
 
+/**
+ * Kicks off flip.resolveGenres() for `pool` if it isn't already resolved
+ * (or resolving), a no-op otherwise. Automates genre fetching (Flip's
+ * genre sort/filter, Runout groove's genre-based directions) so it starts
+ * as soon as a pool is mounted rather than waiting for the listener to
+ * open Flip first -- by the time either is actually used, most of the
+ * pool's artists are typically already resolved and cached. Safe to call
+ * from more than one place (onWallPoolChanged() and renderFlipList() both
+ * do) since flipGenrePoolFor guards against starting a second resolution
+ * for the same pool while one is already in flight.
+ */
+function ensurePoolGenresResolving(pool) {
+  if (flipGenrePoolFor === pool) return;
+  flipGenrePoolFor = pool;
+  flip.resolveGenres(pool).then((resolved) => {
+    if (flipGenrePoolFor !== pool) return; // pool changed again while this was in flight.
+    flipGenrePool = resolved;
+    if (flipMode === 'flip') renderFlipList();
+  });
+}
+
 /** Called whenever a new pool is mounted on the Wall (renderWallDom()):
  * genre resolution is per-pool, so a switch invalidates whatever was
- * previously resolved, and Flip's list (if currently the visible mode) is
- * re-rendered against the new pool. */
+ * previously resolved and starts a fresh one in the background regardless
+ * of which view mode is currently active; Flip's list (if it is the
+ * visible mode) is also re-rendered immediately against the new pool
+ * (with genre absent until the background resolution above lands). */
 function onWallPoolChanged() {
   flipGenrePool = null;
   flipGenrePoolFor = null;
+  ensurePoolGenresResolving(currentWallPool);
   if (flipMode === 'flip') renderFlipList();
 }
 
@@ -855,19 +879,15 @@ function buildFlipRow(entry) {
 async function renderFlipList() {
   if (!flipListEl) return;
 
-  // Genre data isn't on pool entries by default (see flip.js); resolve it
-  // once per mounted pool, then re-render once it lands. filterPool()/
-  // sortPool() themselves run synchronously against whatever is available
-  // in the meantime (unresolved entries simply don't match/group on genre
-  // yet), so the list is never blank while this is in flight.
-  if (flipGenrePoolFor !== currentWallPool) {
-    flipGenrePoolFor = currentWallPool;
-    flip.resolveGenres(currentWallPool).then((resolved) => {
-      if (flipGenrePoolFor !== currentWallPool) return; // pool changed again while this was in flight.
-      flipGenrePool = resolved;
-      if (flipMode === 'flip') renderFlipList();
-    });
-  }
+  // Genre data isn't on pool entries by default (see flip.js); resolution
+  // normally already started in the background as soon as this pool was
+  // mounted (onWallPoolChanged()'s own ensurePoolGenresResolving() call),
+  // but this covers the case of switching to Flip mid-resolution or before
+  // it has ever started. filterPool()/sortPool() themselves run
+  // synchronously against whatever is available in the meantime
+  // (unresolved entries simply don't match/group on genre yet), so the
+  // list is never blank while this is in flight.
+  ensurePoolGenresResolving(currentWallPool);
 
   const pool = flipGenrePool || currentWallPool;
   const filtered = flip.filterPool(pool, flipQuery);
