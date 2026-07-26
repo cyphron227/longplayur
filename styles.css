@@ -823,7 +823,12 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
    an invisible horizontal scroll instead of just wrapping/truncating. */
 #screen-past-sessions { padding: 24px; max-width: 720px; margin: 0 auto; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
 .past-sessions-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 24px; }
+.past-sessions-title-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .past-sessions-header h1 { font-family: var(--font-serif); font-size: 26px; min-width: 0; }
+/* Listening streak (INCREMENT-02 Phase 3): only shown at N >= 2 (a 1-day
+   streak isn't worth a badge); moss reads as a quiet positive status,
+   matching its use elsewhere (device note, saved confirmation). */
+.past-sessions-streak { color: var(--moss); }
 .past-sessions-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .past-sessions-list { display: flex; flex-direction: column; gap: 0; }
 .session-row { border-bottom: 1px solid var(--line); padding: 18px 0; }

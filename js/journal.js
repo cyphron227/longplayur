@@ -192,3 +192,59 @@ export function getLifetimeSessionCount() {
 export function sessionDurationMs(session) {
   return session.entries.reduce((sum, e) => sum + (e.durationMs || 0), 0);
 }
+
+// ---------------------------------------------------------------------
+// Listening streak (INCREMENT-02 Phase 3)
+// ---------------------------------------------------------------------
+
+function localDateKey(date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+/**
+ * The count of consecutive calendar days, in the caller's local timezone,
+ * up to and including today or yesterday, that contain at least one
+ * completed needle drop (a recorded entry). A pure function over the
+ * journal's own `sessions` array so it is unit-testable without touching
+ * localStorage (see tests.html).
+ *
+ * "Up to and including today OR yesterday" (not only today) means a streak
+ * that was unbroken through yesterday but hasn't been continued yet today
+ * still counts -- the alternative (today only) would reset every streak to
+ * 0 for the whole first half of every day, which reads as punishing rather
+ * than motivating. A streak that stopped two or more days ago is 0: it has
+ * genuinely lapsed.
+ * @param {Array} sessions journal.sessions (oldest first; order does not
+ *   actually matter here since every entry's own date is read directly)
+ * @returns {number}
+ */
+export function streakDays(sessions) {
+  if (!Array.isArray(sessions) || sessions.length === 0) return 0;
+
+  const days = new Set();
+  for (const session of sessions) {
+    for (const entry of session.entries || []) {
+      days.add(localDateKey(new Date(entry.startedAt)));
+    }
+  }
+  if (days.size === 0) return 0;
+
+  const today = new Date();
+  const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (!days.has(localDateKey(cursor))) {
+    cursor.setDate(cursor.getDate() - 1); // no entry yet today: see if the streak is still alive as of yesterday.
+  }
+
+  let count = 0;
+  while (days.has(localDateKey(cursor))) {
+    count += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return count;
+}
+
+/** Convenience wrapper reading the current journal directly, for callers
+ * that don't already have a `sessions` array in hand. */
+export function currentStreakDays() {
+  return streakDays(loadJournal().sessions);
+}

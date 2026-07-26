@@ -5,6 +5,38 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## INCREMENT-02 Phase 3: Listening streak (2026-07-26)
+
+`journal.js`'s new `streakDays(sessions)` is a pure function (unit-tested in
+`tests.html`, 5 new assertions: no sessions, a single session today, a
+broken streak, a streak ending yesterday counting, a streak ending two days
+ago resetting to 0) that counts consecutive local-calendar days, up to and
+including today or yesterday, with at least one recorded needle drop.
+"Today or yesterday" (not today only) is deliberate: without it, every
+streak would show as broken for the entire first half of every day until
+the listener's first needle drop of that day, which reads as punishing
+rather than motivating, and isn't how the "N day streak" concept is
+generally understood elsewhere.
+
+- **Placement: the Past sessions screen's own header, not each session
+  row.** The originating research doc's own wording ("append to the
+  existing Past sessions header line... `SESSION 12 · 11 JUL 2026 · 48
+  MIN`") describes a per-session-row deadwax label, but a streak is a
+  property of "now" (today's date against the whole journal), not of any
+  one past session -- attaching it to the newest row, an arbitrary past
+  row, or every row equally would all misrepresent what the number means.
+  The phase prompt's own wording ("the existing Past sessions header line,
+  only when N >= 2") more literally names the screen's actual `<h1>Past
+  sessions</h1>` header, which this instead extends with a small deadwax
+  line underneath it (`#past-sessions-streak`, `moss` coloured, matching
+  that token's existing "quiet positive status" usage for the device note
+  and saved confirmations) shown only once currentStreakDays() >= 2. Stated
+  here as an interpretation call, not a literal reading of either source.
+- `currentStreakDays()` is a thin convenience wrapper (`streakDays(loadJournal().sessions)`)
+  for `main.js`, which does not otherwise need the raw `sessions` array;
+  the pure function itself needs no localStorage access at all, which is
+  what made it straightforward to unit test directly.
+
 ## INCREMENT-02 Phase 2: Personal tag, keeper / spin again / pass (2026-07-26)
 
 `journal.js` bumped `CURRENT_VERSION` 3 -> 4, adding an optional per-entry

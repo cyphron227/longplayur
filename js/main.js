@@ -840,6 +840,7 @@ btnCrackle.addEventListener('click', () => {
 // ---------------------------------------------------------------------
 
 const pastSessionsList = document.getElementById('past-sessions-list');
+const pastSessionsStreak = document.getElementById('past-sessions-streak');
 const btnClosePastSessions = document.getElementById('btn-close-past-sessions');
 const btnNewSession = document.getElementById('btn-new-session');
 
@@ -882,10 +883,22 @@ function svgIcon(iconId) {
   return svg;
 }
 
+function renderPastSessionsStreak() {
+  if (!pastSessionsStreak) return;
+  const streak = journal.currentStreakDays();
+  if (streak >= 2) {
+    pastSessionsStreak.textContent = `${streak} DAY STREAK`;
+    pastSessionsStreak.hidden = false;
+  } else {
+    pastSessionsStreak.hidden = true;
+  }
+}
+
 function renderPastSessions() {
   const sessions = journal.getSessionsNewestFirst();
   const lifetimeCount = journal.getLifetimeSessionCount();
   pastSessionsList.innerHTML = '';
+  renderPastSessionsStreak();
 
   if (sessions.length === 0) {
     const empty = document.createElement('p');
