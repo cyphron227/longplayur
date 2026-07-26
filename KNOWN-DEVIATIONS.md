@@ -5,6 +5,65 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## INCREMENT-03 Phase 1: Flip (2026-07-26)
+
+A second view mode on the Now Playing screen: the dome (Spin) is
+unchanged; Flip is a searchable, sortable list over the same pool, swapped
+in as a sibling of `#wall-viewport` rather than a `wall.js` remount.
+
+- **Genre needed a new, deliberately impure resolver, since it does not
+  already exist on pool entries.** Every pool-producing module
+  (`albums.js`, `bags.js`, `search.js`, `playlists.js`, `newarrivals.js`)
+  carries `artistId`, not genre -- genre lives on the artist and is fetched
+  lazily, one artist at a time, only as albums are actually viewed
+  (`ceremony.js`'s `artistGenreCache`). `js/flip.js`'s `filterPool()` and
+  `sortPool()` are pure functions exactly as specified, operating on
+  whatever `.genre` an entry already carries (or doesn't); the new
+  `resolveGenres()` in the same file is the one explicitly impure addition,
+  reusing `ceremony.js`'s existing cache (via a new `getPrimaryGenre()`
+  export) rather than fetching and caching genre a second time, deduplicated
+  by artist id, and run through `mapWithConcurrency()` (concurrency 4) from
+  its first commit per the hard constraint. In practice this usually costs
+  nothing: a pool of albums the listener has already browsed on the dome
+  resolves entirely from cache.
+- **When genre resolution happens.** `main.js`'s `onWallPoolChanged()`
+  invalidates the previously-resolved genre pool whenever a new pool is
+  mounted (a bag/playlist/search/New arrivals switch, or the initial Wall
+  build) and kicks off a fresh `resolveGenres()` in the background; the list
+  renders immediately against whatever is available (unresolved entries
+  simply can't match or group on genre yet) and re-renders once resolution
+  lands, rather than blocking the whole Flip view on a network round-trip.
+- **Played state: journal history, not `wall.js`'s own `markPlayed()`.**
+  `wall.js` already tracks a played set, but only for the current pool
+  mount's own session (reset on every bag/playlist switch) -- an album
+  played last week, on a different Wall pool, would incorrectly show as
+  "unplayed" under that narrower definition. `journal.js`'s new
+  `lastPlayedAtByAlbum()` reads the existing lifetime journal instead (the
+  same store `markPlayed()`'s own visual ring is ultimately downstream of,
+  via `handleSelectAlbum()`/`handleNeedleDrop()` recording every play), per
+  the explicit instruction not to invent a second played-state store.
+- **Unresolved genre groups under a literal "Unknown" label**, not the
+  release-year fallback the ceremony's own deadwax line uses when genre is
+  unavailable -- grouping an album under a year while labelling the section
+  "genre" would misrepresent what the grouping actually is, so this needed
+  its own honest label rather than reusing an unrelated one.
+- **Display preferences (mode, sort) persist across sessions**
+  (`localStorage['lp_flip_mode']`/`['lp_flip_sort']`), independent of
+  whatever pool happens to be mounted, exactly as specified; restored
+  immediately on boot (harmless before `enterApp()` ever mounts a pool,
+  since `#screen-app` itself stays hidden until then).
+- **Accessibility, stated as intended rather than verified**: the list is
+  real `<button>` rows in document order (keyboard-focusable, reachable via
+  Tab, and readable by a screen reader as an actual list), which the dome
+  never was (`KNOWN-DEVIATIONS.md`'s own "per-cover hover caption is gone... though each tile still has an accessible name" entry, and the dome's own drag-based interaction model generally). Not verified with an actual screen reader in this environment.
+- Two new inline icons (`icon-spin`, `icon-flip`) added to the shared
+  sprite for the mode toggle, same 1.5px-stroke style as the rest.
+- Unit-tested in `tests.html` (12 new assertions): `filterPool()` matching
+  artist/title/genre case-insensitively including an empty query and a
+  no-match query, `sortPool()` for all four modes (including the
+  played/unplayed split against a supplied `playedAt` map), and
+  `groupKeyFor()`'s Unknown-genre and no-grouping cases.
+
 ## INCREMENT-02 Phase 4: MusicBrainz credits, and Community Wax deferred (2026-07-26)
 
 A second free, keyless data source (`js/musicbrainz.js`) for producer/

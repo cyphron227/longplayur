@@ -405,6 +405,13 @@ async function fetchPrimaryGenre(artistId) {
   return genre;
 }
 
+/** Exposed so other modules needing an artist's primary genre (flip.js's
+ * genre sort/filter, INCREMENT-03 Phase 1) reuse this same cache instead of
+ * fetching and caching it a second time. */
+export async function getPrimaryGenre(artistId) {
+  return fetchPrimaryGenre(artistId);
+}
+
 // ---------------------------------------------------------------------
 // Credits (INCREMENT-02 Phase 4): a collapsed disclosure under the
 // selection preview's own deadwax description line, closed by default,

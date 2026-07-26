@@ -446,6 +446,116 @@ button { cursor: pointer; }
    in js/main.js. */
 #wall-container.is-fading { opacity: 0; }
 
+/* -------------------- Spin/Flip mode toggle + list view -------------------- */
+/* INCREMENT-03 Phase 1. The dome (Spin) is unchanged; Flip is a second,
+   real-list view over the same mounted pool -- toggling between them shows
+   / hides #wall-viewport vs #flip-view, both siblings inside #screen-app,
+   rather than remounting anything. */
+
+.mode-toggle {
+  display: inline-flex;
+  align-self: center;
+  margin: 10px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.mode-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--bone-dim);
+  font-size: 13px;
+  padding: 7px 14px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color var(--dur-touch) var(--ease), background var(--dur-touch) var(--ease);
+}
+.mode-toggle-btn + .mode-toggle-btn { border-left: 1px solid var(--line); }
+.mode-toggle-btn:hover { color: var(--bone); }
+.mode-toggle-btn[aria-pressed="true"] { color: var(--obsidian); background: var(--amber); }
+
+.flip-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 20px 24px;
+}
+/* Needed the same way #screen-app's own children do: a bare `display`
+   author rule above otherwise outranks the UA stylesheet's [hidden] rule
+   at equal specificity, since author styles win ties over UA styles. */
+.flip-view[hidden] { display: none; }
+.flip-find-row { flex: 0 0 auto; margin-bottom: 10px; }
+.sort-chips { flex: 0 0 auto; display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.chip {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--bone-dim);
+  font-size: 12px;
+  padding: 6px 12px;
+  min-height: 32px;
+  border-radius: 3px;
+  transition: color var(--dur-touch) var(--ease), border-color var(--dur-touch) var(--ease), background var(--dur-touch) var(--ease);
+}
+.chip:hover { color: var(--bone); }
+.chip[aria-pressed="true"] { color: var(--obsidian); background: var(--amber); border-color: var(--amber); }
+
+.flip-list { flex: 1 1 auto; min-height: 0; }
+.flip-letter-head {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 12px;
+  color: var(--amber);
+  padding: 14px 0 6px;
+  position: sticky;
+  top: 0;
+  background: var(--obsidian);
+  z-index: 1;
+}
+.flip-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line);
+  min-height: 44px;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.flip-row:hover { background: var(--obsidian-2); }
+.flip-row-cover { width: 44px; height: 44px; border-radius: 2px; object-fit: cover; flex: 0 0 auto; background: var(--obsidian-2); }
+.flip-meta { flex: 1 1 auto; min-width: 0; }
+.flip-artist { font-size: 12px; color: var(--bone-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flip-album { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flip-deadwax {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  color: var(--bone-dim);
+  flex: 0 0 auto;
+  text-align: right;
+  max-width: 110px;
+}
+.flip-empty { font-family: var(--font-serif); color: var(--bone-dim); font-size: 16px; text-align: center; padding: 48px 16px; }
+
+@media (max-width: 480px) {
+  .mode-toggle { margin-top: 6px; }
+  .mode-toggle-btn { padding: 6px 10px; min-height: 32px; font-size: 12px; }
+}
+
 /* -------------------- Crates screen -------------------- */
 
 /* Wall-screen entry point: a single pill showing what's currently loaded

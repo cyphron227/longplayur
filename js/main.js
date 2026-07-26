@@ -19,6 +19,7 @@ import { loadMyPlaylists, resolvePlaylist } from './playlists.js';
 import { getNewArrivals } from './newarrivals.js';
 import { getRecordsNearby } from './nearby.js';
 import { searchAlbums, getGenreSuggestions } from './search.js';
+import * as flip from './flip.js';
 
 // Strip the OAuth `code`/`state`/`error` from the address bar before anything else runs.
 const callbackParams = auth.consumeCallbackParams();
@@ -224,6 +225,7 @@ const btnCrackle = document.getElementById('btn-crackle');
 const LS_EVER_DROPPED = 'lp_ever_dropped';
 
 let wallApi = null;
+let currentWallPool = []; // raw pool array currently mounted on the Wall; flip.js's list view reads this directly.
 let latestViewModel = null;
 let pendingEntry = null;
 let currentAlbumId = null;
@@ -271,6 +273,8 @@ function renderWallDom(pool) {
       cancelSelectionPreview();
     },
   });
+  currentWallPool = pool;
+  onWallPoolChanged();
 }
 
 /** Label for whatever source is currently on the Wall -- shown on the
@@ -683,6 +687,175 @@ searchForm?.addEventListener('submit', (e) => {
   performSearch(searchInput.value);
   searchInput.blur(); // dismiss the on-screen keyboard on mobile once submitted.
 });
+
+// ---------------------------------------------------------------------
+// Flip (INCREMENT-03 Phase 1): a searchable, sortable list view over the
+// same pool currently mounted on the Wall, swapped in over the dome rather
+// than replacing it (no wall.js remount). Mode and sort choice are display
+// preferences, persisted independently of whatever pool happens to be
+// mounted; genre data is resolved once per pool (see onWallPoolChanged())
+// and re-filtered/sorted locally after that, no further network calls.
+// ---------------------------------------------------------------------
+
+const modeToggle = document.getElementById('mode-toggle');
+const btnModeSpin = document.getElementById('btn-mode-spin');
+const btnModeFlip = document.getElementById('btn-mode-flip');
+const flipView = document.getElementById('flip-view');
+const flipSearchInput = document.getElementById('flip-search');
+const flipSortChips = document.getElementById('flip-sort-chips');
+const flipListEl = document.getElementById('flip-list');
+
+const LS_FLIP_MODE = 'lp_flip_mode';
+const LS_FLIP_SORT = 'lp_flip_sort';
+
+let flipMode = localStorage.getItem(LS_FLIP_MODE) === 'flip' ? 'flip' : 'spin';
+let flipSort = Object.values(flip.SORT_MODES).includes(localStorage.getItem(LS_FLIP_SORT)) ? localStorage.getItem(LS_FLIP_SORT) : flip.SORT_MODES.ALPHA;
+let flipQuery = '';
+let flipGenrePool = null; // currentWallPool, augmented with .genre, once resolved; null until resolveGenres() finishes for this pool.
+let flipGenrePoolFor = null; // which pool (by reference) flipGenrePool was resolved from, so a pool switch invalidates it.
+
+/** Called whenever a new pool is mounted on the Wall (renderWallDom()):
+ * genre resolution is per-pool, so a switch invalidates whatever was
+ * previously resolved, and Flip's list (if currently the visible mode) is
+ * re-rendered against the new pool. */
+function onWallPoolChanged() {
+  flipGenrePool = null;
+  flipGenrePoolFor = null;
+  if (flipMode === 'flip') renderFlipList();
+}
+
+function setFlipMode(mode) {
+  flipMode = mode;
+  localStorage.setItem(LS_FLIP_MODE, mode);
+  btnModeSpin.setAttribute('aria-pressed', String(mode === 'spin'));
+  btnModeFlip.setAttribute('aria-pressed', String(mode === 'flip'));
+  if (mode === 'flip') {
+    hide(wallViewport);
+    show(flipView);
+    renderFlipList();
+  } else {
+    show(wallViewport);
+    hide(flipView);
+  }
+}
+btnModeSpin?.addEventListener('click', () => setFlipMode('spin'));
+btnModeFlip?.addEventListener('click', () => setFlipMode('flip'));
+
+function setFlipSort(mode) {
+  flipSort = mode;
+  localStorage.setItem(LS_FLIP_SORT, mode);
+  flipSortChips?.querySelectorAll('.chip').forEach((chip) => {
+    chip.setAttribute('aria-pressed', String(chip.dataset.sort === mode));
+  });
+  renderFlipList();
+}
+flipSortChips?.addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-sort]');
+  if (chip) setFlipSort(chip.dataset.sort);
+});
+
+flipSearchInput?.addEventListener('input', () => {
+  flipQuery = flipSearchInput.value;
+  renderFlipList();
+});
+
+// Restore the persisted display preference immediately: harmless before
+// enterApp() ever mounts a pool (#screen-app itself stays hidden until
+// then), and means a listener who left the app in Flip mode sees Flip
+// again on their next visit rather than always starting on Spin. Only the
+// sort chips' own aria-pressed state needs a manual sync here; flipSort
+// itself was already read from localStorage above and renderFlipList()
+// (called by setFlipMode() when applicable) already sorts by it.
+flipSortChips?.querySelectorAll('.chip').forEach((chip) => {
+  chip.setAttribute('aria-pressed', String(chip.dataset.sort === flipSort));
+});
+setFlipMode(flipMode);
+
+function flipRowDeadwax(entry) {
+  const year = (entry.releaseDate || '').slice(0, 4);
+  return [entry.genre || year || null].filter(Boolean).join(' · ');
+}
+
+/** One row: small cover, artist, title, deadwax genre/year line. Tapping it
+ * calls the exact same handler Wall tile taps already use -- no new
+ * interaction code, just a new entry point into it (per explicit
+ * instruction). */
+function buildFlipRow(entry) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'flip-row';
+
+  const cover = document.createElement('img');
+  cover.className = 'flip-row-cover';
+  cover.alt = '';
+  if (entry.image) cover.src = entry.image;
+  row.appendChild(cover);
+
+  const meta = document.createElement('div');
+  meta.className = 'flip-meta';
+  const artist = document.createElement('div');
+  artist.className = 'flip-artist';
+  artist.textContent = entry.artist;
+  const title = document.createElement('div');
+  title.className = 'flip-album';
+  title.textContent = entry.name;
+  meta.append(artist, title);
+  row.appendChild(meta);
+
+  const dw = document.createElement('div');
+  dw.className = 'flip-deadwax';
+  dw.textContent = flipRowDeadwax(entry);
+  row.appendChild(dw);
+
+  row.addEventListener('click', () => handleSelectAlbum(entry));
+  return row;
+}
+
+async function renderFlipList() {
+  if (!flipListEl) return;
+
+  // Genre data isn't on pool entries by default (see flip.js); resolve it
+  // once per mounted pool, then re-render once it lands. filterPool()/
+  // sortPool() themselves run synchronously against whatever is available
+  // in the meantime (unresolved entries simply don't match/group on genre
+  // yet), so the list is never blank while this is in flight.
+  if (flipGenrePoolFor !== currentWallPool) {
+    flipGenrePoolFor = currentWallPool;
+    flip.resolveGenres(currentWallPool).then((resolved) => {
+      if (flipGenrePoolFor !== currentWallPool) return; // pool changed again while this was in flight.
+      flipGenrePool = resolved;
+      if (flipMode === 'flip') renderFlipList();
+    });
+  }
+
+  const pool = flipGenrePool || currentWallPool;
+  const filtered = flip.filterPool(pool, flipQuery);
+  const playedAt = journal.lastPlayedAtByAlbum();
+  const sorted = flip.sortPool(filtered, flipSort, { playedAt });
+
+  flipListEl.innerHTML = '';
+
+  if (sorted.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'flip-empty';
+    empty.textContent = flipQuery.trim() ? 'Nothing in the crate matches that.' : 'Nothing here yet.';
+    flipListEl.appendChild(empty);
+    return;
+  }
+
+  let lastGroupKey = undefined;
+  for (const entry of sorted) {
+    const groupKey = flip.groupKeyFor(entry, flipSort);
+    if (groupKey !== null && groupKey !== lastGroupKey) {
+      const header = document.createElement('div');
+      header.className = 'flip-letter-head';
+      header.textContent = groupKey;
+      flipListEl.appendChild(header);
+      lastGroupKey = groupKey;
+    }
+    flipListEl.appendChild(buildFlipRow(entry));
+  }
+}
 
 function renderJourneyThread() {
   if (!wallApi) return;

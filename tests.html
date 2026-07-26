@@ -19,6 +19,7 @@
 <script type="module">
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './js/ending.js';
 import { streakDays } from './js/journal.js';
+import { filterPool, sortPool, groupKeyFor, UNKNOWN_GENRE, SORT_MODES } from './js/flip.js';
 
 const results = document.getElementById('results');
 let passCount = 0;
@@ -246,6 +247,45 @@ assert(
   streakDays([sessionWithEntriesDaysAgo(4, 3, 2)]) === 0,
   'entries on 3 consecutive days ending 2 days ago (nothing yesterday or today) resets to 0'
 );
+
+// ---------- Flip: filterPool/sortPool/groupKeyFor (pure functions) ----------
+const FLIP_POOL = [
+  { id: 'a1', name: 'Rumours', artist: 'Fleetwood Mac', genre: 'Rock' },
+  { id: 'a2', name: 'Blue Lines', artist: 'Massive Attack', genre: 'Trip Hop' },
+  { id: 'a3', name: 'Dummy', artist: 'Portishead', genre: 'Trip Hop' },
+  { id: 'a4', name: 'Illmatic', artist: 'Nas', genre: null },
+];
+const idsOf = (list) => list.map((e) => e.id);
+
+group('flip.filterPool: matches artist, title, or genre, case-insensitively');
+assert(eq(idsOf(filterPool(FLIP_POOL, 'nas')), ['a4']), 'artist-name match ("nas" -> Nas)');
+assert(eq(idsOf(filterPool(FLIP_POOL, 'RUMOURS')), ['a1']), 'title match, case-insensitive');
+assert(eq(idsOf(filterPool(FLIP_POOL, 'trip hop')), ['a2', 'a3']), 'genre match hits every entry sharing it');
+assert(eq(idsOf(filterPool(FLIP_POOL, '')), ['a1', 'a2', 'a3', 'a4']), 'an empty query returns the whole pool, unfiltered');
+assert(eq(idsOf(filterPool(FLIP_POOL, 'xyz')), []), 'no match anywhere returns an empty array, not an error');
+
+group('flip.sortPool: alpha sorts by artist, then title');
+assert(eq(idsOf(sortPool(FLIP_POOL, SORT_MODES.ALPHA)), ['a1', 'a2', 'a4', 'a3']), 'Fleetwood Mac, Massive Attack, Nas, Portishead');
+
+group('flip.sortPool: genre groups alphabetically, unresolved genre sorts under Unknown');
+assert(eq(idsOf(sortPool(FLIP_POOL, SORT_MODES.GENRE)), ['a1', 'a2', 'a3', 'a4']), 'Rock, then Trip Hop (Massive Attack before Portishead), then Unknown');
+
+group('flip.sortPool: recent sorts most-recently-played first, using the supplied playedAt map');
+assert(
+  eq(idsOf(sortPool(FLIP_POOL, SORT_MODES.RECENT, { playedAt: new Map([['a3', 300], ['a1', 100]]) })), ['a3', 'a1', 'a2', 'a4']),
+  'a3 (300) then a1 (100) then the two never-played entries in their original order'
+);
+
+group('flip.sortPool: unplayed filters out anything present in the playedAt map');
+assert(
+  eq(idsOf(sortPool(FLIP_POOL, SORT_MODES.UNPLAYED, { playedAt: new Map([['a3', 300], ['a1', 100]]) })), ['a2', 'a4']),
+  'only the two entries absent from playedAt remain'
+);
+
+group('flip.groupKeyFor: alpha groups by the artist\'s first letter, genre by genre (or Unknown), others ungrouped');
+assert(groupKeyFor(FLIP_POOL[0], SORT_MODES.ALPHA) === 'F', 'Fleetwood Mac groups under F');
+assert(groupKeyFor(FLIP_POOL[3], SORT_MODES.GENRE) === UNKNOWN_GENRE, 'an entry with no resolved genre groups under Unknown, never invented');
+assert(groupKeyFor(FLIP_POOL[0], SORT_MODES.RECENT) === null, 'recent/unplayed have no natural sticky-header grouping');
 
 // ---------- summary ----------
 

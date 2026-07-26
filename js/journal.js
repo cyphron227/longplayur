@@ -248,3 +248,24 @@ export function streakDays(sessions) {
 export function currentStreakDays() {
   return streakDays(loadJournal().sessions);
 }
+
+/**
+ * Every album's most recent play, across the whole lifetime journal (not
+ * just the currently-mounted Wall pool's own session-local played state --
+ * see wall.js's markPlayed(), a separate, narrower "played since this pool
+ * was mounted" concept). The existing played/session data store this app
+ * already has; used by flip.js's 'recent' and 'unplayed' sort modes
+ * (INCREMENT-03 Phase 1) rather than inventing a second one.
+ * @returns {Map<string, number>} albumId -> most recent startedAt
+ */
+export function lastPlayedAtByAlbum() {
+  const journal = loadJournal();
+  const map = new Map();
+  for (const session of journal.sessions) {
+    for (const entry of session.entries) {
+      const prev = map.get(entry.albumId);
+      if (prev === undefined || entry.startedAt > prev) map.set(entry.albumId, entry.startedAt);
+    }
+  }
+  return map;
+}
