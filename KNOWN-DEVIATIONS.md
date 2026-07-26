@@ -5,6 +5,93 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## INCREMENT-02 Phase 4: MusicBrainz credits, and Community Wax deferred (2026-07-26)
+
+A second free, keyless data source (`js/musicbrainz.js`) for producer/
+engineer/performer credits, since Spotify's own Web API has none (confirmed
+directly while building the deadwax line, back in the pre-INCREMENT-01
+history above). Surfaces as a collapsed "Credits" disclosure, closed by
+default, fetched only when opened.
+
+- **Placement: the selection preview, not the needle-drop ceremony's own
+  text.** The instruction says "under the album view's existing deadwax
+  line" without naming which of the app's two deadwax-bearing views it
+  means. The needle-drop ceremony's own text (`ceremony.js`'s
+  `.ceremony-text`) fades within about a second of Play being pressed
+  (`text.classList.remove('is-visible')` once `commitPlayback()` resolves),
+  which is not long enough to notice, let alone open, a disclosure. The
+  selection preview (`selectAlbum()`'s `.preview-description`) stays on
+  screen indefinitely while waiting for Play or "Find something else", so
+  the Credits toggle was added there instead, under `.preview-text-panel`.
+- **No JSONP fallback, despite the instruction to model this "directly on
+  deezer.js" with "the same fetch-then-JSONP-style-fallback shape".**
+  Deezer's client supports JSONP because Deezer's own API documents an
+  `output=jsonp&callback=` parameter that actually wraps its response in a
+  callback invocation. MusicBrainz's public API has no equivalent: appending
+  a `callback` parameter to a MusicBrainz URL does nothing, since the server
+  does not recognise it and simply returns plain JSON regardless. Loading
+  that as a `<script src>` would not silently fail the way a genuine JSONP
+  timeout does; it would load a JSON object as if it were executable
+  JavaScript and throw a syntax error, which is a strictly worse failure
+  mode than not having a fallback at all. Rather than build a fallback that
+  cannot work and would only be found broken on first real use, `mbFetch()`
+  is a plain `fetch()` only, matching MusicBrainz's actual, documented CORS
+  support for its JSON API. Per the honesty rule: implementing the closest
+  real behaviour instead of a spec detail that does not hold for this API.
+- **No custom `User-Agent` header**, despite MusicBrainz's own API etiquette
+  guide asking API clients to send a descriptive one (app name, version, a
+  contact). Browsers refuse to let JavaScript set the `User-Agent` header at
+  all (it is one of a small set of forbidden header names `fetch()` cannot
+  override); there is no client-side workaround. Requests go out with
+  whatever generic `User-Agent` the listener's own browser sends. Some
+  mitigating context, stated honestly rather than as an excuse: this app has
+  no shared backend for MusicBrainz to rate-limit as a single bad actor in
+  the first place (PRD's own "every user runs their own instance" premise
+  applies here too), and credits are fetched one album at a time, only on
+  an explicit open, never in a batch, which keeps any one user's traffic
+  well inside MusicBrainz's roughly 1-request-per-second public guidance
+  without needing an explicit throttle of its own.
+- **Release-level credits only.** MusicBrainz frequently attaches
+  "producer" and similar roles to individual recordings (tracks) rather
+  than the release (album) as a whole; this pass only reads the release's
+  own `artist-rels`, not each track's. A deliberate scope cut for this
+  phase, not an oversight: pulling every track's relationships would mean
+  up to N additional requests per album (N = track count) for a supplementary,
+  optional feature, which does not fit the "at most one or two genuinely new
+  network calls" discipline the surrounding increment holds everything else
+  to. Some albums will show fewer or no credits than MusicBrainz actually
+  has recorded, purely because of this scoping choice.
+- **Match confidence.** A release-group candidate is only trusted if
+  MusicBrainz's own search relevance score is at least 90 (of 100) AND its
+  title normalises (lowercased, punctuation stripped) to an exact match --
+  both thresholds picked as reasonable-sounding starting points, not tuned
+  against real MusicBrainz responses in this environment (no network access
+  to MusicBrainz was available while writing this). Anything less confident
+  is treated as "not found" rather than shown as a guess, per explicit
+  instruction.
+- **One unified "No credits found" message for both an honest miss (no
+  confident match, or a match with no relationship data) and a genuine
+  request failure**, rather than exposing network-failure detail inside a
+  minor collapsed disclosure row. This is a narrower reading of "fail loud"
+  than the rest of the app: the failure is still logged
+  (`console.error('[musicbrainz] credit lookup failed:', ...)`), and
+  `getAlbumCredits()` still returns a `failed` flag a future caller could
+  act on differently, but the two cases are not given different copy here
+  the way search or playlist loading distinguish "failed" from "empty" in
+  their status lines. Judged proportionate to how minor this feature is
+  (an optional, closed-by-default detail row) versus the cost of a second
+  string a listener would rarely have reason to care about the difference
+  between.
+- **CSP**: `connect-src` gained `https://musicbrainz.org` (plain fetch
+  only; no `script-src` change, since there is no JSONP fallback to add one
+  for).
+- **Community Wax**, the shared-ratings idea sketched in the originating
+  research, is documentation only per explicit instruction: `Docs/PRD.md`
+  gained a new "Deferred: Community Wax" section naming it, its dependency
+  on the personal tag from Phase 2, and the fact that it needs its own
+  backend decision (Supabase is already connected to this project) before
+  any code is written. No code for it exists anywhere in this phase.
+
 ## INCREMENT-02 Phase 3: Listening streak (2026-07-26)
 
 `journal.js`'s new `streakDays(sessions)` is a pure function (unit-tested in

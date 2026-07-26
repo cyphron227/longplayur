@@ -668,6 +668,35 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 .preview-artist { font-family: var(--font-interface); font-size: 16px; font-weight: 500; color: var(--bone-dim); }
 .preview-description { margin-top: 6px; }
 
+/* Credits (INCREMENT-02 Phase 4): a collapsed disclosure under the
+   deadwax description line, closed by default. Everything here needs
+   pointer-events:auto explicitly -- .ceremony-layer (the ancestor) is
+   pointer-events:none so drags pass through to the gallery beneath it,
+   same reason .preview-play-btn needed the same override. */
+.preview-credits { margin-top: 10px; text-align: left; pointer-events: auto; }
+.preview-credits-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--bone-dim);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  padding: 8px 0;
+  min-height: 32px;
+  cursor: pointer;
+}
+.preview-credits-toggle:hover { color: var(--bone); }
+.preview-credits-toggle .icon { width: 14px; height: 14px; transition: transform var(--dur-touch) var(--ease); }
+.preview-credits-toggle.is-open .icon { transform: rotate(180deg); }
+.preview-credits-body { margin-top: 4px; }
+.preview-credits-line { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 12px; }
+.preview-credits-role { flex: 0 0 auto; }
+.preview-credits-names { color: var(--bone); text-align: right; }
+
 .preview-scrim {
   position: absolute;
   inset: 0;

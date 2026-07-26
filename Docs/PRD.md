@@ -149,6 +149,10 @@ Crackle on/off · New session · Past sessions · Sign out. No settings page.
 - Resolved pools are cached per playlist and keyed to the playlist's own `snapshot_id`, so an edited playlist resolves fresh automatically rather than serving a stale cache.
 - Needle-dropping an album from a playlist records normally into Past sessions, tagged with which playlist it came from via `playlistId` (same pattern as `bagId` for record bags).
 
+## Deferred: Community Wax
+
+Sketched, not built. An opt-in Setup toggle that, if turned on, would sync a user's own keeper/spin-again/pass tags (F2's INCREMENT-02 personal tag, see `KNOWN-DEVIATIONS.md`) to a shared backend under a pseudonymous id and pull back an aggregate badge on each album (for example, "62% kept this"). This is explicitly out of scope for INCREMENT-02: every other feature in this document runs with no server and nothing leaving the user's own browser except calls to Spotify, Deezer, and MusicBrainz, and Community Wax breaks that premise on purpose. It needs its own architecture decision (Supabase is already available as a connector to this project) and its own sign-off before any code is written; it is named here only so the idea is not lost, not as a commitment to build it.
+
 ## Edge cases (must handle, with specific copy — see copy deck)
 1. 403 on `/me/top/tracks`: user not allowlisted on their own app, or app misconfigured. Explain the fix.
 2. Redirect URI mismatch on auth: explain exact-match requirement.

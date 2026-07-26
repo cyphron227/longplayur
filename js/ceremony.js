@@ -5,6 +5,7 @@
 import { prefersReducedMotion, formatDuration } from './ui.js';
 import * as playback from './playback.js';
 import { getArtist } from './spotify.js';
+import { getAlbumCredits } from './musicbrainz.js';
 
 export const TIMINGS = Object.freeze({
   recedeMs: 600, // 0 -> 600: other covers recede; camera pans; cover scales to 1.6
@@ -404,6 +405,78 @@ async function fetchPrimaryGenre(artistId) {
   return genre;
 }
 
+// ---------------------------------------------------------------------
+// Credits (INCREMENT-02 Phase 4): a collapsed disclosure under the
+// selection preview's own deadwax description line, closed by default,
+// fetched from MusicBrainz only on open -- not pre-fetched across the
+// whole Wall, learning directly from the bag-preview request-burst mistake
+// already documented in KNOWN-DEVIATIONS.md. Lives on the selection preview
+// (selectAlbum(), below) rather than the needle-drop ceremony's own
+// briefer text, since the preview is the one "album view" that stays on
+// screen long enough (waiting on Play/"Find something else") for a
+// disclosure to be worth opening; the ceremony's own text fades within
+// about a second of Play being pressed.
+// ---------------------------------------------------------------------
+
+function buildCreditsDisclosure(entry) {
+  const wrap = document.createElement('div');
+  wrap.className = 'preview-credits';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'preview-credits-toggle';
+  toggle.setAttribute('aria-expanded', 'false');
+  const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  chevron.setAttribute('class', 'icon');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#icon-chevron');
+  chevron.appendChild(use);
+  const label = document.createElement('span');
+  label.textContent = 'Credits';
+  toggle.append(chevron, label);
+
+  const body = document.createElement('div');
+  body.className = 'preview-credits-body';
+  body.hidden = true;
+
+  let loaded = false;
+  toggle.addEventListener('click', async () => {
+    const wasExpanded = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!wasExpanded));
+    toggle.classList.toggle('is-open', !wasExpanded);
+    body.hidden = wasExpanded;
+    if (wasExpanded || loaded) return;
+    loaded = true;
+
+    body.textContent = 'Loading credits…';
+    // Every string below (role labels are this app's own fixed vocabulary,
+    // but artist names come straight from MusicBrainz) is untrusted the
+    // same way Spotify's own strings are -- built via textContent, never
+    // interpolated into innerHTML.
+    const { credits } = await getAlbumCredits({ artist: entry.artist, title: entry.name });
+    body.textContent = '';
+    if (!credits || credits.length === 0) {
+      body.textContent = 'No credits found.';
+      return;
+    }
+    credits.forEach(({ role, artists }) => {
+      const line = document.createElement('div');
+      line.className = 'preview-credits-line';
+      const roleEl = document.createElement('span');
+      roleEl.className = 'preview-credits-role deadwax';
+      roleEl.textContent = role;
+      const namesEl = document.createElement('span');
+      namesEl.className = 'preview-credits-names';
+      namesEl.textContent = artists.join(', ');
+      line.append(roleEl, namesEl);
+      body.appendChild(line);
+    });
+  });
+
+  wrap.append(toggle, body);
+  return wrap;
+}
+
 /** Same as deadwaxLine() but without the artist (selectAlbum()'s preview
  * already shows the artist on its own line above this one), leading with
  * the artist's primary genre in place of the release year where Spotify
@@ -740,6 +813,7 @@ export async function selectAlbum(entry, ctx) {
   text.innerHTML = '<div class="preview-text-panel"><div class="preview-title"></div><div class="preview-artist"></div><div class="preview-description deadwax"></div></div>';
   text.querySelector('.preview-title').textContent = entry.name;
   text.querySelector('.preview-artist').textContent = entry.artist;
+  text.querySelector('.preview-text-panel').appendChild(buildCreditsDisclosure(entry));
   layer.appendChild(text);
 
   const scrim = document.createElement('div');
