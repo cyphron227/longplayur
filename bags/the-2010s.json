@@ -1,0 +1,27 @@
+{
+  "name": "The 2010s",
+  "category": "decade",
+  "blurb": "Streaming took over, and the album somehow survived it.",
+  "albums": [
+    { "title": "My Beautiful Dark Twisted Fantasy", "artist": "Kanye West" },
+    { "title": "channel ORANGE", "artist": "Frank Ocean" },
+    { "title": "good kid, m.A.A.d city", "artist": "Kendrick Lamar" },
+    { "title": "Random Access Memories", "artist": "Daft Punk" },
+    { "title": "Yeezus", "artist": "Kanye West" },
+    { "title": "Currents", "artist": "Tame Impala" },
+    { "title": "To Pimp a Butterfly", "artist": "Kendrick Lamar" },
+    { "title": "Blonde", "artist": "Frank Ocean" },
+    { "title": "Lemonade", "artist": "Beyoncé" },
+    { "title": "A Moon Shaped Pool", "artist": "Radiohead" },
+    { "title": "Malibu", "artist": "Anderson .Paak" },
+    { "title": "DAMN.", "artist": "Kendrick Lamar" },
+    { "title": "Melodrama", "artist": "Lorde" },
+    { "title": "Konnichiwa", "artist": "Skepta" },
+    { "title": "Astroworld", "artist": "Travis Scott" },
+    { "title": "Invasion of Privacy", "artist": "Cardi B" },
+    { "title": "Con Todo El Mundo", "artist": "Khruangbin" },
+    { "title": "Norman Fucking Rockwell!", "artist": "Lana Del Rey" },
+    { "title": "When We All Fall Asleep, Where Do We Go?", "artist": "Billie Eilish" },
+    { "title": "IGOR", "artist": "Tyler, the Creator" }
+  ]
+}

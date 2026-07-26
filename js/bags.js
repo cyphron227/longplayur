@@ -12,14 +12,16 @@
 
 import { apiFetch } from './spotify.js';
 
-// Six original ("seed") bags, plus eight more (INCREMENT-03 Phase 2:
-// Shelves) grouped on the Record bags screen by their own `category` field
-// below: four by mood, four by decade. Content authoring, not engineering --
-// see KNOWN-DEVIATIONS.md for the honesty note on the eight new ones.
+// Six original ("seed") bags, plus mood and decade bags (INCREMENT-03 Phase
+// 2: Shelves, and later additions) grouped on the Record bags screen by
+// their own `category` field below. Content authoring, not engineering --
+// see KNOWN-DEVIATIONS.md for the honesty note on the non-seed ones. The
+// decade bags are listed here, and so rendered on the Shelves screen, in
+// chronological order.
 const BAG_IDS = [
   '90s-us-rap', 'soul-essentials', 'motown', 'trip-hop', 'britpop', 'late-night-jazz',
   'sunday-morning', 'headphones-on', 'driving', 'rainy-day',
-  'the-60s', 'the-70s', 'the-90s', 'the-2020s',
+  'the-60s', 'the-70s', 'the-90s', 'the-2000s', 'the-2010s', 'the-2020s',
 ];
 const LS_RESOLVED_PREFIX = 'lp_bag_resolved_';
 // The Crates screen now resolves bags eagerly (for each card's album-grid

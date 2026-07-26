@@ -5,6 +5,21 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Two more decade bags: the 2000s and 2010s, per explicit request (2026-07-26)
+
+`bags/the-2000s.json` and `bags/the-2010s.json` (20 albums each, `category:
+"decade"`) fill the gap between the existing "The 90s" and "The 2020s"
+bags. `bags.js`'s `BAG_IDS` lists the decade bags in chronological order
+(60s, 70s, 90s, 2000s, 2010s, 2020s), which is also their render order on
+the Shelves screen, since `loadBagManifest()` resolves them via
+`Promise.all` over that same array and `Promise.all` preserves input
+order regardless of which request actually finishes first. The 80s
+remains absent, per no request to add it; not adding it was a deliberate
+scope decision, not an oversight. Like the earlier eight, these two are a
+first draft (content authoring, assembled from general knowledge, not
+reproduced from any published list) and not yet vetted by the project
+owner.
+
 ## Two more bugs from live use: resurfacing "did nothing", Wake Spotify on every open (2026-07-26)
 
 ### "Now playing doesn't load" when tapping the player-bar art: `pendingEntry` was the wrong source of truth

@@ -1,0 +1,27 @@
+{
+  "name": "The 2000s",
+  "category": "decade",
+  "blurb": "MP3 blogs, burned CDs, and a decade too restless to settle on one sound.",
+  "albums": [
+    { "title": "Stankonia", "artist": "OutKast" },
+    { "title": "Kid A", "artist": "Radiohead" },
+    { "title": "The Marshall Mathers LP", "artist": "Eminem" },
+    { "title": "Is This It", "artist": "The Strokes" },
+    { "title": "Discovery", "artist": "Daft Punk" },
+    { "title": "The Blueprint", "artist": "Jay-Z" },
+    { "title": "Elephant", "artist": "The White Stripes" },
+    { "title": "Speakerboxxx/The Love Below", "artist": "OutKast" },
+    { "title": "The College Dropout", "artist": "Kanye West" },
+    { "title": "Funeral", "artist": "Arcade Fire" },
+    { "title": "Arular", "artist": "M.I.A." },
+    { "title": "Illinois", "artist": "Sufjan Stevens" },
+    { "title": "Back to Black", "artist": "Amy Winehouse" },
+    { "title": "Graduation", "artist": "Kanye West" },
+    { "title": "In Rainbows", "artist": "Radiohead" },
+    { "title": "For Emma, Forever Ago", "artist": "Bon Iver" },
+    { "title": "Vampire Weekend", "artist": "Vampire Weekend" },
+    { "title": "808s & Heartbreak", "artist": "Kanye West" },
+    { "title": "Merriweather Post Pavilion", "artist": "Animal Collective" },
+    { "title": "Bitte Orca", "artist": "Dirty Projectors" }
+  ]
+}
