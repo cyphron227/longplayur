@@ -9,7 +9,13 @@
 
 const LS_JOURNAL = 'lp_journal';
 const SESSION_INACTIVITY_MS = 6 * 60 * 60 * 1000; // 6 hours, PRD F8.
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
+
+// Keeper / spin again / pass (INCREMENT-02 Phase 2): a personal tag on one
+// played album within one session. Mutually exclusive per entry -- setting
+// one clears whichever was there before, and tapping the active one again
+// clears it entirely (see setEntryTag()).
+export const ENTRY_TAGS = Object.freeze({ KEEPER: 'keeper', SPIN_AGAIN: 'spin-again', PASS: 'pass' });
 
 function uuid() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -20,8 +26,14 @@ function uuid() {
  * v1 -> v2: the journal's own field name changed from `sides` to
  * `sessions` (INCREMENT-01 Phase 0's storage rename).
  * v2 -> v3: liner notes removed entirely (INCREMENT-01 Phase 3a); every
- * entry's `note` field is dropped. Existing sessions and entries otherwise
- * survive both migrations intact.
+ * entry's `note` field is dropped.
+ * v3 -> v4: adds the optional per-entry `tag` field (keeper / spin again /
+ * pass, INCREMENT-02 Phase 2). No data migration is actually needed --
+ * an entry with no `tag` property is already indistinguishable from one
+ * explicitly set to untagged -- but the version bump still happens the same
+ * way the last two did, so a future migration has a clean version to check
+ * against rather than inferring "has this app ever written a tag field."
+ * Existing sessions and entries otherwise survive every migration intact.
  */
 function migrate(journal) {
   if (!journal || typeof journal !== 'object') return { v: CURRENT_VERSION, sessions: [] };
@@ -97,10 +109,54 @@ export function recordNeedleDrop(entry, { durationMs = null } = {}) {
     durationMs,
     bagId: entry.bagId ?? null,
     playlistId: entry.playlistId ?? null,
+    tag: null,
   });
 
   saveJournal(journal);
   return { journal, session, sessionOrdinal: journal.sessions.length };
+}
+
+/**
+ * Sets (or, tapping the already-active tag again, clears) one played
+ * entry's personal tag. Entries have no id of their own; `entryStartedAt`
+ * (the `startedAt` recorded at needle-drop time) is used to identify one
+ * specific play within a session instead, on the assumption that two
+ * needle drops in the same session can never share the same millisecond
+ * timestamp -- true in practice since the ceremony's own choreography takes
+ * seconds, not sub-millisecond time, between one drop and the next.
+ * @param {string} sessionId
+ * @param {number} entryStartedAt
+ * @param {'keeper'|'spin-again'|'pass'} tag
+ * @returns {object} the updated journal
+ */
+export function setEntryTag(sessionId, entryStartedAt, tag) {
+  const journal = loadJournal();
+  const session = journal.sessions.find((s) => s.id === sessionId);
+  if (!session) return journal;
+  const entry = session.entries.find((e) => e.startedAt === entryStartedAt);
+  if (!entry) return journal;
+  entry.tag = entry.tag === tag ? null : tag;
+  saveJournal(journal);
+  return journal;
+}
+
+/**
+ * The most recent personal tag recorded against each album, across every
+ * session (sessions and their entries are both stored oldest-first, so a
+ * later tag naturally overwrites an earlier one as this walks the array in
+ * order). Feeds albums.js's pool scoring (INCREMENT-02 Phase 2); an album
+ * never tagged is simply absent from the returned map.
+ * @returns {Map<string, 'keeper'|'spin-again'|'pass'>}
+ */
+export function latestTagsByAlbum() {
+  const journal = loadJournal();
+  const map = new Map();
+  for (const session of journal.sessions) {
+    for (const entry of session.entries) {
+      if (entry.tag) map.set(entry.albumId, entry.tag);
+    }
+  }
+  return map;
 }
 
 /** Explicit "New session": closes whatever session is currently open. */

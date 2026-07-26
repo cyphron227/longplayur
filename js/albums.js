@@ -2,11 +2,25 @@
 // and the pure square-spiral layout function used to place them.
 
 import { getTopTracks, getSavedAlbums } from './spotify.js';
+import { latestTagsByAlbum } from './journal.js';
 
 const LS_POOL = 'lp_pool';
 const POOL_TTL_MS = 24 * 60 * 60 * 1000;
 const POOL_TARGET = 120;
 const MIN_VIABLE = 9;
+
+// Keeper / spin again / pass (INCREMENT-02 Phase 2): a personal tag nudges
+// an album's score, which in turn nudges its rank in the pool (and so its
+// odds of surviving POOL_TARGET's truncation on a large library) -- "spin
+// again" is deliberately left neutral rather than also boosted, since it
+// reads as a milder, non-committal signal than "keeper" and this is a
+// starting guess, not a tuned value; revisit once real usage exists. There
+// is no equivalent hook in Records nearby to apply the "pass" side of this
+// to (js/nearby.js) -- it ranks Deezer-sourced related artists by their own
+// fan count, with no per-album score of this app's own to weight, so that
+// half of the instruction ("or in Records nearby") could not be honestly
+// implemented; see KNOWN-DEVIATIONS.md.
+const TAG_SCORE_MULTIPLIER = { keeper: 1.15, pass: 0.6 };
 
 const TIME_RANGE_WEIGHTS = {
   long_term: 1.0,
@@ -106,10 +120,24 @@ async function mergeSavedAlbums(scores, allowShort) {
   }
 }
 
+/** Nudges each entry's score by its most recent personal tag, if any,
+ * before the pool is sorted -- applied after aggregation so it affects
+ * final rank (and so, on a library over POOL_TARGET, survival) rather than
+ * just the raw top-tracks/saved-albums weighting above. */
+function applyTagWeighting(entries) {
+  const tags = latestTagsByAlbum();
+  if (tags.size === 0) return entries;
+  return entries.map((entry) => {
+    const multiplier = TAG_SCORE_MULTIPLIER[tags.get(entry.id)];
+    return multiplier ? { ...entry, score: entry.score * multiplier } : entry;
+  });
+}
+
 async function buildPoolPass(allowShort) {
   const scores = await aggregateFromTopTracks(allowShort);
   await mergeSavedAlbums(scores, allowShort);
-  return Array.from(scores.values()).sort((a, b) => b.score - a.score);
+  const weighted = applyTagWeighting(Array.from(scores.values()));
+  return weighted.sort((a, b) => b.score - a.score);
 }
 
 /** Fetches fresh top-tracks + saved-albums data and rebuilds the scored pool. */

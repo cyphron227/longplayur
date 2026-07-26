@@ -965,6 +965,49 @@ function renderSessionRow(session, ordinal) {
   return row;
 }
 
+// Keeper / spin again / pass (INCREMENT-02 Phase 2): a personal tag on one
+// played album within one session, mutually exclusive, tapping the active
+// one again clears it. Feeds albums.js's pool scoring on the next Wall
+// build; see journal.js's setEntryTag()/latestTagsByAlbum().
+const ENTRY_TAG_SPECS = [
+  { tag: journal.ENTRY_TAGS.KEEPER, icon: 'icon-keeper', label: 'keeper' },
+  { tag: journal.ENTRY_TAGS.SPIN_AGAIN, icon: 'icon-repeat', label: 'spin again' },
+  { tag: journal.ENTRY_TAGS.PASS, icon: 'icon-pass', label: 'pass' },
+];
+
+/** Three small icon buttons (keeper/spin again/pass) for one played album.
+ * Updates the journal and mutates `entry.tag` locally in place, so the
+ * buttons' own aria-pressed states stay in sync without a full
+ * renderPastSessions() re-render, which would otherwise collapse whichever
+ * session rows the listener currently has expanded. */
+function buildEntryTagButtons(session, entry) {
+  const wrap = document.createElement('div');
+  wrap.className = 'entry-tag-buttons';
+
+  const buttons = ENTRY_TAG_SPECS.map(({ tag, icon, label }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-btn entry-tag-btn';
+    btn.setAttribute('aria-pressed', String(entry.tag === tag));
+    btn.setAttribute('aria-label', `Mark ${entry.name} as ${label}`);
+    btn.title = label[0].toUpperCase() + label.slice(1);
+    btn.appendChild(svgIcon(icon));
+    wrap.appendChild(btn);
+    return btn;
+  });
+
+  buttons.forEach((btn, i) => {
+    const { tag } = ENTRY_TAG_SPECS[i];
+    btn.addEventListener('click', () => {
+      journal.setEntryTag(session.id, entry.startedAt, tag);
+      entry.tag = entry.tag === tag ? null : tag;
+      buttons.forEach((b, j) => b.setAttribute('aria-pressed', String(entry.tag === ENTRY_TAG_SPECS[j].tag)));
+    });
+  });
+
+  return wrap;
+}
+
 function renderEntryRow(session, entry) {
   const wrap = document.createElement('div');
   wrap.className = 'session-entry';
@@ -986,6 +1029,7 @@ function renderEntryRow(session, entry) {
 
   body.append(title, artist);
   wrap.appendChild(body);
+  wrap.appendChild(buildEntryTagButtons(session, entry));
   return wrap;
 }
 

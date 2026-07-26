@@ -844,6 +844,11 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 .session-entry-body { flex: 1 1 auto; min-width: 0; }
 .session-entry-title { font-size: 14px; font-weight: 500; }
 .session-entry-artist { font-size: 13px; color: var(--bone-dim); }
+/* Keeper / spin again / pass (INCREMENT-02 Phase 2): three small toggle
+   buttons per played album, mutually exclusive. */
+.entry-tag-buttons { display: flex; gap: 4px; flex: 0 0 auto; align-self: center; }
+.entry-tag-btn { padding: 6px; min-width: 36px; min-height: 36px; }
+.entry-tag-btn[aria-pressed="true"] { color: var(--amber); border-color: var(--amber); }
 .session-actions { display: flex; gap: 8px; margin-top: 12px; }
 .empty-past-sessions { font-family: var(--font-serif); font-size: 18px; color: var(--bone-dim); text-align: center; padding: 64px 24px; }
 

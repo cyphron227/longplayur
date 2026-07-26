@@ -5,6 +5,56 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## INCREMENT-02 Phase 2: Personal tag, keeper / spin again / pass (2026-07-26)
+
+`journal.js` bumped `CURRENT_VERSION` 3 -> 4, adding an optional per-entry
+`tag` field (`'keeper' | 'spin-again' | 'pass' | null`). No actual data
+migration happens on load -- an entry with no `tag` property already reads
+identically to one explicitly `null` -- but the version bump still happens
+the same way the previous two did, per the explicit instruction, so a
+future migration has a real version number to check against.
+
+- **No entry id, so `startedAt` identifies the play.** Journal entries have
+  never carried an id of their own (`albumId` + `startedAt` + a few display
+  fields). `setEntryTag(sessionId, entryStartedAt, tag)` identifies one
+  specific play within a session by its recorded `startedAt` timestamp
+  (milliseconds), on the assumption that two needle drops in the same
+  session can never land on the same millisecond -- true in practice, since
+  the ceremony's own choreography takes seconds between one drop and the
+  next, but stated here as an assumption rather than a guarantee the code
+  itself enforces.
+- **Mutually exclusive, toggled off by tapping again**, exactly as
+  specified: `setEntryTag()` sets `entry.tag = entry.tag === tag ? null :
+  tag`, so pressing the already-active one clears it and pressing a
+  different one replaces it, never stacking more than one tag on an entry.
+- **UI reads/writes the tag without a full re-render.** Tapping a tag
+  button updates the journal via `setEntryTag()` and mutates the in-memory
+  `entry.tag` (and the three buttons' own `aria-pressed`) directly, rather
+  than calling `renderPastSessions()` again -- a full re-render would rebuild
+  every session row from scratch and collapse whichever ones the listener
+  currently has expanded, which would make tagging an album feel like it
+  closes the session you were looking at. Three new icons (`icon-keeper`,
+  `icon-repeat`, `icon-pass`) were added to the shared SVG sprite, drawn in
+  the same 1.5px-stroke, round-cap style as the existing set; no emoji or
+  unicode glyphs.
+- **Pool-scoring weighting is a stated guess, not a tuned value**:
+  `albums.js`'s new `applyTagWeighting()` multiplies a tagged album's score
+  by 1.15 (keeper) or 0.6 (pass) before the pool is sorted, nudging its rank
+  (and, on a library over `POOL_TARGET`, its odds of being included at all)
+  up or down. "Spin again" is deliberately left neutral -- it reads as a
+  softer, non-committal signal than an explicit keeper, and this is a
+  starting guess pending real usage, not a considered value either way.
+- **Could not honestly extend this to Records nearby**, despite the
+  instruction asking for both: `js/nearby.js` ranks Deezer-sourced related
+  artists by their own fan count, with no per-album score of this app's own
+  to weight in the first place -- there is no existing hook to nudge, so
+  applying the tag there would mean inventing a new scoring concept for
+  that feature rather than feeding an existing one, which is out of scope
+  for this phase. Only the Wall's own pool (`albums.js`) is affected.
+- **No aggregate tag view** was built (not required this phase, per the
+  prompt): a tag can currently only be seen or changed from within its own
+  expanded session row, one play at a time.
+
 ## INCREMENT-02 Phase 1: New arrivals (2026-07-26)
 
 A fourth Record bags source (`js/newarrivals.js`): the latest wanted release
