@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Longplayur — UI concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --obsidian: #121212;
+    --obsidian-2: #1B1A18;
+    --vinyl: #0B0B0C;
+    --bone: #DCD7CB;
+    --bone-dim: #9D998F;
+    --moss: #6B7C5E;
+    --amber: #E8B45A;
+    --line: rgba(220, 215, 203, 0.14);
+    --ember: #D98A7A;
+    --font-serif: 'DM Serif Display', Georgia, serif;
+    --font-interface: 'Inter', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--obsidian); color: var(--bone); }
+  body { font-family: var(--font-interface); font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  button, input { font-family: inherit; color: inherit; }
+  button { cursor: pointer; }
+  a { color: var(--amber); }
+
+  /* ---- demo harness chrome (not part of the shipped app) ---- */
+  .demo-note {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--bone-dim);
+    text-align: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .demo-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    background: var(--obsidian);
+    z-index: 20;
+  }
+  .demo-tab {
+    flex: 1 1 0;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--bone-dim);
+    font-size: 13px;
+    padding: 16px 8px;
+    text-align: center;
+    transition: color 180ms var(--ease), border-color 180ms var(--ease);
+  }
+  .demo-tab strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 2px; color: inherit; }
+  .demo-tab span { color: var(--bone-dim); font-size: 12px; }
+  .demo-tab[aria-current="true"] { color: var(--bone); border-bottom-color: var(--amber); }
+  .demo-tab[aria-current="true"] strong { color: var(--bone); }
+
+  .concept { display: none; max-width: 720px; margin: 0 auto; padding: 28px 20px 80px; }
+  .concept[data-active="true"] { display: block; }
+
+  .concept-head { margin-bottom: 28px; }
+  .concept-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 10px;
+  }
+  .concept-title { font-family: var(--font-serif); font-size: 28px; line-height: 1.25; margin-bottom: 10px; }
+  .concept-desc { color: var(--bone-dim); font-size: 14px; line-height: 1.6; max-width: 54ch; }
+
+  /* shared cover placeholder, echoing the disc's own flat-colour centre label */
+  .cover {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-serif);
+    color: var(--bone);
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .cover span { opacity: 0.55; }
+
+  /* ============ CONCEPT 1: FLIP ============ */
+  .mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .mode-toggle button {
+    background: none;
+    border: none;
+    color: var(--bone-dim);
+    font-size: 13px;
+    padding: 10px 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+  }
+  .mode-toggle button + button { border-left: 1px solid var(--line); }
+  .mode-toggle button[aria-pressed="true"] { color: var(--obsidian); background: var(--amber); }
+  .icon { width: 16px; height: 16px; flex-shrink: 0; }
+
+  .find-row { margin-bottom: 16px; }
+  .text-input {
+    width: 100%;
+    background: var(--obsidian-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    color: var(--bone);
+    font-size: 15px;
+    padding: 12px 14px;
+    min-height: 44px;
+  }
+  .text-input:focus-visible { outline: none; border-color: var(--amber); }
+  .text-input::placeholder { color: var(--bone-dim); }
+
+  .sort-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+  .chip {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--bone-dim);
+    font-size: 12px;
+    padding: 7px 12px;
+    border-radius: 3px;
+    min-height: 32px;
+  }
+  .chip[aria-pressed="true"] { color: var(--bone); border-color: var(--bone-dim); }
+
+  .letter-head {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--amber);
+    padding: 18px 0 8px;
+    position: sticky;
+    top: 0;
+    background: var(--obsidian);
+  }
+  .flip-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--line);
+    min-height: 44px;
+  }
+  .flip-row .cover { width: 44px; height: 44px; font-size: 15px; }
+  .flip-meta { flex: 1 1 auto; min-width: 0; }
+  .flip-artist { font-size: 13px; color: var(--bone-dim); }
+  .flip-album { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .flip-deadwax {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    color: var(--bone-dim);
+    flex-shrink: 0;
+    text-align: right;
+  }
+  .flip-empty { color: var(--bone-dim); font-size: 14px; padding: 40px 0; text-align: center; }
+
+  /* ============ CONCEPT 2: SHELVES ============ */
+  .shelf { margin-bottom: 36px; }
+  .shelf-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .shelf-title { font-family: var(--font-serif); font-size: 19px; }
+  .shelf-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--bone-dim);
+  }
+  .shelf-scroll {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scroll-snap-type: x proximity;
+  }
+  .shelf-scroll::-webkit-scrollbar { height: 4px; }
+  .shelf-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+  .bag-card {
+    flex: 0 0 auto;
+    width: 148px;
+    scroll-snap-align: start;
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 0;
+  }
+  .bag-grid {
+    width: 148px;
+    height: 148px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .bag-grid .cover { border-radius: 0; border: none; font-size: 10px; }
+  .bag-name { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+  .bag-blurb { font-size: 11px; color: var(--bone-dim); line-height: 1.4; }
+
+  /* ============ CONCEPT 3: RUNOUT ============ */
+  .runout-source {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--obsidian-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    margin-bottom: 28px;
+  }
+  .runout-source .cover { width: 56px; height: 56px; font-size: 18px; }
+  .runout-source-meta { flex: 1 1 auto; }
+  .runout-source-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--moss);
+    margin-bottom: 4px;
+  }
+  .runout-source-name { font-family: var(--font-serif); font-size: 18px; margin-bottom: 2px; }
+  .runout-source-deadwax { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bone-dim); }
+
+  .runout-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .runout-cell {
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    position: relative;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    transition: border-color 180ms var(--ease), transform 180ms var(--ease);
+  }
+  .runout-cell:hover, .runout-cell:focus-visible { border-color: var(--amber); outline: none; transform: translateY(-2px); }
+  .runout-cell[aria-pressed="true"] { border-color: var(--amber); }
+  .runout-cell .cover { aspect-ratio: 1; width: 100%; border: none; border-radius: 0; font-size: 22px; }
+  .runout-label {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 8px 8px 20px;
+    background: linear-gradient(to top, rgba(11,11,12,0.92), rgba(11,11,12,0));
+  }
+  .runout-direction {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 3px;
+  }
+  .runout-cell.wildcard .runout-direction { color: var(--ember); }
+  .runout-pick { font-size: 12px; font-weight: 500; line-height: 1.25; }
+  .runout-artist { font-size: 10px; color: var(--bone-dim); }
+
+  .runout-footnote {
+    color: var(--bone-dim);
+    font-size: 12px;
+    line-height: 1.6;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+
+  @media (max-width: 420px) {
+    .runout-grid { gap: 8px; }
+    .runout-label { padding: 6px 6px 14px; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="demo-note">Concept demo, not shipped chrome — three directions to react to</div>
+
+  <div class="demo-tabs" role="tablist">
+    <button class="demo-tab" data-target="flip" aria-current="true"><strong>Flip</strong><span>find in the crate</span></button>
+    <button class="demo-tab" data-target="shelves"><strong>Shelves</strong><span>more curated lists</span></button>
+    <button class="demo-tab" data-target="runout"><strong>Runout groove</strong><span>9 next, 9 directions</span></button>
+  </div>
+
+  <!-- ============ CONCEPT 1: FLIP ============ -->
+  <section class="concept" data-key="flip" data-active="true">
+    <div class="concept-head">
+      <div class="concept-eyebrow">Now Playing — new view mode</div>
+      <h1 class="concept-title">Spin to browse. Flip to find.</h1>
+      <p class="concept-desc">The dome stays exactly as it is for browsing by feel. Flip is the other half of a record store: alphabetical, searchable, sortable, for when you already know what you're after and don't want to spin for it.</p>
+    </div>
+
+    <div class="mode-toggle">
+      <button aria-pressed="false" id="btn-spin">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>
+        Spin
+      </button>
+      <button aria-pressed="true" id="btn-flip">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+        Flip
+      </button>
+    </div>
+
+    <div class="find-row">
+      <input class="text-input" id="flip-search" placeholder="Find in your crate…" autocomplete="off" />
+    </div>
+
+    <div class="sort-chips" id="flip-sort">
+      <button class="chip" data-sort="alpha" aria-pressed="true">Artist A–Z</button>
+      <button class="chip" data-sort="genre" aria-pressed="false">Genre</button>
+      <button class="chip" data-sort="recent" aria-pressed="false">Recently played</button>
+      <button class="chip" data-sort="unplayed" aria-pressed="false">Unplayed only</button>
+    </div>
+
+    <div id="flip-list"></div>
+  </section>
+
+  <!-- ============ CONCEPT 2: SHELVES ============ -->
+  <section class="concept" data-key="shelves">
+    <div class="concept-head">
+      <div class="concept-eyebrow">Record bags — reorganised</div>
+      <h1 class="concept-title">More crates, grouped like a real shop.</h1>
+      <p class="concept-desc">Same card, same 9-cover preview grid you already have. The change is grouping: shelves by canon, mood, and decade instead of one long row, so a bigger library of curated bags stays browsable instead of turning into a scroll.</p>
+    </div>
+    <div id="shelves-root"></div>
+  </section>
+
+  <!-- ============ CONCEPT 3: RUNOUT ============ -->
+  <section class="concept" data-key="runout">
+    <div class="concept-head">
+      <div class="concept-eyebrow">Runout groove — new screen</div>
+      <h1 class="concept-title">Nine ways to go next.</h1>
+      <p class="concept-desc">Replaces the plain zoom-to-shelf at the end of an album. Every cell is an honestly labelled direction, not a black-box "you might like." Each label maps to something the app can actually check: same artist, same year, same genre tag, a Deezer-sourced relation, a past keeper, an unplayed pick from the same bag, a followed artist's new release, a deliberate left turn, or a replay.</p>
+    </div>
+
+    <div class="runout-source">
+      <div class="cover" style="background: var(--obsidian-2)"><span>PD</span></div>
+      <div class="runout-source-meta">
+        <div class="runout-source-label">Just finished</div>
+        <div class="runout-source-name">Dummy</div>
+        <div class="runout-source-deadwax">Portishead · Trip Hop · 1994 · 49 min</div>
+      </div>
+    </div>
+
+    <div class="runout-grid" id="runout-grid"></div>
+
+    <p class="runout-footnote">Tapping a cell opens the same selection preview used everywhere else on the Wall, name, artist, deadwax line, Play or find something else, so this screen introduces one new layout, not a new interaction pattern.</p>
+  </section>
+
+<script>
+  // ---- shared album data (real albums, used only as realistic placeholder metadata) ----
+  const ALBUMS = [
+    {a:"Frank Ocean", t:"Blonde", g:"R&B", y:2016, d:"60 MIN", init:"FO"},
+    {a:"Fleetwood Mac", t:"Rumours", g:"Rock", y:1977, d:"39 MIN", init:"FM"},
+    {a:"Kendrick Lamar", t:"To Pimp a Butterfly", g:"Hip-Hop", y:2015, d:"79 MIN", init:"KL"},
+    {a:"Portishead", t:"Dummy", g:"Trip Hop", y:1994, d:"49 MIN", init:"PD"},
+    {a:"Portishead", t:"Third", g:"Trip Hop", y:2008, d:"48 MIN", init:"PT"},
+    {a:"Massive Attack", t:"Blue Lines", g:"Trip Hop", y:1991, d:"46 MIN", init:"MA"},
+    {a:"Stevie Wonder", t:"Songs in the Key of Life", g:"Soul", y:1976, d:"85 MIN", init:"SW"},
+    {a:"Marvin Gaye", t:"What's Going On", g:"Soul", y:1971, d:"35 MIN", init:"MG"},
+    {a:"Oasis", t:"(What's the Story) Morning Glory?", g:"Britpop", y:1995, d:"49 MIN", init:"OA"},
+    {a:"Blur", t:"Parklife", g:"Britpop", y:1994, d:"58 MIN", init:"BL"},
+    {a:"Pulp", t:"Different Class", g:"Britpop", y:1995, d:"53 MIN", init:"PU"},
+    {a:"A Tribe Called Quest", t:"The Low End Theory", g:"Hip-Hop", y:1991, d:"48 MIN", init:"AT"},
+    {a:"Nas", t:"Illmatic", g:"Hip-Hop", y:1994, d:"39 MIN", init:"NA"},
+    {a:"Wu-Tang Clan", t:"Enter the Wu-Tang (36 Chambers)", g:"Hip-Hop", y:1993, d:"61 MIN", init:"WT"},
+    {a:"Miles Davis", t:"Kind of Blue", g:"Jazz", y:1959, d:"46 MIN", init:"MD"},
+    {a:"John Coltrane", t:"A Love Supreme", g:"Jazz", y:1965, d:"33 MIN", init:"JC"},
+    {a:"Nina Simone", t:"Wild Is the Wind", g:"Jazz", y:1966, d:"40 MIN", init:"NS"},
+    {a:"The Supremes", t:"Where Did Our Love Go", g:"Motown", y:1964, d:"29 MIN", init:"SU"},
+    {a:"Smokey Robinson & the Miracles", t:"Going to a Go-Go", g:"Motown", y:1965, d:"29 MIN", init:"SR"},
+    {a:"The Temptations", t:"Cloud Nine", g:"Motown", y:1969, d:"29 MIN", init:"TE"},
+    {a:"Radiohead", t:"In Rainbows", g:"Alt Rock", y:2007, d:"42 MIN", init:"RH"},
+    {a:"Radiohead", t:"OK Computer", g:"Alt Rock", y:1997, d:"53 MIN", init:"OC"},
+    {a:"Björk", t:"Homogenic", g:"Electronic", y:1997, d:"43 MIN", init:"BJ"},
+    {a:"Aphex Twin", t:"Selected Ambient Works 85–92", g:"Electronic", y:1992, d:"74 MIN", init:"AX"},
+    {a:"Burial", t:"Untrue", g:"Electronic", y:2007, d:"52 MIN", init:"BU"},
+    {a:"D'Angelo", t:"Voodoo", g:"Neo-Soul", y:2000, d:"79 MIN", init:"DA"},
+    {a:"Erykah Badu", t:"Mama's Gun", g:"Neo-Soul", y:2000, d:"71 MIN", init:"EB"},
+    {a:"Amy Winehouse", t:"Back to Black", g:"Soul", y:2006, d:"35 MIN", init:"AW"},
+    {a:"SZA", t:"Ctrl", g:"R&B", y:2017, d:"48 MIN", init:"SZ"},
+    {a:"Solange", t:"A Seat at the Table", g:"R&B", y:2016, d:"51 MIN", init:"SO"},
+    {a:"Sault", t:"Untitled (Black Is)", g:"Soul", y:2020, d:"62 MIN", init:"SA"},
+    {a:"Little Simz", t:"Sometimes I Might Be Introvert", g:"Hip-Hop", y:2021, d:"64 MIN", init:"LS"},
+    {a:"Dave", t:"Psychodrama", g:"UK Rap", y:2019, d:"41 MIN", init:"DV"},
+    {a:"Stormzy", t:"Gang Signs & Prayer", g:"UK Rap", y:2017, d:"60 MIN", init:"ST"},
+    {a:"The xx", t:"xx", g:"Indie", y:2009, d:"38 MIN", init:"XX"},
+    {a:"Arctic Monkeys", t:"AM", g:"Indie Rock", y:2013, d:"42 MIN", init:"AM"},
+    {a:"Joy Division", t:"Unknown Pleasures", g:"Post-Punk", y:1979, d:"39 MIN", init:"JD"},
+    {a:"Talking Heads", t:"Remain in Light", g:"Post-Punk", y:1980, d:"40 MIN", init:"TH"},
+    {a:"Fela Kuti", t:"Zombie", g:"Afrobeat", y:1976, d:"27 MIN", init:"FK"},
+    {a:"Tyler, the Creator", t:"IGOR", g:"Hip-Hop", y:2019, d:"39 MIN", init:"TC"},
+    {a:"Beyoncé", t:"Lemonade", g:"R&B", y:2016, d:"46 MIN", init:"BY"},
+    {a:"Kanye West", t:"My Beautiful Dark Twisted Fantasy", g:"Hip-Hop", y:2010, d:"68 MIN", init:"KW"},
+    {a:"Yussef Dayes", t:"Black Classical Music", g:"Jazz", y:2023, d:"77 MIN", init:"YD"},
+    {a:"Ezra Collective", t:"Where I'm Meant to Be", g:"Jazz", y:2022, d:"46 MIN", init:"EC"},
+  ];
+
+  const TINTS = ["#22211d", "#1e231c", "#241d1c", "#1c1f24", "#241e29", "#231f1a"];
+  function tintFor(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+    return TINTS[Math.abs(h) % TINTS.length];
+  }
+  function coverEl(album, size) {
+    const c = document.createElement("div");
+    c.className = "cover";
+    c.style.background = tintFor(album.a + album.t);
+    c.innerHTML = `<span>${album.init}</span>`;
+    return c;
+  }
+
+  // ---- demo tab switching ----
+  document.querySelectorAll(".demo-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".demo-tab").forEach(t => t.setAttribute("aria-current", "false"));
+      tab.setAttribute("aria-current", "true");
+      document.querySelectorAll(".concept").forEach(c => c.dataset.active = String(c.dataset.key === tab.dataset.target));
+    });
+  });
+
+  // ============ FLIP ============
+  let flipSort = "alpha";
+  function renderFlip(filterText) {
+    const list = document.getElementById("flip-list");
+    list.innerHTML = "";
+    let items = ALBUMS.slice();
+
+    const q = (filterText || "").trim().toLowerCase();
+    if (q) items = items.filter(a => a.a.toLowerCase().includes(q) || a.t.toLowerCase().includes(q) || a.g.toLowerCase().includes(q));
+
+    if (flipSort === "alpha") items.sort((x, y) => x.a.localeCompare(y.a));
+    if (flipSort === "genre") items.sort((x, y) => x.g.localeCompare(y.g) || x.a.localeCompare(y.a));
+    if (flipSort === "recent") items = items.slice().reverse();
+    if (flipSort === "unplayed") items = items.filter((_, i) => i % 3 !== 0); // demo-only stand-in
+
+    if (!items.length) {
+      list.innerHTML = `<p class="flip-empty">Nothing in the crate matches that.</p>`;
+      return;
+    }
+
+    let lastHeader = null;
+    items.forEach(album => {
+      let headerKey = null;
+      if (flipSort === "alpha") headerKey = album.a[0].toUpperCase();
+      if (flipSort === "genre") headerKey = album.g;
+      if (headerKey && headerKey !== lastHeader) {
+        const h = document.createElement("div");
+        h.className = "letter-head";
+        h.textContent = headerKey;
+        list.appendChild(h);
+        lastHeader = headerKey;
+      }
+      const row = document.createElement("button");
+      row.className = "flip-row";
+      row.style.width = "100%";
+      row.style.background = "none";
+      row.style.border = "none";
+      row.style.borderBottom = "1px solid var(--line)";
+      row.style.color = "inherit";
+      row.style.cursor = "pointer";
+      row.appendChild(coverEl(album));
+      const meta = document.createElement("div");
+      meta.className = "flip-meta";
+      meta.innerHTML = `<div class="flip-artist">${album.a}</div><div class="flip-album">${album.t}</div>`;
+      row.appendChild(meta);
+      const dw = document.createElement("div");
+      dw.className = "flip-deadwax";
+      dw.textContent = `${album.g} · ${album.y}`;
+      row.appendChild(dw);
+      list.appendChild(row);
+    });
+  }
+  document.getElementById("flip-search").addEventListener("input", e => renderFlip(e.target.value));
+  document.getElementById("flip-sort").addEventListener("click", e => {
+    const btn = e.target.closest("[data-sort]");
+    if (!btn) return;
+    document.querySelectorAll("#flip-sort .chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+    btn.setAttribute("aria-pressed", "true");
+    flipSort = btn.dataset.sort;
+    renderFlip(document.getElementById("flip-search").value);
+  });
+  renderFlip("");
+
+  // ============ SHELVES ============
+  const SHELVES = [
+    { title: "Your record bags", count: "6 CRATES", bags: [
+      { name: "90s US Rap", blurb: "Low End Theory to Illmatic.", picks: ["A Tribe Called Quest","Nas","Wu-Tang Clan","Kendrick Lamar","Kanye West","Tyler, the Creator","Little Simz","Dave","Stormzy"] },
+      { name: "Soul Essentials", blurb: "The records the rest sample.", picks: ["Stevie Wonder","Marvin Gaye","Nina Simone","D'Angelo","Erykah Badu","Amy Winehouse","Sault","Solange","SZA"] },
+      { name: "Motown", blurb: "Hitsville, in album form.", picks: ["The Supremes","Smokey Robinson & the Miracles","The Temptations","Stevie Wonder","Marvin Gaye"] },
+      { name: "Trip Hop", blurb: "Bristol, slowed right down.", picks: ["Portishead","Massive Attack","Björk","Burial","Portishead"] },
+      { name: "Britpop", blurb: "Camden vs. Manchester.", picks: ["Oasis","Blur","Pulp","Arctic Monkeys","The xx"] },
+      { name: "Late-Night Jazz", blurb: "Lamp-lit, not background.", picks: ["Miles Davis","John Coltrane","Nina Simone","Yussef Dayes","Ezra Collective"] },
+    ]},
+    { title: "By mood", count: "4 CRATES", bags: [
+      { name: "Sunday Morning", blurb: "Slow coffee, low volume.", picks: ["Fleetwood Mac","Stevie Wonder","The xx","Sault"] },
+      { name: "Headphones On", blurb: "For the last train home.", picks: ["Frank Ocean","Burial","Björk","Aphex Twin"] },
+      { name: "Driving", blurb: "Motorway, not city streets.", picks: ["Fleetwood Mac","Talking Heads","Arctic Monkeys","Joy Division"] },
+      { name: "Rainy Day", blurb: "Grey sky listening.", picks: ["Portishead","Radiohead","Massive Attack","Nina Simone"] },
+    ]},
+    { title: "By decade", count: "4 CRATES", bags: [
+      { name: "The 60s", blurb: "Motown, Miles, Coltrane.", picks: ["Miles Davis","John Coltrane","The Supremes","The Temptations"] },
+      { name: "The 70s", blurb: "Rumours to What's Going On.", picks: ["Fleetwood Mac","Marvin Gaye","Stevie Wonder","Talking Heads"] },
+      { name: "The 90s", blurb: "Britpop meets golden-era rap.", picks: ["Oasis","Blur","Nas","A Tribe Called Quest"] },
+      { name: "The 2020s", blurb: "Still being written.", picks: ["Little Simz","Sault","Yussef Dayes","Ezra Collective"] },
+    ]},
+    { title: "New arrivals", count: "FROM ARTISTS YOU FOLLOW", bags: [
+      { name: "This week", blurb: "Latest from your followed artists.", picks: ["Yussef Dayes","Ezra Collective","Little Simz","Dave"] },
+    ]},
+  ];
+  const byName = {};
+  ALBUMS.forEach(a => { (byName[a.a] ||= []).push(a); });
+
+  const shelvesRoot = document.getElementById("shelves-root");
+  SHELVES.forEach(section => {
+    const shelf = document.createElement("div");
+    shelf.className = "shelf";
+    shelf.innerHTML = `<div class="shelf-head"><div class="shelf-title">${section.title}</div><div class="shelf-count">${section.count}</div></div>`;
+    const scroll = document.createElement("div");
+    scroll.className = "shelf-scroll";
+    section.bags.forEach(bag => {
+      const card = document.createElement("button");
+      card.className = "bag-card";
+      const grid = document.createElement("div");
+      grid.className = "bag-grid";
+      const covers = bag.picks.slice(0, 9);
+      while (covers.length < 9) covers.push(covers[covers.length % bag.picks.length] || "?");
+      covers.forEach(artistName => {
+        const album = (byName[artistName] || [{a:artistName,t:"",init:artistName.slice(0,2).toUpperCase()}])[0];
+        grid.appendChild(coverEl(album));
+      });
+      card.appendChild(grid);
+      const name = document.createElement("div");
+      name.className = "bag-name";
+      name.textContent = bag.name;
+      card.appendChild(name);
+      const blurb = document.createElement("div");
+      blurb.className = "bag-blurb";
+      blurb.textContent = bag.blurb;
+      card.appendChild(blurb);
+      scroll.appendChild(card);
+    });
+    shelf.appendChild(scroll);
+    shelvesRoot.appendChild(shelf);
+  });
+
+  // ============ RUNOUT ============
+  const RUNOUT = [
+    { dir: "More from this artist", a: "Portishead", t: "Third", wildcard: false },
+    { dir: "Same genre", a: "Massive Attack", t: "Blue Lines", wildcard: false },
+    { dir: "Same year, 1994", a: "Nas", t: "Illmatic", wildcard: false },
+    { dir: "Related", a: "Burial", t: "Untrue", wildcard: false },
+    { dir: "From your crate", a: "D'Angelo", t: "Voodoo", wildcard: false },
+    { dir: "Unplayed in this bag", a: "Aphex Twin", t: "Selected Ambient Works 85–92", wildcard: false },
+    { dir: "New arrival", a: "Yussef Dayes", t: "Black Classical Music", wildcard: false },
+    { dir: "A left turn", a: "Fela Kuti", t: "Zombie", wildcard: true },
+    { dir: "Play it again", a: "Nina Simone", t: "Wild Is the Wind", wildcard: false },
+  ];
+  const runoutGrid = document.getElementById("runout-grid");
+  RUNOUT.forEach(pick => {
+    const album = { a: pick.a, t: pick.t, init: pick.a.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase() };
+    const cell = document.createElement("button");
+    cell.className = "runout-cell" + (pick.wildcard ? " wildcard" : "");
+    cell.setAttribute("aria-pressed", "false");
+    cell.appendChild(coverEl(album));
+    const label = document.createElement("div");
+    label.className = "runout-label";
+    label.innerHTML = `<div class="runout-direction">${pick.dir}</div><div class="runout-pick">${pick.t}</div><div class="runout-artist">${pick.a}</div>`;
+    cell.appendChild(label);
+    cell.addEventListener("click", () => {
+      document.querySelectorAll(".runout-cell").forEach(c => c.setAttribute("aria-pressed", "false"));
+      cell.setAttribute("aria-pressed", "true");
+    });
+    runoutGrid.appendChild(cell);
+  });
+</script>
+</body>
+</html>
