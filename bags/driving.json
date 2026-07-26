@@ -1,0 +1,25 @@
+{
+  "name": "Driving",
+  "category": "mood",
+  "blurb": "Built for the motorway, not the city street.",
+  "albums": [
+    { "title": "Rumours", "artist": "Fleetwood Mac" },
+    { "title": "Damn the Torpedoes", "artist": "Tom Petty and the Heartbreakers" },
+    { "title": "Born to Run", "artist": "Bruce Springsteen" },
+    { "title": "Autobahn", "artist": "Kraftwerk" },
+    { "title": "Remain in Light", "artist": "Talking Heads" },
+    { "title": "Lost in the Dream", "artist": "The War on Drugs" },
+    { "title": "Discovery", "artist": "Daft Punk" },
+    { "title": "Hurry Up, We're Dreaming", "artist": "M83" },
+    { "title": "Kill for Love", "artist": "Chromatics" },
+    { "title": "Hot Fuss", "artist": "The Killers" },
+    { "title": "The Suburbs", "artist": "Arcade Fire" },
+    { "title": "Wolfgang Amadeus Phoenix", "artist": "Phoenix" },
+    { "title": "The English Riviera", "artist": "Metronomy" },
+    { "title": "Modern Vampires of the City", "artist": "Vampire Weekend" },
+    { "title": "Currents", "artist": "Tame Impala" },
+    { "title": "Power, Corruption & Lies", "artist": "New Order" },
+    { "title": "Melody A.M.", "artist": "Röyksopp" },
+    { "title": "Moon Safari", "artist": "Air" }
+  ]
+}

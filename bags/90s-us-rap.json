@@ -1,5 +1,6 @@
 {
   "name": "90s US rap",
+  "category": "seed",
   "blurb": "East coast boom bap, West coast G-funk, and everything the decade argued about in between.",
   "albums": [
     { "title": "Illmatic", "artist": "Nas" },

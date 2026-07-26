@@ -1,5 +1,6 @@
 {
   "name": "Motown",
+  "category": "seed",
   "blurb": "Hitsville U.S.A., studio A, the sound of young America.",
   "albums": [
     { "title": "Where Did Our Love Go", "artist": "The Supremes" },

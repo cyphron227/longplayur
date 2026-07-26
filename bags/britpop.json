@@ -1,5 +1,6 @@
 {
   "name": "Britpop",
+  "category": "seed",
   "blurb": "Guitars, terraces, and a fair amount of shouting about class.",
   "albums": [
     { "title": "Definitely Maybe", "artist": "Oasis" },

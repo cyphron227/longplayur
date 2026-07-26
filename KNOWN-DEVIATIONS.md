@@ -5,6 +5,61 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## INCREMENT-03 Phase 2: Shelves (2026-07-26)
+
+The Record bags screen's flat lists are now grouped into labelled shelf
+sections (`Your record bags`, `By mood`, `By decade`, `New arrivals`,
+`Your playlists`), each a heading, a small `N CRATES` count in deadwax
+mono, and a horizontally scrolling row -- per the mockup's `.shelf`
+pattern. The card component itself (`buildCrateCard()`, `.crate-card`, the
+9-cover preview grid) is genuinely unchanged, exactly as instructed: the
+only things that changed are the grouping (bags.js's new `category` field)
+and the grid container's own layout (a flex row with `overflow-x: auto`
+instead of a CSS grid; `.crate-card` picked up a fixed 148px width to make
+sense inside a horizontal scroller, since a CSS grid's `minmax(130px, 1fr)`
+sizing has no meaning there).
+
+- **`category` schema addition.** All six original bags' JSON gained
+  `"category": "seed"`; the eight new bags (below) are `"mood"` or
+  `"decade"`. `bags.js`'s `loadBagManifest()` passes it through, falling
+  back to `'seed'` for anything missing or unrecognised so a malformed or
+  future bag lands somewhere sensible rather than disappearing. This is a
+  schema change to static content files, not user data, so (as the
+  instruction notes) no migration was needed.
+- **Eight new bags, content authoring, not engineering, and a first draft
+  only**: `sunday-morning`, `headphones-on`, `driving`, `rainy-day` (mood,
+  15-18 albums each), `the-60s`, `the-70s`, `the-90s`, `the-2020s` (decade,
+  20-21 albums each). Assembled directly from general, widely-known
+  knowledge of each mood/decade rather than reproduced from any single
+  published list (matching the original six bags' own stated convention,
+  PRD F11), and cross-checked against each decade bag's own stated year
+  range where a release date was confidently known (the four decade bags
+  only include albums genuinely released in that decade; "The 2020s" is
+  deliberately capped at real releases up to 2023, this build's own
+  knowledge horizon for confidently real Spotify-searchable titles, rather
+  than reaching for anything more recent and risking an invented title).
+  Unlike the original six, **these eight have not been vetted by the
+  project owner** and should be reviewed before shipping to real users --
+  stated here plainly, per explicit instruction, not implied.
+- **"New arrivals" feature detection, honestly scoped down.** The
+  instruction asks this to be checked "without assuming" INCREMENT-02
+  shipped, the same way Runout groove's Phase 3 will need to. In this
+  actual codebase, both increments are being built together in the same
+  session, so `main.js` already holds a static `import` of `js/newarrivals.js`
+  from INCREMENT-02 Phase 1 -- there is no meaningful way to "not assume"
+  a module exists when this file's own `import` statement already requires
+  it to, short of a contrived dynamic `import()` wrapped in try/catch purely
+  for its own sake. What Shelves actually does, and what "feature detection"
+  reduces to here, is unchanged from Phase 1: `#crate-newarrivals-section`
+  stays `hidden` unless `loadNewArrivalsCard()` resolves a non-empty pool,
+  so the shelf still never appears with no data, empty, or broken -- the
+  data-presence check *is* the detection that matters to a listener, even
+  though the module-presence check is, in this combined build, moot.
+- **Card-shelf pressed state.** `renderBagCards()`'s pressed check gained
+  `!activeNewArrivals` (previously only checked search/playlist), matching
+  the same mutual-exclusivity guarantee the other three sources already had
+  with each other going into this phase.
+
 ## INCREMENT-03 Phase 1: Flip (2026-07-26)
 
 A second view mode on the Now Playing screen: the dome (Spin) is

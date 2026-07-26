@@ -191,7 +191,16 @@ const wallPrompt = document.getElementById('wall-prompt');
 const cratesBtn = document.getElementById('crates-btn');
 const cratesBtnLabel = document.getElementById('crates-btn-label');
 const cratesYourBagBtn = document.getElementById('crates-your-bag-btn');
-const crateBagsGrid = document.getElementById('crate-bags-grid');
+// Shelves (INCREMENT-03 Phase 2): record bags are grouped by their own
+// `category` field into three shelf rows rather than one flat grid.
+const crateBagsSeedGrid = document.getElementById('crate-bags-seed-grid');
+const crateBagsSeedCountEl = document.getElementById('crate-bags-seed-count');
+const crateBagsMoodSection = document.getElementById('crate-bags-mood-section');
+const crateBagsMoodGrid = document.getElementById('crate-bags-mood-grid');
+const crateBagsMoodCountEl = document.getElementById('crate-bags-mood-count');
+const crateBagsDecadeSection = document.getElementById('crate-bags-decade-section');
+const crateBagsDecadeGrid = document.getElementById('crate-bags-decade-grid');
+const crateBagsDecadeCountEl = document.getElementById('crate-bags-decade-count');
 const crateNewArrivalsSection = document.getElementById('crate-newarrivals-section');
 const crateNewArrivalsGrid = document.getElementById('crate-newarrivals-grid');
 const cratePlaylistsGrid = document.getElementById('crate-playlists-grid');
@@ -404,21 +413,48 @@ function updateCrateCardArt(card, images) {
   else card.insertBefore(newArt, card.firstChild);
 }
 
+// A bag's own `category` (bags.js's loadBagManifest(), falls back to
+// 'seed' for anything missing/unrecognised) picks which shelf it renders
+// into. Grid element and its shelf's own <section> (so an empty shelf --
+// not expected in practice with 4 mood + 4 decade bags shipped, but
+// possible if a bag JSON fails to load) can be hidden, the same
+// no-empty-state convention used elsewhere in this app.
+const BAG_SHELVES = {
+  seed: { grid: () => crateBagsSeedGrid, count: () => crateBagsSeedCountEl, section: () => null },
+  mood: { grid: () => crateBagsMoodGrid, count: () => crateBagsMoodCountEl, section: () => crateBagsMoodSection },
+  decade: { grid: () => crateBagsDecadeGrid, count: () => crateBagsDecadeCountEl, section: () => crateBagsDecadeSection },
+};
+
 function renderBagCards() {
-  crateBagsGrid.innerHTML = '';
+  crateBagsSeedGrid.innerHTML = '';
+  crateBagsMoodGrid.innerHTML = '';
+  crateBagsDecadeGrid.innerHTML = '';
   const cards = new Map();
+  const counts = { seed: 0, mood: 0, decade: 0 };
+
   for (const bag of bagManifestCache || []) {
+    const category = BAG_SHELVES[bag.category] ? bag.category : 'seed';
     const cached = bagPreviewCache.get(bag.id);
     const card = buildCrateCard({
       label: bag.name,
       title: bag.blurb,
       images: cached,
-      pressed: !activeSearchQuery && !activePlaylistId && activeBagId === bag.id,
+      pressed: !activeSearchQuery && !activePlaylistId && !activeNewArrivals && activeBagId === bag.id,
       onClick: () => selectBag(bag.id),
     });
-    crateBagsGrid.appendChild(card);
+    BAG_SHELVES[category].grid().appendChild(card);
+    counts[category] += 1;
     if (!cached) cards.set(bag.id, card);
   }
+
+  for (const [category, { count, section }] of Object.entries(BAG_SHELVES)) {
+    const n = counts[category];
+    const countEl = count();
+    if (countEl) countEl.textContent = `${n} CRATE${n === 1 ? '' : 'S'}`;
+    const sectionEl = section();
+    if (sectionEl) sectionEl.hidden = n === 0;
+  }
+
   return cards;
 }
 

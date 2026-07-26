@@ -1,0 +1,28 @@
+{
+  "name": "The 90s",
+  "category": "decade",
+  "blurb": "Britpop against golden-era rap, and neither side backing down.",
+  "albums": [
+    { "title": "(What's the Story) Morning Glory?", "artist": "Oasis" },
+    { "title": "Parklife", "artist": "Blur" },
+    { "title": "Different Class", "artist": "Pulp" },
+    { "title": "OK Computer", "artist": "Radiohead" },
+    { "title": "Nevermind", "artist": "Nirvana" },
+    { "title": "Illmatic", "artist": "Nas" },
+    { "title": "The Low End Theory", "artist": "A Tribe Called Quest" },
+    { "title": "Enter the Wu-Tang (36 Chambers)", "artist": "Wu-Tang Clan" },
+    { "title": "Dummy", "artist": "Portishead" },
+    { "title": "Blue Lines", "artist": "Massive Attack" },
+    { "title": "Ready to Die", "artist": "The Notorious B.I.G." },
+    { "title": "Check Your Head", "artist": "Beastie Boys" },
+    { "title": "The Score", "artist": "Fugees" },
+    { "title": "Jagged Little Pill", "artist": "Alanis Morissette" },
+    { "title": "Odelay", "artist": "Beck" },
+    { "title": "Siamese Dream", "artist": "The Smashing Pumpkins" },
+    { "title": "To Bring You My Love", "artist": "PJ Harvey" },
+    { "title": "Homogenic", "artist": "Björk" },
+    { "title": "Selected Ambient Works 85-92", "artist": "Aphex Twin" },
+    { "title": "Brown Sugar", "artist": "D'Angelo" },
+    { "title": "The Miseducation of Lauryn Hill", "artist": "Lauryn Hill" }
+  ]
+}

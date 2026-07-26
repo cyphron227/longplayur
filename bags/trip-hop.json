@@ -1,5 +1,6 @@
 {
   "name": "Trip hop",
+  "category": "seed",
   "blurb": "Bristol basslines and slow-motion beats for after dark.",
   "albums": [
     { "title": "Dummy", "artist": "Portishead" },

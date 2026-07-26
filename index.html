@@ -328,24 +328,54 @@
 
       <p id="crates-status" class="crate-status" aria-live="polite"></p>
 
-      <section class="crate-section">
-        <h2 class="crate-heading">Record bags</h2>
-        <div id="crate-bags-grid" class="crate-grid"></div>
+      <!-- Shelves (INCREMENT-03 Phase 2): grouped like a real shop instead
+           of one flat list. Each shelf reuses the same bag-card / 9-cover
+           preview grid component (buildCrateCard() in main.js), unchanged;
+           only the grouping and the grid's own layout (a horizontally
+           scrolling row here, not a CSS grid) are new. -->
+      <section class="crate-shelf">
+        <div class="crate-shelf-head">
+          <h2 class="crate-shelf-title">Your record bags</h2>
+          <span id="crate-bags-seed-count" class="crate-shelf-count deadwax"></span>
+        </div>
+        <div id="crate-bags-seed-grid" class="crate-shelf-scroll"></div>
+      </section>
+
+      <section id="crate-bags-mood-section" class="crate-shelf">
+        <div class="crate-shelf-head">
+          <h2 class="crate-shelf-title">By mood</h2>
+          <span id="crate-bags-mood-count" class="crate-shelf-count deadwax"></span>
+        </div>
+        <div id="crate-bags-mood-grid" class="crate-shelf-scroll"></div>
+      </section>
+
+      <section id="crate-bags-decade-section" class="crate-shelf">
+        <div class="crate-shelf-head">
+          <h2 class="crate-shelf-title">By decade</h2>
+          <span id="crate-bags-decade-count" class="crate-shelf-count deadwax"></span>
+        </div>
+        <div id="crate-bags-decade-grid" class="crate-shelf-scroll"></div>
       </section>
 
       <!-- New arrivals (INCREMENT-02 Phase 1): latest releases from artists
            the user follows. Hidden entirely (not shown empty/broken) if
            GET /me/following fails or the user follows nobody, matching
-           Records nearby's own silent-hide convention. -->
-      <section id="crate-newarrivals-section" class="crate-section" hidden>
-        <h2 class="crate-heading">New arrivals</h2>
-        <div id="crate-newarrivals-grid" class="crate-grid"></div>
+           Records nearby's own silent-hide convention -- also the
+           feature-detection case INCREMENT-03 Phase 2 asks for: this shelf
+           simply never un-hides itself if INCREMENT-02 Phase 1 is not present. -->
+      <section id="crate-newarrivals-section" class="crate-shelf" hidden>
+        <div class="crate-shelf-head">
+          <h2 class="crate-shelf-title">New arrivals</h2>
+        </div>
+        <div id="crate-newarrivals-grid" class="crate-shelf-scroll"></div>
       </section>
 
-      <section class="crate-section">
-        <h2 class="crate-heading">Your playlists</h2>
+      <section class="crate-shelf">
+        <div class="crate-shelf-head">
+          <h2 class="crate-shelf-title">Your playlists</h2>
+        </div>
         <p id="crate-playlists-status" class="crate-status"></p>
-        <div id="crate-playlists-grid" class="crate-grid"></div>
+        <div id="crate-playlists-grid" class="crate-shelf-scroll"></div>
       </section>
     </div>
   </section>

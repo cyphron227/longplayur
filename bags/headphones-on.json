@@ -1,0 +1,25 @@
+{
+  "name": "Headphones on",
+  "category": "mood",
+  "blurb": "For the last train home and the walk after it.",
+  "albums": [
+    { "title": "Untrue", "artist": "Burial" },
+    { "title": "Music Has the Right to Children", "artist": "Boards of Canada" },
+    { "title": "Selected Ambient Works 85-92", "artist": "Aphex Twin" },
+    { "title": "Black Sands", "artist": "Bonobo" },
+    { "title": "There Is Love in You", "artist": "Four Tet" },
+    { "title": "Immunity", "artist": "Jon Hopkins" },
+    { "title": "Spaces", "artist": "Nils Frahm" },
+    { "title": "Dive", "artist": "Tycho" },
+    { "title": "Mezzanine", "artist": "Massive Attack" },
+    { "title": "Dummy", "artist": "Portishead" },
+    { "title": "Ambivalence Avenue", "artist": "Bibio" },
+    { "title": "Persona", "artist": "Rival Consoles" },
+    { "title": "Elaenia", "artist": "Floating Points" },
+    { "title": "James Blake", "artist": "James Blake" },
+    { "title": "II", "artist": "Moderat" },
+    { "title": "In Colour", "artist": "Jamie xx" },
+    { "title": "Kiasmos", "artist": "Kiasmos" },
+    { "title": "Homogenic", "artist": "Björk" }
+  ]
+}

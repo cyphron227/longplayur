@@ -1,5 +1,6 @@
 {
   "name": "Soul essentials",
+  "category": "seed",
   "blurb": "The records that taught everyone else how to sing like they meant it.",
   "albums": [
     { "title": "What's Going On", "artist": "Marvin Gaye" },

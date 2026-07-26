@@ -1,0 +1,24 @@
+{
+  "name": "Rainy day",
+  "category": "mood",
+  "blurb": "Grey sky listening, curtains half drawn.",
+  "albums": [
+    { "title": "Dummy", "artist": "Portishead" },
+    { "title": "OK Computer", "artist": "Radiohead" },
+    { "title": "Blue Lines", "artist": "Massive Attack" },
+    { "title": "Either/Or", "artist": "Elliott Smith" },
+    { "title": "Disintegration", "artist": "The Cure" },
+    { "title": "So Tonight That I Might See", "artist": "Mazzy Star" },
+    { "title": "Ágætis byrjun", "artist": "Sigur Rós" },
+    { "title": "Teen Dream", "artist": "Beach House" },
+    { "title": "Moon Pix", "artist": "Cat Power" },
+    { "title": "Boxer", "artist": "The National" },
+    { "title": "O", "artist": "Damien Rice" },
+    { "title": "Things We Lost in the Fire", "artist": "Low" },
+    { "title": "Grace", "artist": "Jeff Buckley" },
+    { "title": "It'll End in Tears", "artist": "This Mortal Coil" },
+    { "title": "Spirit of Eden", "artist": "Talk Talk" },
+    { "title": "Souvlaki", "artist": "Slowdive" },
+    { "title": "Wild Is the Wind", "artist": "Nina Simone" }
+  ]
+}

@@ -630,20 +630,38 @@ button { cursor: pointer; }
 .search-input:focus-visible { border-color: var(--amber); }
 .search-submit-btn { flex: 0 0 auto; min-height: 40px; }
 
-.crate-section { flex: 0 0 auto; padding: 0 20px; }
-.crate-heading {
+.crate-status { font-size: 13px; color: var(--bone-dim); margin: 0 0 10px; padding: 0 20px; }
+/* #crate-playlists-status already sits inside a .crate-shelf, which supplies
+   its own 20px horizontal padding -- without this, it would double up. */
+.crate-shelf .crate-status { padding: 0; }
+
+/* Shelves (INCREMENT-03 Phase 2): a heading, a small count/label in mono
+   caps, then a horizontally scrolling row -- per the mockup's .shelf
+   pattern, grouping the same bag-card component instead of one flat grid. */
+.crate-shelf { flex: 0 0 auto; padding: 0 20px; }
+.crate-shelf[hidden] { display: none; }
+.crate-shelf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.crate-shelf-title {
   font-family: var(--font-serif);
   font-size: 16px;
   color: var(--bone);
-  margin: 0 0 10px;
+  margin: 0;
 }
-.crate-status { font-size: 13px; color: var(--bone-dim); margin: 0 0 10px; }
-.crate-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+.crate-shelf-count { flex: 0 0 auto; }
+.crate-shelf-scroll {
+  display: flex;
   gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
 }
+.crate-shelf-scroll::-webkit-scrollbar { height: 4px; }
+.crate-shelf-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+
 .crate-card {
+  flex: 0 0 148px;
+  width: 148px;
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: 6px;

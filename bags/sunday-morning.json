@@ -1,0 +1,25 @@
+{
+  "name": "Sunday morning",
+  "category": "mood",
+  "blurb": "Slow coffee, low volume, nowhere to be until the afternoon.",
+  "albums": [
+    { "title": "Rumours", "artist": "Fleetwood Mac" },
+    { "title": "Astral Weeks", "artist": "Van Morrison" },
+    { "title": "Come Away with Me", "artist": "Norah Jones" },
+    { "title": "Still Bill", "artist": "Bill Withers" },
+    { "title": "Otis Blue", "artist": "Otis Redding" },
+    { "title": "For Emma, Forever Ago", "artist": "Bon Iver" },
+    { "title": "Pet Sounds", "artist": "The Beach Boys" },
+    { "title": "Tapestry", "artist": "Carole King" },
+    { "title": "Talking Book", "artist": "Stevie Wonder" },
+    { "title": "Sweet Baby James", "artist": "James Taylor" },
+    { "title": "Diamond Life", "artist": "Sade" },
+    { "title": "Corinne Bailey Rae", "artist": "Corinne Bailey Rae" },
+    { "title": "Pink Moon", "artist": "Nick Drake" },
+    { "title": "Call Me", "artist": "Al Green" },
+    { "title": "Veneer", "artist": "José González" },
+    { "title": "Bridge Over Troubled Water", "artist": "Simon & Garfunkel" },
+    { "title": "Wild Is the Wind", "artist": "Nina Simone" },
+    { "title": "Blue", "artist": "Joni Mitchell" }
+  ]
+}

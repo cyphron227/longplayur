@@ -12,7 +12,15 @@
 
 import { apiFetch } from './spotify.js';
 
-const BAG_IDS = ['90s-us-rap', 'soul-essentials', 'motown', 'trip-hop', 'britpop', 'late-night-jazz'];
+// Six original ("seed") bags, plus eight more (INCREMENT-03 Phase 2:
+// Shelves) grouped on the Record bags screen by their own `category` field
+// below: four by mood, four by decade. Content authoring, not engineering --
+// see KNOWN-DEVIATIONS.md for the honesty note on the eight new ones.
+const BAG_IDS = [
+  '90s-us-rap', 'soul-essentials', 'motown', 'trip-hop', 'britpop', 'late-night-jazz',
+  'sunday-morning', 'headphones-on', 'driving', 'rainy-day',
+  'the-60s', 'the-70s', 'the-90s', 'the-2020s',
+];
 const LS_RESOLVED_PREFIX = 'lp_bag_resolved_';
 // The Crates screen now resolves bags eagerly (for each card's album-grid
 // preview) rather than only on selection, so a cold cache can mean several
@@ -53,7 +61,11 @@ export function loadBagManifest() {
           const res = await fetch(`bags/${id}.json`);
           if (!res.ok) return null;
           const data = await res.json();
-          return { id, name: data.name, blurb: data.blurb, albums: data.albums || [] };
+          // 'seed' fallback covers any bag JSON that predates the category
+          // field (none currently do, all six original bags were given one
+          // alongside this change, but a missing/unrecognised category
+          // should still land somewhere sensible rather than disappear).
+          return { id, name: data.name, blurb: data.blurb, albums: data.albums || [], category: data.category || 'seed' };
         } catch {
           return null;
         }

@@ -1,0 +1,27 @@
+{
+  "name": "The 60s",
+  "category": "decade",
+  "blurb": "Guitars plugged in for the first time, and everyone finding out what an album could be.",
+  "albums": [
+    { "title": "Revolver", "artist": "The Beatles" },
+    { "title": "Abbey Road", "artist": "The Beatles" },
+    { "title": "Let It Bleed", "artist": "The Rolling Stones" },
+    { "title": "Highway 61 Revisited", "artist": "Bob Dylan" },
+    { "title": "Pet Sounds", "artist": "The Beach Boys" },
+    { "title": "The Velvet Underground & Nico", "artist": "The Velvet Underground" },
+    { "title": "Are You Experienced", "artist": "The Jimi Hendrix Experience" },
+    { "title": "Tommy", "artist": "The Who" },
+    { "title": "Bookends", "artist": "Simon & Garfunkel" },
+    { "title": "A Love Supreme", "artist": "John Coltrane" },
+    { "title": "In a Silent Way", "artist": "Miles Davis" },
+    { "title": "I Never Loved a Man the Way I Love You", "artist": "Aretha Franklin" },
+    { "title": "Otis Blue", "artist": "Otis Redding" },
+    { "title": "Where Did Our Love Go", "artist": "The Supremes" },
+    { "title": "Cloud Nine", "artist": "The Temptations" },
+    { "title": "Stand!", "artist": "Sly and the Family Stone" },
+    { "title": "The Kinks Are the Village Green Preservation Society", "artist": "The Kinks" },
+    { "title": "Astral Weeks", "artist": "Van Morrison" },
+    { "title": "Wild Is the Wind", "artist": "Nina Simone" },
+    { "title": "Odessey and Oracle", "artist": "The Zombies" }
+  ]
+}

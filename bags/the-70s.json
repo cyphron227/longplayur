@@ -1,0 +1,27 @@
+{
+  "name": "The 70s",
+  "category": "decade",
+  "blurb": "The decade the album became the whole point.",
+  "albums": [
+    { "title": "Rumours", "artist": "Fleetwood Mac" },
+    { "title": "What's Going On", "artist": "Marvin Gaye" },
+    { "title": "Songs in the Key of Life", "artist": "Stevie Wonder" },
+    { "title": "Innervisions", "artist": "Stevie Wonder" },
+    { "title": "The Dark Side of the Moon", "artist": "Pink Floyd" },
+    { "title": "Led Zeppelin IV", "artist": "Led Zeppelin" },
+    { "title": "The Rise and Fall of Ziggy Stardust and the Spiders from Mars", "artist": "David Bowie" },
+    { "title": "Blue", "artist": "Joni Mitchell" },
+    { "title": "Talking Heads: 77", "artist": "Talking Heads" },
+    { "title": "Born to Run", "artist": "Bruce Springsteen" },
+    { "title": "Aja", "artist": "Steely Dan" },
+    { "title": "London Calling", "artist": "The Clash" },
+    { "title": "Never Mind the Bollocks, Here's the Sex Pistols", "artist": "Sex Pistols" },
+    { "title": "Bad Girls", "artist": "Donna Summer" },
+    { "title": "That's the Way of the World", "artist": "Earth, Wind & Fire" },
+    { "title": "Call Me", "artist": "Al Green" },
+    { "title": "Superfly", "artist": "Curtis Mayfield" },
+    { "title": "Zombie", "artist": "Fela Kuti" },
+    { "title": "Trans-Europe Express", "artist": "Kraftwerk" },
+    { "title": "Unknown Pleasures", "artist": "Joy Division" }
+  ]
+}

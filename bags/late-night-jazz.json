@@ -1,5 +1,6 @@
 {
   "name": "Late-night jazz",
+  "category": "seed",
   "blurb": "Low light, brushed drums, and no reason to be anywhere else.",
   "albums": [
     { "title": "Kind of Blue", "artist": "Miles Davis" },

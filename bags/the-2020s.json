@@ -1,0 +1,27 @@
+{
+  "name": "The 2020s",
+  "category": "decade",
+  "blurb": "Still being written.",
+  "albums": [
+    { "title": "Sometimes I Might Be Introvert", "artist": "Little Simz" },
+    { "title": "Untitled (Black Is)", "artist": "Sault" },
+    { "title": "Black Classical Music", "artist": "Yussef Dayes" },
+    { "title": "Where I'm Meant to Be", "artist": "Ezra Collective" },
+    { "title": "Call Me If You Get Lost", "artist": "Tyler, the Creator" },
+    { "title": "Renaissance", "artist": "Beyoncé" },
+    { "title": "Mr. Morale & the Big Steppers", "artist": "Kendrick Lamar" },
+    { "title": "Planet Her", "artist": "Doja Cat" },
+    { "title": "We're All Alone in This Together", "artist": "Dave" },
+    { "title": "This Is What I Mean", "artist": "Stormzy" },
+    { "title": "The Car", "artist": "Arctic Monkeys" },
+    { "title": "Wet Leg", "artist": "Wet Leg" },
+    { "title": "Skinty Fia", "artist": "Fontaines D.C." },
+    { "title": "Cavalcade", "artist": "black midi" },
+    { "title": "30", "artist": "Adele" },
+    { "title": "SOUR", "artist": "Olivia Rodrigo" },
+    { "title": "Dragon New Warm Mountain I Believe in You", "artist": "Big Thief" },
+    { "title": "SOS", "artist": "SZA" },
+    { "title": "Falling or Flying", "artist": "Jorja Smith" },
+    { "title": "MOTOMAMI", "artist": "Rosalía" }
+  ]
+}
