@@ -872,7 +872,18 @@ function buildFlipRow(entry) {
   dw.textContent = flipRowDeadwax(entry);
   row.appendChild(dw);
 
-  row.addEventListener('click', () => handleSelectAlbum(entry));
+  row.addEventListener('click', () => {
+    // The ceremony needs the dome's own container visible to animate into
+    // (it appends its layer inside #wall-viewport, which Flip mode hides
+    // entirely) -- without switching back first, the whole preview
+    // (including its Play button) renders inside a display:none ancestor:
+    // present in the DOM, completely invisible and unclickable, so the
+    // ceremony just sits there waiting for a Play press that can never
+    // happen. Switch back to Spin first, exactly like Runout groove's
+    // cells switch back to Now Playing before doing the same thing.
+    setFlipMode('spin');
+    handleSelectAlbum(entry);
+  });
   return row;
 }
 

@@ -5,6 +5,94 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Two bugs from the previous round, found live (2026-07-26)
+
+### Flip rows didn't play: the ceremony was rendering inside a hidden container
+
+Reported live: tapping a row in Flip did nothing audible. Root cause:
+`setFlipMode('flip')` hides `#wall-viewport` entirely (`hide(wallViewport)`,
+which the browser's own `[hidden] { display: none }` default applies,
+since `.wall-viewport`'s own CSS never sets `display` to conflict with
+it) so the dome can be swapped for the list. But `buildFlipRow()`'s click
+handler called `handleSelectAlbum(entry)` directly, and `ceremony.js`'s
+`selectAlbum()` builds its entire selection preview -- cover, text panel,
+and critically the Play button -- as children appended inside
+`wallViewportEl`. A descendant of a `display: none` ancestor has no box at
+all: it is fully present in the DOM (so nothing throws) but entirely
+invisible and unclickable. The ceremony was, every time, silently waiting
+forever for a Play press on a button the listener could never see or tap.
+
+This is exactly the same shape of bug Runout groove's cells were already
+built to avoid (`showScreen('app')` before `handleSelectAlbum()`), just
+missed for Flip's own rows when Phase 1 was built -- Flip's own instruction
+said reusing `handleSelectAlbum()` needed "no new interaction code, just a
+new entry point into it", which is true for the *call*, but the *view*
+still has to actually be visible first. Fixed the same way: `setFlipMode('spin')`
+now runs immediately before `handleSelectAlbum(entry)` in the row's click
+handler, so `#wall-viewport` (and the ceremony inside it) is visible before
+anything animates into it.
+
+### Genre still "Unknown" for some artists: a rate-limited MusicBrainz burst was getting permanently mis-cached
+
+Reported live, after the previous MusicBrainz-fallback fix: some artists'
+genres resolved correctly, others stayed stuck on "Unknown" indefinitely.
+Two compounding causes, both in the automatic background resolution added
+for the earlier fix:
+
+1. **Concurrency limits don't cap request rate.** `flip.js`/`runout.js`
+   bound how many artists' lookups can be *in flight* at once
+   (`GENRE_RESOLVE_CONCURRENCY`, lowered from 4 to 2 already), but that
+   does not by itself cap how fast completed requests arrive -- with each
+   artist needing up to two sequential MusicBrainz requests (search, then
+   genres) and each pair completing quickly, a real pool's worth of unique
+   artists could still burst well past MusicBrainz's roughly-1-request-
+   per-second public courtesy guidance. Fixed with an actual request-pacing
+   queue in `musicbrainz.js`'s `mbFetch()` (`schedule()`, a promise chain
+   enforcing a minimum 500ms gap between the *start* of any two
+   consecutive MusicBrainz requests, app-wide -- credits and genre lookups
+   share the same queue), rather than only bounding concurrency. 500ms
+   (roughly 2 requests/second) is a deliberate compromise between
+   respecting the 1/second guidance and not making an occasional
+   on-demand credits lookup wait too long behind a queued-up background
+   genre batch -- not a value verified against MusicBrainz's actual
+   enforcement, since this environment has no network access to it.
+2. **The real bug: a rate-limited (or otherwise failed) MusicBrainz
+   request was being cached exactly like a confirmed "no genre" miss.**
+   `ceremony.js`'s `fetchPrimaryGenre()` called `musicbrainz.js`'s
+   `getArtistGenre()` and unconditionally cached whatever it returned --
+   `null` either way, with no way to tell "MusicBrainz doesn't know this
+   artist's genre" apart from "the request to find out failed". Once (1)
+   above caused a burst of artists to get legitimately rate-limited by
+   MusicBrainz, every one of them had that failure permanently written
+   into both the in-memory `Map` and the 30-day `localStorage` cache as if
+   it were a confirmed miss -- exactly the patchy "some correct, some
+   stuck forever" pattern reported. Fixed by changing `getArtistGenre()`'s
+   return shape to `{genre, failed}` (mirroring `getAlbumCredits()`'s own
+   existing `{credits, failed}` pattern in the same file) and having
+   `fetchPrimaryGenre()` return `null` for that call *without caching
+   anything* when `failed` is true, so a later attempt (the next pool
+   mount, reopening Flip) retries that artist honestly instead of trusting
+   a stuck failure for 30 days.
+3. **A smaller, related fix bundled in**: `normalize()` in
+   `musicbrainz.js` now runs Unicode NFKD decomposition and strips
+   combining diacritical marks before the existing `[^a-z0-9]` filter, so
+   an accented name like "Björk" normalises consistently instead of the
+   accent silently splitting the word in two (a plain `[^a-z0-9]` filter
+   turns "ö" into a bare space: "bj rk"), which could otherwise fail an
+   otherwise-correct exact-name match against MusicBrainz's own stored
+   spelling and produce a false "not confident enough" miss. This affects
+   both the genre lookup and the existing album-credits lookup, since both
+   share this same function.
+
+**Verified against mocked network responses** (still no live Spotify or
+MusicBrainz access in this environment): a successful MusicBrainz
+fallback still resolves and caches correctly; a simulated `500` response
+from every MusicBrainz endpoint resolves to `null` for that call *and
+leaves nothing in the persistent cache*, confirmed by inspecting
+`localStorage['lp_artist_genre_cache']` directly; a confirmed "artist not
+found" response (empty search results, a real 200) still caches `null` as
+before, unaffected by the fix.
+
 ## Genre resolution: MusicBrainz fallback, persistent cache, automated (2026-07-26)
 
 Reported live, post-launch, against the real deployment: every genre in

@@ -454,7 +454,16 @@ async function fetchPrimaryGenre(artistId, artistName) {
   }
 
   if (!genre && artistName) {
-    genre = await getArtistGenre(artistName).catch(() => null);
+    // A transient MusicBrainz failure (its own rate limit, a dropped
+    // request) must NOT be cached as a confirmed "no genre" -- that exact
+    // mistake, made once, permanently mis-labelled a whole burst of
+    // artists as genre-less for the cache's full TTL the first time this
+    // was built (see KNOWN-DEVIATIONS.md). Return null for this call
+    // without caching, so a later attempt (a fresh pool mount, reopening
+    // Flip) retries it honestly instead of trusting a stuck failure.
+    const result = await getArtistGenre(artistName).catch(() => ({ genre: null, failed: true }));
+    if (result.failed) return null;
+    genre = result.genre;
   }
 
   artistGenreCache.set(artistId, genre);

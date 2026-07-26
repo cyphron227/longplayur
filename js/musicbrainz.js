@@ -53,15 +53,62 @@ const ROLE_LABELS = {
   arranger: 'Arranger',
 };
 
+// NFKD + stripping combining marks before the a-z0-9 filter means "Beyoncé"
+// and "Beyonce" (or two different Unicode representations of the same
+// accented character) normalise identically, rather than the accent
+// silently splitting a word in two (a plain [^a-z0-9] filter turns "é" into
+// a bare space, e.g. "Björk" -> "bj rk") and quietly failing an otherwise
+// correct exact-name match.
 function normalize(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return (s || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '') // strip combining diacritical marks left behind by NFKD decomposition.
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// MusicBrainz's own public-API courtesy guidance is roughly 1 request per
+// second; bounding how many callers can be *in flight* at once (the
+// concurrency limits in flip.js/runout.js) does not by itself cap the
+// *rate* of completed requests, and going through this in practice
+// (concurrency 2, each artist costing up to 2 requests) burst well past
+// that guidance and got a real chunk of a wall pool's worth of artists
+// rate-limited -- which then got silently, permanently mis-cached as "no
+// genre" (see getPrimaryGenre() in ceremony.js's fix for the caching half
+// of this; this is the request-pacing half). Every MusicBrainz request in
+// this app, credits or genre, goes through this same queue, so a single
+// on-demand credits lookup can occasionally queue briefly behind an
+// in-progress background genre batch -- judged an acceptable trade-off
+// against actually respecting the rate limit; 500ms (roughly 2 req/s) is a
+// deliberately chosen compromise between the 1 req/s guidance and not
+// making that occasional wait too long, not a value verified against
+// MusicBrainz's actual enforcement in this environment (no network access
+// to it here).
+const MIN_REQUEST_SPACING_MS = 500;
+let requestQueue = Promise.resolve();
+
+function schedule(fn) {
+  const run = requestQueue.then(async () => {
+    try {
+      return await fn();
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, MIN_REQUEST_SPACING_MS));
+    }
+  });
+  // Chain off `run` but swallow its rejection here so one failed request
+  // doesn't wedge every request queued after it.
+  requestQueue = run.catch(() => {});
+  return run;
 }
 
 async function mbFetch(path) {
-  const url = `${MB_BASE}${path}${path.includes('?') ? '&' : '?'}fmt=json`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`musicbrainz_${res.status}`);
-  return res.json();
+  return schedule(async () => {
+    const url = `${MB_BASE}${path}${path.includes('?') ? '&' : '?'}fmt=json`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`musicbrainz_${res.status}`);
+    return res.json();
+  });
 }
 
 /** The best release-group match for artist+title, or null if nothing meets
@@ -236,25 +283,32 @@ function setCachedGenre(name, genre) {
  * relationship to a Spotify artist id, so this always searches by name,
  * the same way getAlbumCredits() searches releases by artist+title).
  * @param {string} artistName
- * @returns {Promise<string|null>} null for an honest miss (no confident
- *   artist match, or a match with no genre tags recorded) -- never a guess.
+ * @returns {Promise<{genre: string|null, failed: boolean}>} genre is null
+ *   for an honest miss (no confident artist match, or a match with no
+ *   genre tags recorded) -- never a guess. `failed` distinguishes that
+ *   honest miss (worth caching -- see getCachedGenre()/setCachedGenre())
+ *   from the request itself breaking (a real bug, or MusicBrainz's own
+ *   rate limit), which callers must NOT cache as "no genre": doing that
+ *   once already meant a single burst of rate-limited requests
+ *   permanently mis-labelled a whole chunk of artists as genre-less for
+ *   the cache's full 30-day TTL (see KNOWN-DEVIATIONS.md).
  */
 export async function getArtistGenre(artistName) {
-  if (!artistName) return null;
+  if (!artistName) return { genre: null, failed: false };
   const cached = getCachedGenre(artistName);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) return { genre: cached, failed: false };
 
   try {
     const artist = await findArtist(artistName);
     if (!artist) {
       setCachedGenre(artistName, null);
-      return null;
+      return { genre: null, failed: false };
     }
     const genre = await findArtistGenre(artist.id);
     setCachedGenre(artistName, genre);
-    return genre;
+    return { genre, failed: false };
   } catch (err) {
     console.error('[musicbrainz] artist genre lookup failed:', err);
-    return null; // not cached: a transient failure should retry next time, not stick as a permanent miss.
+    return { genre: null, failed: true }; // not cached here: the caller must not treat this the same as a confirmed miss.
   }
 }
