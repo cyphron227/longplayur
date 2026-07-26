@@ -366,6 +366,96 @@ export async function settleActiveOverlay(wallApi, { animate = true } = {}) {
   }
 }
 
+/**
+ * The inverse of settleActiveOverlay(): brings the currently-playing
+ * album's cover back to the foreground as the enlarged "now playing" hero,
+ * from wherever it currently is -- a persistent per-cell disc (settled
+ * earlier by dragging the gallery), or already the active hero elsewhere
+ * on screen (just re-centres the camera on it). Reached by tapping the
+ * small album art on the player bar; per explicit request, that should
+ * "resurface" the main graphic rather than doing nothing once the hero has
+ * settled away.
+ * @param {object} entry the currently-playing pool-shaped entry (id, name,
+ *   artist, image) -- passed directly rather than looked up from wallApi,
+ *   since the playing album may not be present in whatever pool is
+ *   currently mounted (e.g. dropped from Records nearby or Runout groove).
+ * @param {{wallApi: object, wallViewportEl: HTMLElement}} ctx
+ */
+export async function resurfaceNowPlaying(entry, ctx) {
+  const { wallApi, wallViewportEl } = ctx;
+
+  // Already the hero somewhere on screen: just make sure the camera is
+  // actually centred on it (it may have been dragged away from since),
+  // rather than tearing down and rebuilding anything.
+  if (activeOverlay?.albumId === entry.id) {
+    wallApi.panToAlbum(entry.id, { animate: true });
+    return;
+  }
+
+  // A different album is somehow still the active hero (shouldn't happen
+  // in practice, since only one album plays at a time) -- settle it first,
+  // the same guard selectAlbum() uses.
+  if (activeOverlay) {
+    await settleActiveOverlay(wallApi, { animate: true });
+  }
+
+  const reduced = prefersReducedMotion();
+  const layer = ensureLayer(wallViewportEl);
+  const cellRect = wallApi.getCellRect(entry.id) || fallbackCenterRect(wallViewportEl);
+
+  // Recover whatever progress the persistent per-cell disc had already
+  // reached (attachPersistentDisc()/settleActiveOverlay() keep this in
+  // sync with playback) so resurfacing never jumps the tonearm arc back to
+  // 0. An album not present in the mounted pool never had a cell to attach
+  // a persistent disc to in the first place, so there is nothing to
+  // recover -- its resurfaced arc simply starts at 0 and catches back up
+  // to the real position within a second, since updateTonearmProgress()
+  // is driven by the player bar's own live elapsed/total on every poll
+  // regardless.
+  const priorOffset = discsByAlbum.get(entry.id)?.arc.style.strokeDashoffset;
+  retireDisc(entry.id); // removes the persistent per-cell disc, if any.
+
+  wallApi.recedeAllExcept(entry.id);
+  wallApi.panToAlbum(entry.id, { animate: true });
+
+  const moveDur = reduced ? TIMINGS.reducedMs : TIMINGS.recedeMs;
+  const cover = document.createElement('div');
+  cover.className = 'ceremony-cover';
+  Object.assign(cover.style, {
+    left: `${cellRect.x}px`, top: `${cellRect.y}px`,
+    width: `${cellRect.width}px`, height: `${cellRect.height}px`,
+    transition: `left ${moveDur}ms var(--ease), top ${moveDur}ms var(--ease), width ${moveDur}ms var(--ease), height ${moveDur}ms var(--ease)`,
+  });
+  if (entry.image) {
+    const img = document.createElement('img');
+    img.src = entry.image;
+    img.alt = '';
+    cover.appendChild(img);
+  }
+  const disc = buildDiscSvg();
+  disc.svg.classList.add('is-out'); // already playing: appears settled immediately, no slide-in.
+  if (priorOffset !== undefined) disc.arc.style.strokeDashoffset = priorOffset;
+  cover.appendChild(disc.svg);
+  layer.appendChild(cover);
+
+  cover.getBoundingClientRect(); // force layout before animating.
+  const target = computeEnlargedTarget(wallViewportEl);
+  requestAnimationFrame(() => {
+    Object.assign(cover.style, {
+      left: `${target.left}px`, top: `${target.top}px`,
+      width: `${target.width}px`, height: `${target.height}px`,
+    });
+  });
+  if (!reduced) await delay(moveDur);
+
+  // No text panel: the steady "now playing" state never shows one (it
+  // fades out the moment commitPlayback() succeeds during the original
+  // needle drop), so resurfacing matches that same at-rest appearance.
+  wallApi.enterRestingState(entry.id, { keepHidden: true });
+  wallApi.setCurrent(entry.id);
+  activeOverlay = { albumId: entry.id, cover, text: null, disc };
+}
+
 // ---------------------------------------------------------------------
 // Needle drop
 // ---------------------------------------------------------------------

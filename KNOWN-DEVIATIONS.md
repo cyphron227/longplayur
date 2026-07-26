@@ -5,6 +5,52 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Player bar art resurfaces the "now playing" hero (2026-07-26)
+
+Per explicit request: tapping the small album art on the player bar now
+brings the enlarged "now playing" hero cover (the same disc-bearing cover
+shown right after a needle drop) back to the foreground, from wherever it
+has settled to -- a small persistent per-cell disc on the dome (dragging
+the gallery settles it there), or off screen entirely (Flip, Crates, Past
+sessions, or Runout groove all leave the Wall itself out of view). Before
+this, once the hero settled away there was no way to bring it back short
+of starting a fresh needle drop.
+
+- **`ceremony.js`'s new `resurfaceNowPlaying(entry, ctx)`** is the direct
+  inverse of the existing `settleActiveOverlay()`: it rebuilds the enlarged
+  cover and disc from wherever the album's current cell is (or the
+  existing viewport-centre fallback, `fallbackCenterRect()`, for an album
+  not present in whatever pool is currently mounted -- the same mechanism
+  Records nearby and Runout groove picks already rely on), recovers
+  whatever tonearm-arc progress the settled persistent disc had already
+  reached (so resurfacing never visibly resets progress to 0 -- an
+  off-pool album, which never had a cell to attach a persistent disc to in
+  the first place, is the one case with nothing to recover; its arc simply
+  starts at 0 and catches back up within a second, since the arc is
+  continuously re-driven from the player bar's own live elapsed/total on
+  every poll regardless), and skips building a text panel entirely, since
+  the steady "now playing" state never shows one even right after a real
+  needle drop (it fades out the moment playback actually starts).
+- **`main.js`'s `handleResurfaceNowPlaying()`** reads the currently-playing
+  album from `pendingEntry` (the same reliable, pool-membership-independent
+  source `handleRunout()` already uses, rather than `wallApi.getEntry()`,
+  which only knows about whatever pool happens to be mounted right now),
+  cancels any unrelated selection preview the listener has open elsewhere,
+  switches back to Spin (if Flip is active) and to the Now Playing screen
+  (if elsewhere) so the ceremony has a visible home to animate into --
+  exactly the same "switch back first" pattern Flip's rows and Runout
+  groove's cells already needed for the same underlying reason (the
+  ceremony renders inside `#wall-viewport`, invisible whenever that screen
+  or view mode isn't the active one).
+- **UI**: the player bar's album art (`#player-art`) is now wrapped in a
+  real `<button>` (`aria-label="Show now playing"`, 52px, well over the
+  44px touch-target floor) rather than a bare `<img>` with a click
+  listener, so it is keyboard-reachable and has an accessible name, per
+  the app's own accessibility floor. Hover gets the same `filter:
+  brightness(1.08)` "covers respond like sleeves under gallery light"
+  treatment used elsewhere (DESIGN-SPEC's anti-generic rule against
+  scaling on hover), not a scale transform.
+
 ## Genre search removed entirely, per explicit request (2026-07-26)
 
 Reported live: searching by genre for "African music" and "Brazilian"

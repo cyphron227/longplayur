@@ -9,7 +9,8 @@ import { initWall } from './wall.js';
 import * as playback from './playback.js';
 import {
   needleDrop, selectAlbum, runoutGroove, updateTonearmProgress, retireDisc,
-  isCrackleEnabled, toggleCrackle, settleActiveOverlay, cancelSelectionPreview
+  isCrackleEnabled, toggleCrackle, settleActiveOverlay, cancelSelectionPreview,
+  resurfaceNowPlaying
 } from './ceremony.js';
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './ending.js';
 import * as journal from './journal.js';
@@ -214,6 +215,7 @@ const nearbyShelf = document.getElementById('nearby-shelf');
 const playerNearby = document.getElementById('player-nearby');
 
 const playerBar = document.getElementById('player-bar');
+const playerArtBtn = document.getElementById('player-art-btn');
 const playerArt = document.getElementById('player-art');
 const playerTrack = document.getElementById('player-track');
 const playerArtist = document.getElementById('player-artist');
@@ -1129,6 +1131,36 @@ function updatePlayerBar(viewModel) {
 
   announce(`Now playing ${viewModel.albumName} by ${viewModel.artistName}`);
 }
+
+/**
+ * Tapping the player bar's small album art brings the enlarged "now
+ * playing" hero cover back to the foreground, wherever it has settled to
+ * (dragging the gallery leaves it as a small per-cell disc; switching to
+ * Flip, Crates, Past sessions, or Runout groove leaves the Wall itself out
+ * of view entirely) -- per explicit request, tapping it should resurface
+ * the main graphic rather than doing nothing.
+ */
+async function handleResurfaceNowPlaying() {
+  if (ceremonyBusy || !currentAlbumId || !wallApi) return;
+  // pendingEntry (set at the top of handleNeedleDrop()/handleSelectAlbum())
+  // reliably holds the full entry for whatever is currently playing,
+  // regardless of whether that album is present in whatever pool happens
+  // to be mounted right now -- the same reasoning handleRunout() already
+  // relies on it for.
+  const entry = pendingEntry && pendingEntry.id === currentAlbumId ? pendingEntry : null;
+  if (!entry) return;
+
+  ceremonyBusy = true;
+  try {
+    cancelSelectionPreview(); // drop any unrelated selection preview the listener has open elsewhere.
+    if (flipMode === 'flip') setFlipMode('spin'); // the ceremony needs the dome's own container visible to animate into.
+    showScreen('app');
+    await resurfaceNowPlaying(entry, { wallApi, wallViewportEl: wallViewport });
+  } finally {
+    ceremonyBusy = false;
+  }
+}
+playerArtBtn?.addEventListener('click', handleResurfaceNowPlaying);
 
 playerPlayPause.addEventListener('click', async () => {
   if (!latestViewModel) return;

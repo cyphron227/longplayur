@@ -1006,7 +1006,20 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   background: var(--obsidian-2);
 }
 .player-top { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.player-art { width: 52px; height: 52px; border-radius: 2px; object-fit: cover; flex: 0 0 auto; }
+/* Tapping the art resurfaces the enlarged "now playing" hero cover if it
+   has settled away (dragging the gallery, or switching to Flip/Crates/
+   Past sessions) -- see ceremony.js's resurfaceNowPlaying(). */
+.player-art-btn {
+  display: block;
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  cursor: pointer;
+}
+.player-art-btn:hover .player-art { filter: brightness(1.08); }
+.player-art { width: 52px; height: 52px; border-radius: 2px; object-fit: cover; display: block; }
 .player-meta { min-width: 0; flex: 1 1 auto; }
 .player-track { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-artist { font-size: 12px; color: var(--bone-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
