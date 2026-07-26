@@ -5,6 +5,85 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Two more bugs from live use: resurfacing "did nothing", Wake Spotify on every open (2026-07-26)
+
+### "Now playing doesn't load" when tapping the player-bar art: `pendingEntry` was the wrong source of truth
+
+Reported live, right after the player-art resurface feature shipped:
+tapping it sometimes did nothing at all. Root cause: `handleResurfaceNowPlaying()`
+(and, it turns out, the earlier `handleRunout()` fix from the same
+session) both used `pendingEntry` as a stand-in for "the entry that is
+currently playing". `pendingEntry` is not that -- it is set the instant
+*any* selection preview opens (`handleSelectAlbum()`'s very first line),
+and critically is **never reset** if that preview is then dismissed
+("Find something else") without playing. So the sequence that broke it:
+album A is playing (`currentAlbumId` = A); the listener taps a *different*
+cover, B, previewing it; they dismiss B without pressing Play. At that
+point `pendingEntry` = B, but the actually-playing album is still A.
+Tapping the player-bar art then compared `pendingEntry.id` (B) against
+`currentAlbumId` (A), found a mismatch, and silently did nothing -- exactly
+the reported symptom. The same stale-pointer risk existed in
+`handleRunout()` already, just less likely to be hit by chance (it needs a
+dismissed preview to land in the narrow window before the *previous*
+album's runout fires).
+
+Fixed with a dedicated `currentPlayingEntry` variable in `main.js`, set
+only at the one point a needle drop actually **commits** (immediately
+after `currentAlbumId = entry.id;`, in both `handleNeedleDrop()` and
+`handleSelectAlbum()`), never by a preview merely opening. Both
+`handleRunout()` and `handleResurfaceNowPlaying()` now read this instead
+of `pendingEntry`, which keeps its original, narrower meaning ("the entry
+a device-picker resume should hand back to `handleNeedleDrop()`" -- see
+`openDeviceModal()`'s own device-click handler, the one place `pendingEntry`
+is still the genuinely correct thing to read).
+
+### "Wake Spotify" appearing on every app open, whether or not it was needed
+
+Reported live: the no-devices-found modal (with its Android "Wake Spotify"
+button) popped up immediately on opening the app, even when the listener
+had no intention of playing anything yet, and often wasn't actually stuck
+(Spotify would have been reachable once they tried). Root cause:
+`playback.js`'s `startConnectFallback()` -- which every iOS/mobile boot,
+and any desktop boot where the SDK failed to initialise, goes through --
+called `handlers.onNeedDevicePicker?.([])` unconditionally the moment
+`GET /me/player/devices` came back empty, before the listener had done
+anything at all. A `GET /me/player/devices` call returning nothing is
+extremely common right after opening the app (Spotify simply isn't
+already playing anywhere), so this fired on essentially every load using
+Connect mode.
+
+Fixed by deferring the whole "what do we do about zero or several
+devices" decision from boot time to the moment a play is actually
+attempted. `startConnectFallback()` now only acts on the one unambiguous
+case at boot -- exactly one device found, silently claimed, the same way
+the SDK path's own silent desktop reconnect already works without asking
+-- and does nothing for zero or several. A new `NoActiveDeviceError`
+(exported from `playback.js`) is thrown from `commitPlayback()` instead,
+at the moment of a real play attempt, after a **fresh** device check
+(not the boot-time snapshot, since the listener may well have opened
+Spotify elsewhere in the meantime): if that fresh check finds exactly one
+device, it is silently claimed there instead, mid-play, with no prompt at
+all; zero or several throw `NoActiveDeviceError(devices)`, which
+`handleNeedleDrop()`/`handleSelectAlbum()` catch and only then open the
+device picker (Wake Spotify included, on Android, exactly as before) --
+now genuinely only when there is a real decision blocking a real play
+attempt. `onNeedDevicePicker` (the handler `initPlayback()` used to call
+this through) had no callers left after this change and was removed
+rather than left wired to nothing.
+
+**Verified against mocked network responses** (again, no live Spotify
+account reachable from this environment): forced into Connect mode via an
+iPhone user agent, four scenarios were exercised directly against
+`playback.js`'s real `initPlayback()`/`commitPlayback()` --
+zero-devices-at-boot-and-at-play (throws `NoActiveDeviceError` with an
+empty list, no `PUT /me/player/play` request ever sent), one-device-at-boot
+(silently claimed at boot, exactly one `GET /me/player/devices` call made,
+play succeeds immediately), zero-at-boot-then-one-appears-by-play-time
+(the fresh check at play time correctly catches and claims it, play
+succeeds), and zero-at-boot-then-two-at-play-time (correctly throws
+`NoActiveDeviceError` with both, genuinely ambiguous). All four matched
+the intended behaviour exactly.
+
 ## Player bar art resurfaces the "now playing" hero (2026-07-26)
 
 Per explicit request: tapping the small album art on the player bar now

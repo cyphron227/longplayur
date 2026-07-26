@@ -10,6 +10,20 @@ const SDK_SRC = 'https://sdk.scdn.co/spotify-player.js';
 const SDK_TIMEOUT_MS = 8000;
 const POLL_INTERVAL_MS = 5000;
 
+/** No active Spotify device at the moment playback was actually attempted
+ * (Connect mode only). Callers should show the device picker (`devices`,
+ * possibly empty) and, on iOS/mobile with none found, the "Wake Spotify"
+ * flow -- see main.js's handleNeedleDrop()/handleSelectAlbum() catch
+ * blocks. Thrown lazily, at the moment of an actual play attempt, rather
+ * than assumed at boot: see startConnectFallback()'s own comment for why. */
+export class NoActiveDeviceError extends Error {
+  constructor(devices) {
+    super('No active Spotify device.');
+    this.name = 'NoActiveDeviceError';
+    this.devices = devices;
+  }
+}
+
 let mode = null; // 'sdk' | 'connect'
 let sdkPlayer = null;
 let deviceId = null;
@@ -157,7 +171,10 @@ function publishViewModelFromConnect(state, snapshot) {
 
 /**
  * @param {object} h onPlayerBarUpdate, onSdkTransition, onConnectTransition,
- *   onNeedDevicePicker(devices), onError, onModeReady(mode)
+ *   onError, onModeReady(mode). Device selection is no longer prompted at
+ *   boot (see startConnectFallback()'s own comment); callers instead catch
+ *   NoActiveDeviceError from commitPlayback() at the moment of an actual
+ *   play attempt.
  */
 export async function initPlayback(h) {
   handlers = h;
@@ -175,15 +192,22 @@ export async function initPlayback(h) {
   return 'connect';
 }
 
+// Boot-time device check: silently claims a device only in the one
+// unambiguous case (exactly one found), the same way the SDK path's
+// silent desktop reconnect claims its own device without asking. Zero or
+// several devices used to prompt the listener immediately here, before
+// they had done anything -- reported live as the "Wake Spotify" modal
+// popping up on every single app open, whether or not they were about to
+// play anything. Deciding what to do about no/ambiguous devices is now
+// deferred entirely to the moment an actual play is attempted
+// (commitPlayback()'s own fresh check below), so the prompt only ever
+// appears when there is a real decision blocking real intent -- see
+// KNOWN-DEVIATIONS.md.
 async function startConnectFallback() {
   const data = await api.getDevices().catch(() => ({ devices: [] }));
   const devices = data?.devices || [];
-  if (devices.length === 0) {
-    handlers.onNeedDevicePicker?.([]);
-  } else if (devices.length === 1) {
+  if (devices.length === 1) {
     await selectDevice(devices[0].id, devices[0].name);
-  } else {
-    handlers.onNeedDevicePicker?.(devices);
   }
   await initConnectPolling();
   handlers.onModeReady?.('connect');
@@ -227,6 +251,19 @@ export async function commitPlayback() {
   if (!currentContext) throw new Error('No album prepared.');
   if (mode === 'sdk' && !deviceId) {
     throw new Error('Longplayur device is not ready yet.');
+  }
+  if (mode === 'connect' && !deviceId) {
+    // Check fresh rather than trusting whatever startConnectFallback()
+    // saw at boot: the listener may well have opened Spotify elsewhere
+    // since then, and this is also the first time this app actually needs
+    // an answer, per the "only ask when there's a real decision to make"
+    // change (see that function's own comment).
+    const devices = await listDevices();
+    if (devices.length === 1) {
+      await selectDevice(devices[0].id, devices[0].name);
+    } else {
+      throw new NoActiveDeviceError(devices);
+    }
   }
   await api.playContext(deviceId, currentContext.entry.uri, 0);
   return currentContext;

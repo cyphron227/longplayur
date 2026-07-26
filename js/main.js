@@ -245,6 +245,16 @@ let currentWallPool = []; // raw pool array currently mounted on the Wall; flip.
 let latestViewModel = null;
 let pendingEntry = null;
 let currentAlbumId = null;
+// The full entry for whatever currentAlbumId is currently playing, set
+// only once a needle drop actually commits -- NOT the same thing as
+// pendingEntry, which is set as soon as a preview opens and stays set even
+// if that preview is dismissed without playing. Using pendingEntry for
+// "what's currently playing" (an earlier version of both handleRunout()
+// and handleResurfaceNowPlaying() did) breaks the moment a listener
+// previews a *different* album and then dismisses it while something else
+// is still playing: pendingEntry would point at the dismissed album, not
+// the one actually still playing. See KNOWN-DEVIATIONS.md.
+let currentPlayingEntry = null;
 let currentSessionId = null;
 let ceremonyBusy = false;
 let runoutBusy = false;
@@ -908,6 +918,7 @@ async function handleNeedleDrop(entry) {
       crackleHintEl: crackleHint,
     });
     currentAlbumId = entry.id;
+    currentPlayingEntry = entry;
     localStorage.setItem(LS_EVER_DROPPED, 'true');
     // prepareAlbum() has run by now (needleDrop awaits commitPlayback), so
     // the context carries the album's real tracklist duration.
@@ -919,6 +930,9 @@ async function handleNeedleDrop(entry) {
     if (err instanceof SpotifyApiError && err.status === 403) {
       wallApi.markUnavailable(entry.id);
       wallPrompt.textContent = "Spotify won't play this one here. Pick another record.";
+    } else if (err instanceof playback.NoActiveDeviceError) {
+      wallPrompt.textContent = 'Choose where Longplayur should play.';
+      openDeviceModal(err.devices);
     } else {
       wallPrompt.textContent = describeSpotifyError(err);
     }
@@ -952,6 +966,7 @@ async function handleSelectAlbum(entry) {
       return;
     }
     currentAlbumId = entry.id;
+    currentPlayingEntry = entry;
     localStorage.setItem(LS_EVER_DROPPED, 'true');
     const durationMs = playback.getCurrentContext()?.totalDurationMs ?? null;
     const { session, sessionOrdinal } = journal.recordNeedleDrop(entry, { durationMs });
@@ -961,6 +976,9 @@ async function handleSelectAlbum(entry) {
     if (err instanceof SpotifyApiError && err.status === 403) {
       wallApi.markUnavailable(entry.id);
       wallPrompt.textContent = "Spotify won't play this one here. Pick another record.";
+    } else if (err instanceof playback.NoActiveDeviceError) {
+      wallPrompt.textContent = 'Choose where Longplayur should play.';
+      openDeviceModal(err.devices);
     } else {
       wallPrompt.textContent = describeSpotifyError(err);
     }
@@ -1074,14 +1092,17 @@ async function handleRunout() {
   if (runoutBusy || !currentAlbumId) return;
   runoutBusy = true;
   const finishedId = currentAlbumId;
-  // pendingEntry (set at the top of handleNeedleDrop()/handleSelectAlbum())
-  // still holds the full entry for whatever just finished, regardless of
-  // whether that album is present in whatever pool is currently mounted
-  // (e.g. it was dropped from Records nearby, or from this very screen on
-  // a previous runout) -- more reliable than wallApi.getEntry(), which only
-  // knows about the currently-mounted pool's own membership.
-  const finishedEntry = pendingEntry && pendingEntry.id === finishedId ? pendingEntry : null;
+  // currentPlayingEntry (set only once a needle drop actually commits,
+  // never by a merely-previewed-then-dismissed album -- see its own
+  // definition) holds the full entry for whatever just finished,
+  // regardless of whether that album is present in whatever pool is
+  // currently mounted (e.g. it was dropped from Records nearby, or from
+  // this very screen on a previous runout) -- more reliable than
+  // wallApi.getEntry(), which only knows about the currently-mounted
+  // pool's own membership.
+  const finishedEntry = currentPlayingEntry && currentPlayingEntry.id === finishedId ? currentPlayingEntry : null;
   currentAlbumId = null;
+  currentPlayingEntry = null;
   try {
     // Explicitly pause: Spotify's own account-level Autoplay setting (if
     // the listener has it on) would otherwise start playing something
@@ -1093,8 +1114,8 @@ async function handleRunout() {
       await showRunoutScreen(finishedEntry);
     } else {
       // Should not normally happen -- every played album's entry is known
-      // via pendingEntry -- but degrade to the always-available fallback
-      // rather than show a Runout screen with nothing to build it from.
+      // via currentPlayingEntry -- but degrade to the always-available
+      // fallback rather than show a Runout screen with nothing to build it from.
       wallApi.zoomToFitAll({ animate: true });
     }
   } finally {
@@ -1142,12 +1163,15 @@ function updatePlayerBar(viewModel) {
  */
 async function handleResurfaceNowPlaying() {
   if (ceremonyBusy || !currentAlbumId || !wallApi) return;
-  // pendingEntry (set at the top of handleNeedleDrop()/handleSelectAlbum())
+  // currentPlayingEntry (set only once a needle drop actually commits)
   // reliably holds the full entry for whatever is currently playing,
   // regardless of whether that album is present in whatever pool happens
-  // to be mounted right now -- the same reasoning handleRunout() already
-  // relies on it for.
-  const entry = pendingEntry && pendingEntry.id === currentAlbumId ? pendingEntry : null;
+  // to be mounted right now -- the same reasoning handleRunout() relies on
+  // it for. pendingEntry is NOT a safe substitute here: it is also set the
+  // moment any preview opens, even one the listener goes on to dismiss
+  // without playing, which would point this at the wrong album entirely
+  // while something else keeps actually playing.
+  const entry = currentPlayingEntry && currentPlayingEntry.id === currentAlbumId ? currentPlayingEntry : null;
   if (!entry) return;
 
   ceremonyBusy = true;
@@ -1653,7 +1677,6 @@ async function initPlaybackForApp() {
   try {
     await playback.initPlayback({
       onPlayerBarUpdate: updatePlayerBar,
-      onNeedDevicePicker: openDeviceModal,
       onSdkTransition: (prev, next) => {
         if (detectEndFromSdkStates(prev, next)) handleRunout();
       },
@@ -1713,6 +1736,7 @@ function performSignOut() {
   if (currentAlbumId) {
     retireDisc(currentAlbumId);
     currentAlbumId = null;
+    currentPlayingEntry = null;
   }
   currentSessionId = null;
   auth.signOut();
