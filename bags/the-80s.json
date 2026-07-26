@@ -1,0 +1,27 @@
+{
+  "name": "The 80s",
+  "category": "decade",
+  "blurb": "Drum machines, big choruses, and a decade that never once played it quiet.",
+  "albums": [
+    { "title": "Remain in Light", "artist": "Talking Heads" },
+    { "title": "Sandinista!", "artist": "The Clash" },
+    { "title": "1999", "artist": "Prince" },
+    { "title": "Thriller", "artist": "Michael Jackson" },
+    { "title": "Murmur", "artist": "R.E.M." },
+    { "title": "Purple Rain", "artist": "Prince" },
+    { "title": "Born in the U.S.A.", "artist": "Bruce Springsteen" },
+    { "title": "The Queen Is Dead", "artist": "The Smiths" },
+    { "title": "Graceland", "artist": "Paul Simon" },
+    { "title": "Master of Puppets", "artist": "Metallica" },
+    { "title": "The Joshua Tree", "artist": "U2" },
+    { "title": "Sign o' the Times", "artist": "Prince" },
+    { "title": "Appetite for Destruction", "artist": "Guns N' Roses" },
+    { "title": "It Takes a Nation of Millions to Hold Us Back", "artist": "Public Enemy" },
+    { "title": "Daydream Nation", "artist": "Sonic Youth" },
+    { "title": "Straight Outta Compton", "artist": "N.W.A" },
+    { "title": "Paul's Boutique", "artist": "Beastie Boys" },
+    { "title": "Disintegration", "artist": "The Cure" },
+    { "title": "3 Feet High and Rising", "artist": "De La Soul" },
+    { "title": "Doolittle", "artist": "Pixies" }
+  ]
+}

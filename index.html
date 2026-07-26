@@ -9,6 +9,7 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="js/dome-gallery.bundle.css">
+<link rel="stylesheet" href="js/transport.bundle.css">
 
 <!-- Vercel Web Analytics: same-origin (/_vercel/insights/*), proxied through
      this deployment's own domain, so no CSP change is needed for it. -->
@@ -262,43 +263,14 @@
       <div id="flip-list" class="flip-list"></div>
     </section>
 
-    <div id="player-bar" class="player-bar" hidden>
-      <div class="player-top">
-        <button id="player-art-btn" class="player-art-btn" type="button" aria-label="Show now playing" title="Show now playing">
-          <img id="player-art" class="player-art" alt="">
-        </button>
-        <div class="player-meta">
-          <div id="player-track" class="player-track"></div>
-          <div id="player-artist" class="player-artist"></div>
-          <div id="player-album" class="player-album"></div>
-        </div>
-      </div>
-      <div class="player-bottom">
-        <div class="player-controls">
-          <button id="player-prev" class="icon-btn" type="button" aria-label="Previous album" title="Previous album">
-            <svg class="icon"><use href="#icon-previous"/></svg>
-          </button>
-          <button id="player-playpause" class="icon-btn" type="button" aria-label="Play" title="Play">
-            <svg class="icon"><use href="#icon-play"/></svg>
-          </button>
-          <button id="player-next" class="icon-btn" type="button" aria-label="Next album" title="Next album">
-            <svg class="icon"><use href="#icon-next"/></svg>
-          </button>
-        </div>
-        <div class="player-progress-wrap">
-          <span id="player-elapsed" class="player-time">0:00</span>
-          <div class="player-progress"><div id="player-progress-fill" class="player-progress-fill"></div></div>
-          <span id="player-total" class="player-time">0:00</span>
-        </div>
-        <span id="player-device" class="player-device" hidden></span>
-        <button id="player-nearby" class="icon-btn player-device-switch" type="button" aria-label="Records nearby" title="Records nearby">
-          <svg class="icon"><use href="#icon-nearby"/></svg>
-        </button>
-        <button id="player-device-switch" class="icon-btn player-device-switch" type="button" aria-label="Choose playback device" title="Choose playback device">
-          <svg class="icon"><use href="#icon-device"/></svg>
-        </button>
-      </div>
-    </div>
+    <!-- The transport: mounted by js/transport.bundle.js (react-h5-audio-player's
+         shell, driven entirely by our own playback state -- see
+         transport/src/Transport.tsx for why: Spotify's SDK renders audio
+         itself and Connect mode plays on a remote device, so there is
+         never a real local audio stream to hand the library's <audio>
+         element, and every control is a custom override rather than the
+         library's own audio-driven default. -->
+    <div id="player-bar" hidden></div>
 
     <div id="nearby-shelf" class="nearby-shelf" hidden></div>
 

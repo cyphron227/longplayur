@@ -1,5 +1,7 @@
-# Only the gallery/ subfolder has any tooling (an isolated Vite build for
-# the Wall's dome gallery component). The deployed site itself is a plain
-# static build with nothing to ignore.
+# Only gallery/ and transport/ have any tooling (isolated Vite builds for
+# the Wall's dome gallery component and the transport/player bar). The
+# deployed site itself is a plain static build with nothing to ignore.
 gallery/node_modules/
 gallery/dist/
+transport/node_modules/
+transport/dist/

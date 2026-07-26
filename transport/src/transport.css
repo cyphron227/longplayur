@@ -1,0 +1,107 @@
+/* Restyles react-h5-audio-player's default (white, boxed) skin to match
+   Longplayur's own player bar -- same colours, spacing, and two-row shape
+   as the hand-rolled bar it replaces (see styles.css's own now-removed
+   "Player bar" section history in KNOWN-DEVIATIONS.md). CSS custom
+   properties (--obsidian-2, --bone, etc.) are defined on :root in the
+   app's own styles.css; they cascade into this separately-loaded
+   stylesheet the same way they would into any other stylesheet on the
+   same page. */
+
+.lp-transport.rhap_container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 20px;
+  background: var(--obsidian-2, #1B1A18);
+  box-shadow: none;
+  border-top: 1px solid var(--line, rgba(220, 215, 203, 0.14));
+  color: var(--bone, #DCD7CB);
+  font-family: var(--font-interface, system-ui, sans-serif);
+}
+.lp-transport.rhap_container:focus:not(:focus-visible) { outline: 0; }
+
+.lp-transport .rhap_header { margin: 0; }
+.lp-transport .rhap_main { gap: 0; }
+.lp-transport .rhap_progress-section { display: none; }
+.lp-transport .rhap_controls-section { justify-content: flex-start; }
+
+.lp-transport-meta { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.lp-transport-art-btn {
+  display: block;
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  cursor: pointer;
+}
+.lp-transport-art-btn:hover .lp-transport-art { filter: brightness(1.08); }
+.lp-transport-art {
+  width: 52px;
+  height: 52px;
+  border-radius: 2px;
+  object-fit: cover;
+  display: block;
+  background: var(--vinyl, #0B0B0C);
+}
+.lp-transport-text { min-width: 0; flex: 1 1 auto; }
+.lp-transport-track {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lp-transport-artist, .lp-transport-album {
+  font-size: 12px;
+  color: var(--bone-dim, #9D998F);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lp-transport-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
+}
+.lp-transport-controls { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.lp-transport-icon-btn { flex: 0 0 auto; }
+.lp-transport-playpause { color: var(--bone, #DCD7CB); border-color: var(--bone-dim, #9D998F); }
+
+.lp-transport-progress-wrap { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.lp-transport-progress { flex: 1 1 auto; min-width: 40px; height: 1px; background: var(--line, rgba(220, 215, 203, 0.14)); position: relative; }
+.lp-transport-progress-fill { position: absolute; top: 0; left: 0; height: 1px; background: var(--amber, #E8B45A); }
+.lp-transport-time {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--bone-dim, #9D998F);
+  letter-spacing: 0.04em;
+}
+
+.lp-transport-device {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--moss, #6B7C5E);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .lp-transport-device { display: none; }
+
+  /* Fixed and permanent, same as the bar this replaces: it must never
+     scroll off screen on a phone. */
+  .lp-transport.rhap_container {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}

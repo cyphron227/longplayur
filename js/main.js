@@ -22,6 +22,7 @@ import { getRecordsNearby } from './nearby.js';
 import { searchAlbums } from './search.js';
 import * as flip from './flip.js';
 import { gatherRunoutContext, buildRunoutGrid } from './runout.js';
+import { mountTransport } from './transport.bundle.js';
 
 // Strip the OAuth `code`/`state`/`error` from the address bar before anything else runs.
 const callbackParams = auth.consumeCallbackParams();
@@ -212,22 +213,7 @@ const crateNewArrivalsGrid = document.getElementById('crate-newarrivals-grid');
 const cratePlaylistsGrid = document.getElementById('crate-playlists-grid');
 const cratePlaylistsStatus = document.getElementById('crate-playlists-status');
 const nearbyShelf = document.getElementById('nearby-shelf');
-const playerNearby = document.getElementById('player-nearby');
-
-const playerBar = document.getElementById('player-bar');
-const playerArtBtn = document.getElementById('player-art-btn');
-const playerArt = document.getElementById('player-art');
-const playerTrack = document.getElementById('player-track');
-const playerArtist = document.getElementById('player-artist');
-const playerAlbum = document.getElementById('player-album');
-const playerPlayPause = document.getElementById('player-playpause');
-const playerPrev = document.getElementById('player-prev');
-const playerNext = document.getElementById('player-next');
-const playerElapsed = document.getElementById('player-elapsed');
-const playerTotal = document.getElementById('player-total');
-const playerProgressFill = document.getElementById('player-progress-fill');
-const playerDevice = document.getElementById('player-device');
-const playerDeviceSwitch = document.getElementById('player-device-switch');
+const playerBarEl = document.getElementById('player-bar');
 const wakeConfirmation = document.getElementById('wake-confirmation');
 
 const modalDevice = document.getElementById('modal-device');
@@ -1125,28 +1111,8 @@ async function handleRunout() {
 
 function updatePlayerBar(viewModel) {
   latestViewModel = viewModel;
-  show(playerBar);
-  if (viewModel.albumArt) playerArt.src = viewModel.albumArt;
-  playerTrack.textContent = viewModel.trackName || '';
-  playerArtist.textContent = viewModel.artistName || '';
-  playerAlbum.textContent = viewModel.albumName || '';
-
-  const playIcon = playerPlayPause.querySelector('use');
-  playIcon.setAttribute('href', viewModel.isPlaying ? '#icon-pause' : '#icon-play');
-  playerPlayPause.setAttribute('aria-label', viewModel.isPlaying ? 'Pause' : 'Play');
-  playerPlayPause.setAttribute('title', viewModel.isPlaying ? 'Pause' : 'Play');
-
-  playerElapsed.textContent = formatDuration(viewModel.elapsedMs || 0);
-  playerTotal.textContent = formatDuration(viewModel.totalMs || 0);
-  const pct = viewModel.totalMs ? Math.min(100, (viewModel.elapsedMs / viewModel.totalMs) * 100) : 0;
-  playerProgressFill.style.width = `${pct}%`;
-
-  if (viewModel.mode === 'connect' && viewModel.deviceName) {
-    playerDevice.textContent = `Playing on ${viewModel.deviceName}`;
-    show(playerDevice);
-  } else {
-    hide(playerDevice);
-  }
+  show(playerBarEl);
+  transportApi.update(viewModel);
 
   if (currentAlbumId) updateTonearmProgress(currentAlbumId, viewModel.elapsedMs || 0, viewModel.totalMs || 0);
 
@@ -1184,14 +1150,10 @@ async function handleResurfaceNowPlaying() {
     ceremonyBusy = false;
   }
 }
-playerArtBtn?.addEventListener('click', handleResurfaceNowPlaying);
-
-playerPlayPause.addEventListener('click', async () => {
+async function handlePlayPauseClick() {
   if (!latestViewModel) return;
   await playback.togglePlayPause(latestViewModel.isPlaying);
-});
-playerPrev.addEventListener('click', () => playback.skipPrevious());
-playerNext.addEventListener('click', () => playback.skipNext());
+}
 
 function syncCrackleButton() {
   const on = isCrackleEnabled();
@@ -1617,10 +1579,10 @@ function handleWakeSpotify() {
 // next, unaffected by which device is reporting it).
 // ---------------------------------------------------------------------
 
-playerDeviceSwitch.addEventListener('click', async () => {
+async function handleDeviceSwitchClick() {
   const devices = await playback.listDevices();
   openDeviceModal(devices, { isSwitch: true });
-});
+}
 
 // ---------------------------------------------------------------------
 // Records nearby (PRD F10): a low shelf of related albums for whatever is
@@ -1659,7 +1621,7 @@ function closeNearbyShelf() {
   hide(nearbyShelf);
 }
 
-playerNearby.addEventListener('click', async () => {
+async function handleNearbyClick() {
   if (nearbyOpen) {
     closeNearbyShelf();
     return;
@@ -1671,6 +1633,21 @@ playerNearby.addEventListener('click', async () => {
   renderNearbyShelf(shelf);
   nearbyOpen = true;
   show(nearbyShelf);
+}
+
+// Mounted once: react-h5-audio-player's shell (see transport/src/Transport.tsx),
+// driven entirely by updatePlayerBar() below via transportApi.update()
+// rather than by any real <audio> element. Handler references here are all
+// hoisted function declarations, so it does not matter that some are
+// defined further down this file -- none of them run until an actual
+// click, by which point the whole module has finished evaluating.
+const transportApi = mountTransport(playerBarEl, {
+  onArtClick: () => handleResurfaceNowPlaying(),
+  onPrev: () => playback.skipPrevious(),
+  onPlayPause: () => handlePlayPauseClick(),
+  onNext: () => playback.skipNext(),
+  onNearby: () => handleNearbyClick(),
+  onDeviceSwitch: () => handleDeviceSwitchClick(),
 });
 
 async function initPlaybackForApp() {

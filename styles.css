@@ -992,46 +992,16 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   white-space: normal;
 }
 
-/* -------------------- Player bar -------------------- */
+/* -------------------- Player bar (the transport) -------------------- */
 
-/* Two rows: track/artist/album each get a full-width line of their own so
-   long song names stay readable; controls and progress sit below. */
-.player-bar {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--line);
-  background: var(--obsidian-2);
-}
-.player-top { display: flex; align-items: center; gap: 14px; min-width: 0; }
-/* Tapping the art resurfaces the enlarged "now playing" hero cover if it
-   has settled away (dragging the gallery, or switching to Flip/Crates/
-   Past sessions) -- see ceremony.js's resurfaceNowPlaying(). */
-.player-art-btn {
-  display: block;
-  flex: 0 0 auto;
-  padding: 0;
-  border: none;
-  border-radius: 2px;
-  background: none;
-  cursor: pointer;
-}
-.player-art-btn:hover .player-art { filter: brightness(1.08); }
-.player-art { width: 52px; height: 52px; border-radius: 2px; object-fit: cover; display: block; }
-.player-meta { min-width: 0; flex: 1 1 auto; }
-.player-track { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.player-artist { font-size: 12px; color: var(--bone-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.player-album { font-size: 12px; color: var(--bone-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.player-bottom { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.player-controls { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
-.player-progress-wrap { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
-.player-progress { flex: 1 1 auto; min-width: 40px; height: 1px; background: var(--line); position: relative; }
-.player-progress-fill { position: absolute; top: 0; left: 0; height: 1px; background: var(--amber); }
-.player-time { flex: 0 0 auto; font-family: var(--font-mono); font-size: 11px; color: var(--bone-dim); letter-spacing: 0.04em; }
-.player-device { font-family: var(--font-mono); font-size: 11px; color: var(--moss); letter-spacing: 0.04em; white-space: nowrap; }
-.player-device-switch { flex: 0 0 auto; border-color: transparent; padding: 8px; min-width: 36px; min-height: 36px; }
+/* The transport is now a react-h5-audio-player shell, mounted by
+   js/transport.bundle.js into #player-bar (a plain, empty, non-styled
+   mount point -- see index.html). Its own layout/colours live in
+   transport/src/transport.css, compiled into js/transport.bundle.css and
+   linked from index.html's <head> alongside dome-gallery.bundle.css. This
+   file only still owns the phone-width fixed-position rule below, since
+   that behaviour depends on this file's own #wall-viewport/.crackle-hint
+   layout maths, not on anything internal to the transport component. */
 
 /* Auto-dismissing confirmation for the Android wake flow (PRD F7): moss,
    deadwax, appears once the phone is found as a device, then fades. */
@@ -1140,8 +1110,6 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 
 @media (max-width: 480px) {
   .tagline { font-size: 24px; }
-  /* No room next to the progress bar on a phone; the times matter more. */
-  .player-device { display: none; }
 
   /* Less chrome above the Wall so more of a short phone viewport goes to
      the gallery itself. */
@@ -1153,17 +1121,16 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
   .past-sessions-header h1 { font-size: 20px; }
   .past-sessions-actions .icon-btn { padding: 8px 10px; }
 
-  /* Fixed and permanent: the player bar must never scroll off screen, and
-     nothing outside the gallery itself should scroll at all on a phone. */
-  .player-bar {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 40;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-  /* Taking the player bar out of flex flow above means #wall-viewport's
+  /* The transport itself (fixed, never scrolls off screen on a phone) is
+     styled in transport/src/transport.css, compiled into
+     js/transport.bundle.css -- its own @media (max-width: 480px) block
+     carries the equivalent position: fixed rule for .lp-transport, since
+     that stylesheet owns the mounted component's actual visible box. This
+     file only still needs the layout consequences below, which depend on
+     #wall-viewport/.crackle-hint/.nearby-shelf, not on the transport
+     component itself.
+
+     Taking the player bar out of flex flow above means #wall-viewport's
      own flex:1 1 auto no longer reserves room for it, so it was growing
      to the full remaining height including the area now hidden behind the
      fixed bar. DomeGallery centres its content within whatever height it
@@ -1186,5 +1153,24 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
     bottom: calc(140px + env(safe-area-inset-bottom, 0px));
     z-index: 40;
     background: var(--obsidian);
+  }
+  /* Records nearby ("similar albums", PRD F10): normally a static sibling
+     of the player bar, rendered in flow right after it. Taking the player
+     bar out of flow (position: fixed, above) leaves the flex column's
+     total content height unchanged from #screen-app's fixed point of view,
+     so this shelf was landing exactly in the 140px zone reserved for the
+     player bar -- painted underneath it (player-bar's z-index: 40 beats an
+     unpositioned, non-stacking-context sibling regardless of DOM order),
+     and clipped entirely by #app/#screen-app's overflow: hidden besides.
+     Net effect on a phone: opening it visibly did nothing. Anchoring it
+     to the viewport in its own right, directly above the player bar, with
+     a higher z-index, is the fix -- reported live, see KNOWN-DEVIATIONS.md. */
+  .nearby-shelf {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    z-index: 41;
+    background: var(--obsidian-2);
   }
 }

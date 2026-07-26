@@ -5,6 +5,97 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## The 80s decade bag, and the transport rewritten on react-h5-audio-player (2026-07-26)
+
+### The 80s
+
+`bags/the-80s.json` (20 albums, `category: "decade"`) fills the one
+remaining gap the previous session's 2000s/2010s addition left on
+purpose. `bags.js`'s `BAG_IDS` now reads 60s, 70s, 80s, 90s, 2000s, 2010s,
+2020s -- the full run, in chronological order, per explicit request. Same
+caveat as every other non-seed bag: first draft, content authoring from
+general knowledge, not yet vetted by the project owner.
+
+### Records nearby ("similar albums") invisible behind the player bar on a phone
+
+Reported live: opening it appeared to do nothing on an Android layout.
+Root cause, confirmed by measuring the actual rendered geometry
+(Playwright, a 390x844 mobile viewport): `#screen-app`'s phone-width media
+query takes the player bar out of flex flow (`position: fixed`, so it
+always sits above whatever else is on screen) but left `.nearby-shelf` a
+plain static-flow sibling, unpositioned. With the player bar no longer
+reserving its own space in the flex column, `.nearby-shelf` rendered
+starting exactly where the fixed player bar's own 140px zone begins --
+underneath it optically (a positioned element beats a static one
+regardless of DOM order) and then clipped outright by `#app`/`#screen-app`'s
+`overflow: hidden`, since the flex column's total content height now
+exceeded the viewport. Fixed the same way `.crackle-hint` already handles
+this: anchor `.nearby-shelf` to the viewport in its own right on a phone,
+directly above the player bar, at a higher z-index. See `styles.css`'s
+own comment on the fix for the full reasoning.
+
+### The transport, rebuilt on react-h5-audio-player
+
+Per explicit request. The player bar's markup, styling, and event wiring
+were hand-rolled vanilla JS/CSS; they are now a `react-h5-audio-player`
+component (`transport/`, a new isolated Vite build following the same
+pattern `gallery/` already established for the Wall's dome -- compiles to
+`js/transport.bundle.js`/`.css`, committed like the gallery bundle is, no
+runtime build step for deployment).
+
+The one thing this could not do literally: `react-h5-audio-player` is
+built around a real `<audio>` element with a real media `src` -- it plays
+the file itself, and its default progress bar, current-time/duration
+labels, and play/pause button all read that element's own state.
+Longplayur has no such thing to give it. The Web Playback SDK renders
+Spotify's audio itself, inside the browser but outside any `<audio>` tag
+this page controls; Spotify Connect mode plays on a remote device
+entirely outside this tab. There is no audio stream URL this page can
+legally or technically hand to a local `<audio>` element (Spotify's API
+does not expose one). Mounting the library with a real-looking fake `src`
+was rejected: it would either silently fail to load (broken/misleading
+`<audio>` state) or, worse, actually try to play something.
+
+So `transport/src/Transport.tsx` mounts `<AudioPlayer>` with no `src` at
+all, and every interactive part -- play/pause, previous/next, the
+progress fill, the elapsed/total labels, the device-switch and Records
+nearby buttons -- is a custom element supplied through the library's
+`customControlsSection` override rather than its own `RHAP_UI` defaults,
+driven entirely by the same view-model shape `playback.js`'s
+`onPlayerBarUpdate` already produced for the old hand-rolled bar
+(`trackName`, `artistName`, `albumName`, `albumArt`, `isPlaying`,
+`elapsedMs`, `totalMs`, `deviceName`, `mode`). `customProgressBarSection`
+is passed empty and hidden via CSS, rather than split across the
+library's own progress/controls halves, both of which assume real audio
+metadata driving their layout. Button icons reuse the app's existing
+shared SVG sprite (`<use href="#icon-x">`, resolved against the whole
+document regardless of which subtree it's referenced from) rather than
+the library's own default icon set, which is sourced from Iconify by
+name and would otherwise require a runtime fetch to `api.iconify.design`
+-- blocked by this app's CSP (`connect-src`/`script-src` are both a fixed
+allowlist) and undesirable even if it weren't. `hasDefaultKeyBindings` is
+turned off for the same reason as the missing `src`: the library's
+built-in arrow-key seek/space-to-toggle bindings operate on the real
+(absent) `<audio>` element and would be silent no-ops at best.
+
+Net effect: the transport looks and is structured like a
+`react-h5-audio-player` instance (its container/header/controls-section
+class names and responsive layout scaffolding are genuinely in use, and
+its CSS is restyled with this app's own colour tokens rather than its
+default light skin), but essentially none of its own audio-handling
+logic runs -- Longplayur's playback state has always lived in
+`playback.js`, and still does. Functionally this is a like-for-like swap:
+tapping any control still calls exactly the same `playback.js`/`main.js`
+functions the old bar's buttons called (`skipPrevious`, `skipNext`,
+`togglePlayPause`, `handleResurfaceNowPlaying`, the device-switch modal,
+Records nearby), and `updatePlayerBar()` still drives the visible state
+from the same `onPlayerBarUpdate` callback -- only the DOM/CSS producing
+the bar changed. Verified functionally with mocked view-model updates and
+real clicks under Playwright (both a desktop viewport and an Android
+user agent/viewport), not against a live Spotify account, matching this
+project's own established caveat for anything that cannot be exercised
+without one.
+
 ## Two more decade bags: the 2000s and 2010s, per explicit request (2026-07-26)
 
 `bags/the-2000s.json` and `bags/the-2010s.json` (20 albums each, `category:

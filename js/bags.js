@@ -21,7 +21,7 @@ import { apiFetch } from './spotify.js';
 const BAG_IDS = [
   '90s-us-rap', 'soul-essentials', 'motown', 'trip-hop', 'britpop', 'late-night-jazz',
   'sunday-morning', 'headphones-on', 'driving', 'rainy-day',
-  'the-60s', 'the-70s', 'the-90s', 'the-2000s', 'the-2010s', 'the-2020s',
+  'the-60s', 'the-70s', 'the-80s', 'the-90s', 'the-2000s', 'the-2010s', 'the-2020s',
 ];
 const LS_RESOLVED_PREFIX = 'lp_bag_resolved_';
 // The Crates screen now resolves bags eagerly (for each card's album-grid

@@ -175,7 +175,7 @@ history.
 - No accounts, no server.
 - This deployment uses Vercel Web Analytics and Google Analytics (GA4) to see page views and traffic. Neither sees your Spotify listening history, your client ID, or anything else this app stores locally -- they only see that the page was visited, same as any other website with analytics. If you deploy your own copy, both are entirely optional: remove the `<script>` tags for either (or both) in `index.html`, and their CSP entries alongside them, and no analytics data leaves your instance at all.
 - Your Spotify client ID, tokens, cached album pool, journal (including any keeper/spin-again/pass tags), New arrivals cache, and small caches of genre names and MusicBrainz credits picked up from past use live only in your browser's local storage.
-- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby, genre search, and Runout groove's related-album direction, and only artist/album/genre metadata -- never your listening history), to MusicBrainz's public API (`musicbrainz.org`, for album credits only, looked up by artist and title, never your listening history), to Google Analytics (`www.googletagmanager.com`, `www.google-analytics.com`) and Vercel Analytics (same-origin, no separate domain), and to your own self-hosted copy of this site.
+- Network requests go to Spotify's own domains (`accounts.spotify.com`, `api.spotify.com`, `sdk.scdn.co`), to Deezer's public API (`api.deezer.com`, for Records nearby and Runout groove's related-album direction, and only artist/album/genre metadata -- never your listening history), to MusicBrainz's public API (`musicbrainz.org`, for album credits only, looked up by artist and title, never your listening history), to Google Analytics (`www.googletagmanager.com`, `www.google-analytics.com`) and Vercel Analytics (same-origin, no separate domain), and to your own self-hosted copy of this site.
 - Signing out clears your Spotify session tokens but keeps your client ID and your past sessions, so you are not re-typing your client ID or losing your listening history every time.
 
 ## Limitations, honestly
@@ -192,21 +192,27 @@ history.
 ## Development
 
 The deployed site itself has no build step: it is served directly with
-`npx serve .` and deploys to GitHub Pages or Vercel as-is. The one
-exception is the Wall's dome gallery, which is a real React component
-(forked from react-bits) compiled ahead of time into a plain static file:
+`npx serve .` and deploys to GitHub Pages or Vercel as-is. Two exceptions
+are real React components compiled ahead of time into plain static files:
+the Wall's dome gallery (forked from react-bits), and the transport
+(player bar), built on `react-h5-audio-player`:
 
 ```bash
 npx serve .          # serve the site locally, no build needed
 
-cd gallery && npm install && npm run build   # only needed after editing gallery/src/*
+cd gallery && npm install && npm run build     # only needed after editing gallery/src/*
+cd transport && npm install && npm run build   # only needed after editing transport/src/*
 ```
 
 `gallery/` builds `gallery/src/DomeGallery.tsx` + `gallery/src/mount.tsx`
 into `js/dome-gallery.bundle.js` (React, ReactDOM, and `@use-gesture/react`
-inlined), which `js/wall.js` imports like any other static module. The
-built bundle is committed, so cloning the repo and running `npx serve .` is
-enough unless you're changing the gallery itself.
+inlined), which `js/wall.js` imports like any other static module.
+`transport/` builds `transport/src/Transport.tsx` + `transport/src/mount.tsx`
+into `js/transport.bundle.js` (React, ReactDOM, and `react-h5-audio-player`
+inlined), which `js/main.js` imports the same way; see
+`KNOWN-DEVIATIONS.md` for why it is mounted with no real `<audio>` source.
+Both built bundles are committed, so cloning the repo and running
+`npx serve .` is enough unless you're changing one of these components.
 
 Open `tests.html` in a browser (or via the local server above) to run the
 pure-function test suite: end-of-album detection (`js/ending.js`, skips,
@@ -220,6 +226,7 @@ fill all nine directions).
 index.html      screens, SVG icon sprite, the groove brand mark
 styles.css      design tokens, layout, ceremony choreography CSS
 gallery/        isolated Vite build for the Wall's dome gallery (see above)
+transport/      isolated Vite build for the transport/player bar (see above)
 bags/           record bag definitions (name, blurb, category, album/artist pairs)
 js/
   main.js                 boot, screen routing, event wiring
@@ -232,11 +239,12 @@ js/
   deezer.js               shared Deezer public API client (fetch + JSONP fallback)
   nearby.js               Records nearby, sourced from Deezer's public API
   musicbrainz.js          album credits from MusicBrainz's public API
-  search.js               search by artist or genre (Spotify + Deezer)
+  search.js               search by artist (Spotify)
   flip.js                 Flip: filter/sort over the mounted Wall pool
   runout.js               Runout groove: the nine end-of-album directions
   wall.js                 bridges the dome gallery to the app's needle-drop/journal API
   dome-gallery.bundle.js  build output of gallery/ (React dome gallery), do not hand-edit
+  transport.bundle.js     build output of transport/ (React player bar), do not hand-edit
   playback.js             Web Playback SDK + Spotify Connect fallback, output switcher
   ending.js               end-of-album detection (pure functions)
   ceremony.js             needle drop, crackle (Web Audio), tonearm arc, runout groove visual
