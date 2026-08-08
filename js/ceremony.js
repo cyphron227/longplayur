@@ -629,10 +629,20 @@ function buildCreditsDisclosure(entry) {
     // `.split(',')[0].trim()`), and reported live as "credits are never
     // found" -- see KNOWN-DEVIATIONS.md.
     const primaryArtist = (entry.artist || '').split(',')[0].trim();
-    const { credits } = await getAlbumCredits({ artist: primaryArtist, title: entry.name });
+    const { credits, failed } = await getAlbumCredits({ artist: primaryArtist, title: entry.name });
     body.textContent = '';
     if (!credits || credits.length === 0) {
-      body.textContent = 'No credits found.';
+      // A genuine miss (no confident MusicBrainz match, or a match with
+      // no credit data recorded) and the lookup itself breaking used to
+      // show identical copy on purpose (per an earlier explicit
+      // instruction to degrade quietly, rather than surface network
+      // detail in a minor collapsed row). Revisited after repeated live
+      // reports of credits never being found, still without live access
+      // to MusicBrainz to diagnose why (see KNOWN-DEVIATIONS.md) -- this
+      // distinction is now the only way to tell "MusicBrainz genuinely
+      // has nothing for this one" from "something is actually broken"
+      // from outside a browser console.
+      body.textContent = failed ? 'Could not check credits right now.' : 'No credits found.';
       return;
     }
     credits.forEach(({ role, artists }) => {

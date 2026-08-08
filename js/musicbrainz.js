@@ -135,28 +135,64 @@ function coreTitle(title) {
   return normalize((title || '').replace(TITLE_QUALIFIER_PATTERN, ' '));
 }
 
-/** The best release-group match for artist+title, or null if nothing meets
- * MIN_CONFIDENCE_SCORE plus a title match (exact, or exact once a common
- * edition/remaster qualifier is stripped from both sides) -- an
- * unconfident match is not returned at all, rather than guessed at. */
+// MusicBrainz release-group search results carry the matched
+// release-group's own credited artist(s) (`artist-credit`), independent
+// of whatever the query's combined Lucene score came out to. Checking
+// that ourselves, the same normalize()-based way every other name match
+// in this app already works, means a genuine match is no longer solely
+// at the mercy of an opaque combined score this app has no way to
+// calibrate against real MusicBrainz behaviour (unverifiable here --
+// this build's network egress cannot reach musicbrainz.org at all, see
+// KNOWN-DEVIATIONS.md). MIN_CONFIDENCE_SCORE is kept as a fallback for
+// the case this can't parse (an unusual artist-credit shape), not
+// removed -- this only adds a second, independent way to earn
+// confidence, it does not lower the bar.
+function artistCreditMatches(releaseGroup, wantedArtist) {
+  const credited = (releaseGroup['artist-credit'] || [])
+    .map((c) => c.name || c.artist?.name || '')
+    .join(' ');
+  const normalizedCredited = normalize(credited);
+  if (!normalizedCredited || !wantedArtist) return false;
+  return normalizedCredited.includes(wantedArtist) || wantedArtist.includes(normalizedCredited);
+}
+
+/** The best release-group match for artist+title, or null if nothing
+ * confidently matches both -- an unconfident match is not returned at
+ * all, rather than guessed at. A title match (exact, or exact once a
+ * common edition/remaster qualifier is stripped from both sides) is
+ * always required; the artist is confirmed either by comparing this
+ * release-group's own credited artist(s) directly, or, failing that,
+ * MusicBrainz's own combined relevance score meeting
+ * MIN_CONFIDENCE_SCORE. The title term is sent unprefixed (searches
+ * MusicBrainz's own default field for this entity, its title) rather
+ * than a specific `releasegroup:` field, to not depend on getting an
+ * exact Lucene field name right without any way to check it here. */
 async function findReleaseGroup(artist, title) {
-  const q = encodeURIComponent(`releasegroup:"${title}" AND artist:"${artist}"`);
-  const data = await mbFetch(`/release-group/?query=${q}&limit=5`);
+  const q = encodeURIComponent(`"${title}" AND artist:"${artist}"`);
+  const data = await mbFetch(`/release-group/?query=${q}&limit=10`);
   const candidates = data?.['release-groups'] || [];
   const wantedTitle = normalize(title);
   const wantedCore = coreTitle(title);
+  const wantedArtist = normalize(artist);
 
   const best = candidates.find((rg) => {
-    if ((rg.score ?? 0) < MIN_CONFIDENCE_SCORE) return false;
-    return normalize(rg.title) === wantedTitle || coreTitle(rg.title) === wantedCore;
+    const titleMatches = normalize(rg.title) === wantedTitle || coreTitle(rg.title) === wantedCore;
+    if (!titleMatches) return false;
+    return artistCreditMatches(rg, wantedArtist) || (rg.score ?? 0) >= MIN_CONFIDENCE_SCORE;
   });
   if (!best && candidates.length > 0) {
     // Diagnostic only (fires on a miss, which is expected and common --
-    // see getAlbumCredits()'s own doc): the actual top candidate and its
-    // score, so a real "why didn't this match" question is answerable
-    // from the console rather than a total black box. Never surfaced in
-    // the UI, which shows the same quiet "No credits found" either way.
-    console.info('[musicbrainz] no confident release-group match', { artist, title, topCandidate: candidates[0]?.title, topScore: candidates[0]?.score });
+    // see getAlbumCredits()'s own doc): the actual top candidate, its
+    // credited artist(s), and its score, so a real "why didn't this
+    // match" question is answerable from the console rather than a
+    // total black box.  Never surfaced in the UI, which shows the same
+    // quiet "No credits found" either way.
+    console.info('[musicbrainz] no confident release-group match', {
+      artist, title,
+      topCandidate: candidates[0]?.title,
+      topCandidateArtist: (candidates[0]?.['artist-credit'] || []).map((c) => c.name).join(', '),
+      topScore: candidates[0]?.score,
+    });
   }
   return best || null;
 }

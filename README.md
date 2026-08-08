@@ -202,6 +202,7 @@ history.
 
 - Requires Spotify Premium. There is no free-tier fallback.
 - The Web Playback SDK works in desktop Chrome, Edge, and Firefox. iOS Safari and most mobile browsers fall back to Spotify Connect (control a device that's already playing Spotify elsewhere) with a 5-second polling loop instead of the SDK's real-time events, so the player bar is slightly less responsive there.
+- The current track, artist, album, and cover art are published via the Web Media Session API, so a Bluetooth speaker, a car's own display, a phone lock screen, or a hardware media key all show the real thing rather than just "Longplayur" -- and play/pause/skip from any of those route to the same controls as the on-screen transport.
 - No playlists, no social features, no accounts, no native mobile app: this is a v1, and those are deliberate non-goals, not oversights.
 - End-of-album detection is a heuristic (see `js/ending.js` and `tests.html`). It is unit-tested against 8+ cases per playback path, but has not yet been exercised against a real Spotify account by an automated agent; see `KNOWN-DEVIATIONS.md`.
 - The album disc's centre label is a flat colour rather than a true sample of the album art's dominant edge colour, to avoid a second canvas/CORS dependency inside the persistent per-cell SVG.

@@ -1261,14 +1261,51 @@ async function handleRunout() {
   }
 }
 
+/**
+ * The Web Media Session API is the only way a page tells the OS what is
+ * actually playing -- without it, a Bluetooth speaker/car head unit, a
+ * lock screen, or a hardware media key has nothing to show beyond the
+ * page/tab's own generic identity ("Longplayur"), which is exactly what
+ * was reported live. Longplayur never had any `navigator.mediaSession`
+ * code at all until now: this sets real per-track metadata on every
+ * player-bar update, and (once, at boot -- see below) action handlers so
+ * play/pause/skip from a Bluetooth remote, a car's steering-wheel
+ * controls, or a hardware media key route to the exact same functions the
+ * on-screen transport buttons already call.
+ */
+function updateMediaSessionMetadata(viewModel) {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: viewModel.trackName || '',
+    artist: viewModel.artistName || '',
+    album: viewModel.albumName || '',
+    artwork: viewModel.albumArt ? [{ src: viewModel.albumArt, sizes: '300x300', type: 'image/jpeg' }] : [],
+  });
+  navigator.mediaSession.playbackState = viewModel.isPlaying ? 'playing' : 'paused';
+}
+
 function updatePlayerBar(viewModel) {
   latestViewModel = viewModel;
   show(playerBarEl);
   transportApi.update(viewModel);
+  updateMediaSessionMetadata(viewModel);
 
   if (currentAlbumId) updateTonearmProgress(currentAlbumId, viewModel.elapsedMs || 0, viewModel.totalMs || 0);
 
   announce(`Now playing ${viewModel.albumName} by ${viewModel.artistName}`);
+}
+
+// Registered once, not per update: unlike metadata (which changes every
+// track), these handlers are the same function for the whole session.
+// 'play'/'pause' call togglePlayPause() with the state we want to move
+// *away* from, rather than routing through the on-screen button's own
+// toggle-off-current-state handler -- a hardware "play" press means
+// "start playing" unconditionally, not "flip whatever it currently is".
+if ('mediaSession' in navigator) {
+  navigator.mediaSession.setActionHandler('play', () => playback.togglePlayPause(false));
+  navigator.mediaSession.setActionHandler('pause', () => playback.togglePlayPause(true));
+  navigator.mediaSession.setActionHandler('previoustrack', () => playback.skipPrevious());
+  navigator.mediaSession.setActionHandler('nexttrack', () => playback.skipNext());
 }
 
 /**
