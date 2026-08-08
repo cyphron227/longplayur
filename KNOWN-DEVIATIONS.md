@@ -5,6 +5,51 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## By album's real bug, and a genre sort, both from live use (2026-08-08)
+
+Reported right after the three-phase plan above shipped: "By session" and
+"By album" looked identical, with keeper/spin-again/pass icons showing up
+somewhere the listener didn't expect them.
+
+### The actual bug: `.past-sessions-list` never hid
+
+Root cause was a missing companion rule, the same class of bug this file
+has already recorded once for a different element (`.flip-view[hidden]`'s
+own comment explains why): `.past-sessions-list { display: flex; ... }`
+is an author-origin CSS rule, and author rules always beat the browser's
+own `[hidden] { display: none }` default, regardless of selector
+specificity -- there is no author-origin `.past-sessions-list[hidden]`
+rule undoing that, unlike `.flip-view`, `.crate-shelf`, `.bag-detail-view`,
+`.sessions-albums-view`, `.nearby-shelf`, and `.modal`, which all already
+have one. `setSessionsMode('albums')` calls `hide(pastSessionsList)`,
+which sets the `hidden` attribute correctly, but the element stayed
+visually `display: flex` regardless, stacked underneath the new By album
+list. This existed from the moment By album shipped, since nothing had
+ever tried to hide `.past-sessions-list` before that toggle existed.
+
+The reported symptoms are both fully explained by this one bug: the two
+views looked the same because both were rendering at once, and the
+keeper/spin-again/pass icons appearing "by albums" were always the
+By-session view's own entry-tag buttons (`renderSessionRow()`, unchanged,
+never present in By album's own row-building code) bleeding through from
+the still-visible list underneath. Fixed with the same one-line pattern
+as the others: `.past-sessions-list[hidden] { display: none; }`.
+
+### A real request, added: genre sort
+
+By album's sort was recent/artist A-Z/most played; a genre sort was asked
+for directly. Added the same way Flip's own genre sort works: a persistent
+`albumId -> genre` map, filled in the background via `flip.resolveGenres()`
+(so it reuses Flip's own resolver and, underneath that, `ceremony.js`'s
+existing 30-day genre cache -- no second genre-fetching path), with
+sticky group headers the same way alpha sort already had them. Needed one
+small addition to the journal entry itself: `artistId` (genre resolution
+needs an artist id, not just a name, to check Spotify's own genre field
+first) was never stored, the same gap `uri` had before the previous
+entry's fix. Stored going forward, purely additive; entries recorded
+before this simply show "Unknown" for genre, the same honest degradation
+Flip already gives an artist with no resolvable genre.
+
 ## From played to complete: Sort/Show split, By album, Bag detail (2026-08-08)
 
 Three phases from a proposed plan (an artifact shared for review, then approved), in one pass, per explicit request ("go ahead"). All three are built entirely on `journal.js`'s existing lifetime history -- no second played/unplayed store anywhere.

@@ -1341,11 +1341,21 @@ const sessionsAlbumListEl = document.getElementById('sessions-album-list');
 
 const LS_SESSIONS_MODE = 'lp_sessions_mode';
 const LS_SESSIONS_ALBUM_SORT = 'lp_sessions_album_sort';
-const SESSIONS_ALBUM_SORT_MODES = ['recent', 'alpha', 'most-played'];
+const SESSIONS_ALBUM_SORT_MODES = ['recent', 'alpha', 'genre', 'most-played'];
 
 let sessionsMode = localStorage.getItem(LS_SESSIONS_MODE) === 'albums' ? 'albums' : 'log';
 let sessionsAlbumSort = SESSIONS_ALBUM_SORT_MODES.includes(localStorage.getItem(LS_SESSIONS_ALBUM_SORT)) ? localStorage.getItem(LS_SESSIONS_ALBUM_SORT) : 'recent';
 let sessionsAlbumQuery = '';
+// Genre isn't stored on a journal entry (it lives on the artist, resolved
+// lazily, same as everywhere else genre is used in this app); this is a
+// persistent albumId -> genre map, filled in incrementally by
+// flip.resolveGenres() -- reusing Flip's own resolver and its own
+// underlying cache (ceremony.js's artistGenreCache, 30-day localStorage),
+// not a second genre-fetching path. A plain Map rather than caching whole
+// resolved arrays, so a newly-played album since the last resolution just
+// needs its own entry filled in, not a full re-resolve.
+const sessionsAlbumGenreByAlbumId = new Map();
+let sessionsAlbumGenreResolving = false;
 
 function openPastSessions() {
   renderPastSessions();
@@ -1471,12 +1481,14 @@ sessionsAlbumSearch?.addEventListener('input', () => {
   renderSessionAlbums();
 });
 
-/** 'recent'/'alpha' delegate straight to flip.js's own sortPool() (the
- * data shape matches exactly); 'most-played' is local to this view --
- * play frequency isn't a concept Flip's own pool sorting needs, so it
- * doesn't belong in flip.js's exported SORT_MODES. */
+/** 'recent'/'alpha'/'genre' delegate straight to flip.js's own sortPool()
+ * (the data shape matches exactly, once genre is augmented on -- see
+ * ensureSessionAlbumGenresResolving()); 'most-played' is local to this
+ * view -- play frequency isn't a concept Flip's own pool sorting needs,
+ * so it doesn't belong in flip.js's exported SORT_MODES. */
 function sortSessionAlbums(entries, mode, context) {
   if (mode === 'alpha') return flip.sortPool(entries, flip.SORT_MODES.ALPHA);
+  if (mode === 'genre') return flip.sortPool(entries, flip.SORT_MODES.GENRE);
   if (mode === 'most-played') {
     return [...entries].sort((a, b) =>
       (context.playCounts.get(b.id) || 0) - (context.playCounts.get(a.id) || 0) ||
@@ -1484,6 +1496,24 @@ function sortSessionAlbums(entries, mode, context) {
     );
   }
   return flip.sortPool(entries, flip.SORT_MODES.RECENT, context); // default 'recent'
+}
+
+/** Resolves genre for whichever of `entries` don't already have one
+ * cached in sessionsAlbumGenreByAlbumId, in the background, then
+ * re-renders once done -- the list is never blocked on this, it just
+ * shows "Unknown" for anything not yet resolved (same convention as
+ * Flip). Guarded against overlapping calls the same way Flip's own
+ * ensurePoolGenresResolving() is. */
+function ensureSessionAlbumGenresResolving(entries) {
+  if (sessionsAlbumGenreResolving) return;
+  const unresolved = entries.filter((e) => !sessionsAlbumGenreByAlbumId.has(e.id));
+  if (unresolved.length === 0) return;
+  sessionsAlbumGenreResolving = true;
+  flip.resolveGenres(unresolved).then((resolved) => {
+    sessionsAlbumGenreResolving = false;
+    for (const entry of resolved) sessionsAlbumGenreByAlbumId.set(entry.id, entry.genre);
+    if (sessionsMode === 'albums') renderSessionAlbums();
+  });
 }
 
 function sessionAlbumDeadwax(entry, { playCounts, playedAt }) {
@@ -1537,7 +1567,9 @@ function buildSessionAlbumRow(entry, context) {
 function renderSessionAlbums() {
   if (!sessionsAlbumListEl) return;
 
-  const all = journal.playedEntriesNewestFirst();
+  const played = journal.playedEntriesNewestFirst();
+  if (sessionsAlbumSort === 'genre') ensureSessionAlbumGenresResolving(played);
+  const all = played.map((e) => ({ ...e, genre: sessionsAlbumGenreByAlbumId.get(e.id) ?? null }));
   const context = { playedAt: journal.lastPlayedAtByAlbum(), playCounts: journal.playCountsByAlbum() };
   const filtered = flip.filterPool(all, sessionsAlbumQuery);
   const sorted = sortSessionAlbums(filtered, sessionsAlbumSort, context);
@@ -1554,9 +1586,10 @@ function renderSessionAlbums() {
     return;
   }
 
+  const groupSortMode = flip.SORT_MODES[sessionsAlbumSort.toUpperCase()]; // undefined for 'most-played', which has no natural grouping, same as Flip's own 'recent'.
   let lastGroupKey;
   for (const entry of sorted) {
-    const groupKey = sessionsAlbumSort === 'alpha' ? flip.groupKeyFor(entry, flip.SORT_MODES.ALPHA) : null;
+    const groupKey = groupSortMode ? flip.groupKeyFor(entry, groupSortMode) : null;
     if (groupKey !== null && groupKey !== lastGroupKey) {
       const header = document.createElement('div');
       header.className = 'flip-letter-head';

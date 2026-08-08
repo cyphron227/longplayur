@@ -162,9 +162,9 @@ doesn't, the line simply says so.
 
 A second toggle, "By album", swaps the chronological session-by-session log
 for a flat, deduplicated list of every album you've ever played through
-Longplayur, searchable and sortable (most recent, artist A-to-Z, or most
-played). Tapping a row plays it directly, exactly like anywhere else in the
-app.
+Longplayur, searchable and sortable (most recent, artist A-to-Z, genre, or
+most played), never grouped back into sessions. Tapping a row plays it
+directly, exactly like anywhere else in the app.
 
 ## Records nearby
 

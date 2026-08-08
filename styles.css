@@ -1081,6 +1081,19 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
    matching its use elsewhere (device note, saved confirmation). */
 .past-sessions-streak { color: var(--moss); }
 .past-sessions-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+/* [hidden] on its own is a UA-stylesheet rule; an author rule setting a
+   bare `display` on the same element (this one) always outranks it,
+   regardless of specificity -- author beats UA by cascade origin, not
+   just specificity. Every other class in this file that both sets its
+   own `display` and gets hidden/shown via JS already has this same
+   companion rule (.flip-view[hidden], .crate-shelf[hidden],
+   .bag-detail-view[hidden], .sessions-albums-view[hidden] below, etc.);
+   this one was missing it, since nothing ever tried to hide this element
+   until By album's own toggle needed to -- the reported symptom
+   ("By album" looking "split by session", with session-only keeper/
+   spin-again/pass icons bleeding into it) was this element simply never
+   actually disappearing, sitting stacked underneath the new view. */
+.past-sessions-list[hidden] { display: none; }
 .past-sessions-list { display: flex; flex-direction: column; gap: 0; }
 .session-row { border-bottom: 1px solid var(--line); padding: 18px 0; }
 .session-row-head-wrap { display: flex; align-items: center; gap: 8px; }

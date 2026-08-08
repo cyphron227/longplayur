@@ -114,6 +114,13 @@ export function recordNeedleDrop(entry, { durationMs = null } = {}) {
     // re-derive it, though it always could (see the deterministic
     // fallback on those two functions, for entries recorded before this).
     uri: entry.uri ?? null,
+    // Same reasoning as `uri` just above: not read in this file, only by
+    // playedEntriesNewestFirst() below, so By album can offer a genre sort
+    // (flip.js's own resolveGenres() needs an artist id, not just a name,
+    // to check Spotify's own genre field first). An entry recorded before
+    // this simply has no artistId; its genre sorts under Unknown, same
+    // honest degradation as everything else this app cannot resolve.
+    artistId: entry.artistId ?? null,
     startedAt: now,
     durationMs,
     bagId: entry.bagId ?? null,
@@ -288,13 +295,14 @@ function albumUri(entry) {
 }
 
 /** Every album ever played, reconstructed as a lightweight pool-shaped
- * entry ({id, uri, name, artist, image} -- a journal entry already carries
- * enough of an album's own data to stand in as a real, checkable, directly
- * playable pick without that album needing to be present in whatever pool
- * is currently mounted), most recently played first, deduplicated by
- * album (a replayed album keeps only its latest occurrence). Used by
- * runout.js's "Played before" direction and Past sessions' By album view.
- * @returns {Array<{id: string, uri: string, name: string, artist: string, image: string|null}>}
+ * entry ({id, uri, name, artist, artistId, image} -- a journal entry
+ * already carries enough of an album's own data to stand in as a real,
+ * checkable, directly playable, genre-resolvable pick without that album
+ * needing to be present in whatever pool is currently mounted), most
+ * recently played first, deduplicated by album (a replayed album keeps
+ * only its latest occurrence). Used by runout.js's "Played before"
+ * direction and Past sessions' By album view.
+ * @returns {Array<{id: string, uri: string, name: string, artist: string, artistId: string|null, image: string|null}>}
  */
 export function playedEntriesNewestFirst() {
   const journal = loadJournal();
@@ -306,7 +314,7 @@ export function playedEntriesNewestFirst() {
   }
   return Array.from(byAlbum.values())
     .sort((a, b) => b.startedAt - a.startedAt)
-    .map((e) => ({ id: e.albumId, uri: albumUri(e), name: e.name, artist: e.artist, image: e.image }));
+    .map((e) => ({ id: e.albumId, uri: albumUri(e), name: e.name, artist: e.artist, artistId: e.artistId ?? null, image: e.image }));
 }
 
 /** Same shape and ordering as playedEntriesNewestFirst(), filtered to
@@ -323,7 +331,7 @@ export function keeperEntriesNewestFirst() {
   }
   return Array.from(byAlbum.values())
     .sort((a, b) => b.startedAt - a.startedAt)
-    .map((e) => ({ id: e.albumId, uri: albumUri(e), name: e.name, artist: e.artist, image: e.image }));
+    .map((e) => ({ id: e.albumId, uri: albumUri(e), name: e.name, artist: e.artist, artistId: e.artistId ?? null, image: e.image }));
 }
 
 /**
