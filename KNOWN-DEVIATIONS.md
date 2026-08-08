@@ -5,6 +5,16 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## The search query itself was searching for words that don't exist (2026-08-08)
+
+The plain-text diagnostic (see the two entries below) paid off again, immediately: `"no confident release-group match for \"Nothing (Deluxe Explicit Version)\" by \"N.E.R.D\": MusicBrainz returned zero candidates for this search"`. Zero candidates, not "found some, none confident" -- a materially different signal from every previous fix in this run, and the actual bug.
+
+`findReleaseGroup()`'s query wraps the title in double quotes -- a strict Lucene phrase search, every word required present (and adjacent) in the document being searched. The qualifier-stripping added earlier only ever applied to *comparing* an already-returned candidate's title against the wanted one; the search query itself still sent the *entire* Spotify title, qualifier included. MusicBrainz's real release-group title for this album is almost certainly just "Nothing" -- a handful of characters. A phrase query for `"nothing deluxe explicit version"` cannot match a document that only contains the word "nothing": the extra words are not merely a bad relevance signal, they simply are not in the target document at all, so the search returns nothing to even consider.
+
+Fixed at the actual point of failure: the query is now built from the qualifier-stripped title (`stripTitleQualifierForQuery()`, a lighter-touch sibling of the existing `coreTitle()` -- keeps real casing/punctuation, since this is genuine search text rather than a normalised comparison key, unlike `coreTitle()`), so "Nothing (Deluxe Explicit Version)" now searches for `"Nothing"`. The qualifier word list also gained `explicit`/`clean`, Spotify-specific content-warning tags neither the original list nor MusicBrainz's own titling convention would ever carry. The post-fetch title comparison (accepting an exact match, or a qualifier-stripped match on both sides) is unchanged and still runs afterwards as the actual confidence check -- this only fixes what candidates the search can find in the first place, it does not loosen what counts as a match once found.
+
+Verified functionally: the exact reported case (title "Nothing (Deluxe Explicit Version)", artist "N.E.R.D") now sends the query `"Nothing" AND artist:"N.E.R.D"` (confirmed by capturing the actual outgoing request in a mocked test) rather than the original unfindable phrase, and resolves real credits data end to end once a matching release-group is returned.
+
 ## The real MusicBrainz bug, confirmed live: genuine rate-limiting (2026-08-08)
 
 The copy-paste-safe diagnostic logging from the previous entry paid off immediately: a listener's own browser console, pasted back after a fresh reload, showed a real, live `GET https://musicbrainz.org/ws/2/artist/{id}?inc=genres&fmt=json` request returning `503 (Service Unavailable)` -- an actual response from the actual server, not a network/CORS/CSP failure and not a matching-logic miss. This is the first genuinely verified fact about this app's live MusicBrainz behaviour in this whole run of fixes (everything in the two entries above was reasoned from documentation, since this build environment's own network egress cannot reach `musicbrainz.org` at all).

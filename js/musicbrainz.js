@@ -136,22 +136,40 @@ async function mbFetch(path) {
   });
 }
 
-// Spotify titles very commonly carry an edition/remaster qualifier a
-// MusicBrainz release-group's own canonical title does not (or the other
-// way round) -- "Rumours (Remastered)" vs "Rumours", "OK Computer
-// (Deluxe Edition)" vs "OK Computer". A bare `normalize()` (punctuation/
-// case only) does not account for that, so an exact-title requirement
-// alone rejected a large share of genuine matches: reported live as
-// "credits are never found", for effectively every album tried, not a
-// handful of edge cases. Stripping this class of qualifier for the
-// comparison (not from the search query text itself, which still helps
-// MusicBrainz's own relevance scoring) recovers those without weakening
-// the actual confidence check -- MIN_CONFIDENCE_SCORE still has to be met
-// either way, this only widens what counts as "the same title".
-const TITLE_QUALIFIER_PATTERN = /[([][^()[\]]*\b(remaster(ed)?|deluxe|expanded|anniversary|edition|version|bonus|reissue|remix(ed)?|special|collector'?s?|mono|stereo)\b[^()[\]]*[)\]]/gi;
+// Spotify titles very commonly carry an edition/remaster/content-warning
+// qualifier a MusicBrainz release-group's own canonical title does not
+// (or the other way round) -- "Rumours (Remastered)" vs "Rumours",
+// "Nothing (Deluxe Explicit Version)" vs "Nothing". A bare normalize()
+// (punctuation/case only) does not account for that.
+const TITLE_QUALIFIER_PATTERN = /[([][^()[\]]*\b(remaster(ed)?|deluxe|expanded|anniversary|edition|version|bonus|reissue|remix(ed)?|special|collector'?s?|mono|stereo|explicit|clean)\b[^()[\]]*[)\]]/gi;
 
+// Fully normalised (lowercase, punctuation stripped) -- used only to
+// *compare* two titles for an exact match after the fact, never sent as
+// search text itself (MusicBrainz's search is a real word index, not a
+// literal-string comparison; sending it pre-lowercased/depunctuated
+// would not help and could only ever hurt relevance).
 function coreTitle(title) {
   return normalize((title || '').replace(TITLE_QUALIFIER_PATTERN, ' '));
+}
+
+// This is the more serious of the two reasons TITLE_QUALIFIER_PATTERN
+// exists, confirmed live (the other -- comparing a resolved candidate's
+// title, see coreTitle() above -- was the first-pass fix, not this one).
+// This app's release-group query wraps the title in quotes: a strict
+// Lucene phrase search, every word required present (and, by default,
+// adjacent) in the document. Sending the *entire* Spotify title,
+// qualifier included, when MusicBrainz's own canonical title does not
+// have it, does not just risk a lower relevance score -- it can return
+// zero candidates outright, because the extra words are not merely a
+// bad match, they are not in the target document being searched for at
+// all. Confirmed live: "Nothing (Deluxe Explicit Version)" by N.E.R.D.
+// returned zero candidates, because the real release-group's title is
+// just "Nothing" -- a phrase query for "nothing deluxe explicit
+// version" can never match a document containing only "nothing". Keeps
+// the title's own casing/most punctuation, unlike coreTitle() above,
+// since this is real search text, not a normalised comparison key.
+function stripTitleQualifierForQuery(title) {
+  return (title || '').replace(TITLE_QUALIFIER_PATTERN, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // MusicBrainz release-group search results carry the matched
@@ -177,9 +195,14 @@ function artistCreditMatches(releaseGroup, wantedArtist) {
 
 /** The best release-group match for artist+title, or null if nothing
  * confidently matches both -- an unconfident match is not returned at
- * all, rather than guessed at. A title match (exact, or exact once a
- * common edition/remaster qualifier is stripped from both sides) is
- * always required; the artist is confirmed either by comparing this
+ * all, rather than guessed at. The search itself is sent with any
+ * edition/remaster/content-warning qualifier already stripped from the
+ * title (see stripTitleQualifierForQuery()'s own comment for why this
+ * is not just a minor relevance tweak); the title match check that
+ * follows accepts either an exact match or a match once the same class
+ * of qualifier is stripped from *both* sides, since a MusicBrainz result
+ * could still carry one even though the query no longer asks for it
+ * verbatim. The artist is confirmed either by comparing this
  * release-group's own credited artist(s) directly, or, failing that,
  * MusicBrainz's own combined relevance score meeting
  * MIN_CONFIDENCE_SCORE. The title term is sent unprefixed (searches
@@ -187,7 +210,8 @@ function artistCreditMatches(releaseGroup, wantedArtist) {
  * than a specific `releasegroup:` field, to not depend on getting an
  * exact Lucene field name right without any way to check it here. */
 async function findReleaseGroup(artist, title) {
-  const q = encodeURIComponent(`"${title}" AND artist:"${artist}"`);
+  const searchTitle = stripTitleQualifierForQuery(title) || title;
+  const q = encodeURIComponent(`"${searchTitle}" AND artist:"${artist}"`);
   const data = await mbFetch(`/release-group/?query=${q}&limit=10`);
   const candidates = data?.['release-groups'] || [];
   const wantedTitle = normalize(title);
@@ -220,7 +244,7 @@ async function findReleaseGroup(artist, title) {
     const summary = candidates.length === 0
       ? 'MusicBrainz returned zero candidates for this search'
       : candidates.map((rg, i) => `#${i + 1} "${rg.title}" by ${(rg['artist-credit'] || []).map((c) => c.name).join(', ') || '(unknown artist)'} score=${rg.score ?? '?'}`).join(' | ');
-    console.info(`[musicbrainz] no confident release-group match for "${title}" by "${artist}": ${summary}`);
+    console.info(`[musicbrainz] no confident release-group match for "${title}" by "${artist}" (searched as "${searchTitle}"): ${summary}`);
   }
   return best || null;
 }
