@@ -1,0 +1,32 @@
+{
+  "name": "Cool Guide Top Albums 1-25",
+  "category": "seed",
+  "blurb": "The top half of a shared internet chart, ranked by user and critic scores -- the first twenty-five.",
+  "albums": [
+    { "title": "Wish You Were Here", "artist": "Pink Floyd" },
+    { "title": "Abbey Road", "artist": "The Beatles" },
+    { "title": "To Pimp a Butterfly", "artist": "Kendrick Lamar" },
+    { "title": "The Dark Side of the Moon", "artist": "Pink Floyd" },
+    { "title": "Songs in the Key of Life", "artist": "Stevie Wonder" },
+    { "title": "The Rise and Fall of Ziggy Stardust and the Spiders from Mars", "artist": "David Bowie" },
+    { "title": "Kind of Blue", "artist": "Miles Davis" },
+    { "title": "OK Computer", "artist": "Radiohead" },
+    { "title": "A Love Supreme", "artist": "John Coltrane" },
+    { "title": "Revolver", "artist": "The Beatles" },
+    { "title": "The Black Saint and the Sinner Lady", "artist": "Charles Mingus" },
+    { "title": "Illmatic", "artist": "Nas" },
+    { "title": "Led Zeppelin IV", "artist": "Led Zeppelin" },
+    { "title": "good kid, m.A.A.d city", "artist": "Kendrick Lamar" },
+    { "title": "Enter the Wu-Tang (36 Chambers)", "artist": "Wu-Tang Clan" },
+    { "title": "In a Silent Way", "artist": "Miles Davis" },
+    { "title": "Electric Ladyland", "artist": "The Jimi Hendrix Experience" },
+    { "title": "Highway 61 Revisited", "artist": "Bob Dylan" },
+    { "title": "Sgt. Pepper's Lonely Hearts Club Band", "artist": "The Beatles" },
+    { "title": "In the Court of the Crimson King", "artist": "King Crimson" },
+    { "title": "Remain in Light", "artist": "Talking Heads" },
+    { "title": "Blonde on Blonde", "artist": "Bob Dylan" },
+    { "title": "Blood on the Tracks", "artist": "Bob Dylan" },
+    { "title": "The Queen Is Dead", "artist": "The Smiths" },
+    { "title": "Madvillainy", "artist": "Madvillain" }
+  ]
+}

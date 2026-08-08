@@ -17,9 +17,13 @@ import { apiFetch } from './spotify.js';
 // their own `category` field below. Content authoring, not engineering --
 // see KNOWN-DEVIATIONS.md for the honesty note on the non-seed ones. The
 // decade bags are listed here, and so rendered on the Shelves screen, in
-// chronological order.
+// chronological order. The two "Cool Guide" chart bags are `seed` too
+// (there is no dedicated shelf for chart-based bags, and they are not a
+// mood or a decade), so they render alongside the original six under
+// "Your record bags".
 const BAG_IDS = [
   '90s-us-rap', 'soul-essentials', 'motown', 'trip-hop', 'britpop', 'late-night-jazz',
+  'cool-guide-top-1-25', 'cool-guide-top-26-50',
   'sunday-morning', 'headphones-on', 'driving', 'rainy-day',
   'the-60s', 'the-70s', 'the-80s', 'the-90s', 'the-2000s', 'the-2010s', 'the-2020s',
 ];

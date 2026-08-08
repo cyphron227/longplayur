@@ -5,6 +5,25 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## Two "Cool Guide" chart bags, transcribed from a screenshotted ranking (2026-08-08)
+
+`bags/cool-guide-top-1-25.json` and `bags/cool-guide-top-26-50.json` (25
+albums each, `category: "seed"`) per explicit request, sourced from two
+screenshots of a "Cool Guide" fan-made album ranking chart (user/critic
+scores, dated May 2025 per the images' own caption). Titles were
+transcribed as given, with the chart's own abbreviations expanded to
+their full album titles for search accuracy ("TRAFOZSATSFM" -> *The Rise
+and Fall of Ziggy Stardust and the Spiders from Mars*, "TVU&N" -> *The
+Velvet Underground & Nico*, "LYSFLATH" -> *Lift Your Skinny Fists Like
+Antennas to Heaven*). `category: "seed"` rather than a new dedicated
+shelf: these are neither a mood nor a decade, and no chart/ranking shelf
+exists on the Shelves screen, so they render alongside the original six
+under "Your record bags", the same fallback every unrecognised category
+already gets. Not vetted beyond a re-read of the transcription against
+the screenshots; no album-by-album search-resolution check against a
+live Spotify account was possible in this environment (see this file's
+own repeated caveat on that).
+
 ## The 80s decade bag, and the transport rewritten on react-h5-audio-player (2026-07-26)
 
 ### The 80s

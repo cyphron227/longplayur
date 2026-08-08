@@ -1,0 +1,32 @@
+{
+  "name": "Cool Guide Top Albums 26-50",
+  "category": "seed",
+  "blurb": "The same chart's back half -- twenty-six through fifty, still all near the top.",
+  "albums": [
+    { "title": "What's Going On", "artist": "Marvin Gaye" },
+    { "title": "Grace", "artist": "Jeff Buckley" },
+    { "title": "Pet Sounds", "artist": "The Beach Boys" },
+    { "title": "Bitches Brew", "artist": "Miles Davis" },
+    { "title": "In Rainbows", "artist": "Radiohead" },
+    { "title": "The Velvet Underground & Nico", "artist": "The Velvet Underground" },
+    { "title": "Are You Experienced", "artist": "The Jimi Hendrix Experience" },
+    { "title": "Paranoid", "artist": "Black Sabbath" },
+    { "title": "The Doors", "artist": "The Doors" },
+    { "title": "Rumours", "artist": "Fleetwood Mac" },
+    { "title": "Pink Moon", "artist": "Nick Drake" },
+    { "title": "Marquee Moon", "artist": "Television" },
+    { "title": "Blue", "artist": "Joni Mitchell" },
+    { "title": "The Beatles", "artist": "The Beatles" },
+    { "title": "Lift Your Skinny Fists Like Antennas to Heaven", "artist": "Godspeed You! Black Emperor" },
+    { "title": "Red", "artist": "King Crimson" },
+    { "title": "Doolittle", "artist": "Pixies" },
+    { "title": "London Calling", "artist": "The Clash" },
+    { "title": "Master of Puppets", "artist": "Metallica" },
+    { "title": "Bringing It All Back Home", "artist": "Bob Dylan" },
+    { "title": "Soundtracks for the Blind", "artist": "Swans" },
+    { "title": "Purple Rain", "artist": "Prince and the Revolution" },
+    { "title": "Hounds of Love", "artist": "Kate Bush" },
+    { "title": "loveless", "artist": "My Bloody Valentine" },
+    { "title": "Songs of Leonard Cohen", "artist": "Leonard Cohen" }
+  ]
+}
