@@ -5,6 +5,19 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## The real MusicBrainz bug, confirmed live: genuine rate-limiting (2026-08-08)
+
+The copy-paste-safe diagnostic logging from the previous entry paid off immediately: a listener's own browser console, pasted back after a fresh reload, showed a real, live `GET https://musicbrainz.org/ws/2/artist/{id}?inc=genres&fmt=json` request returning `503 (Service Unavailable)` -- an actual response from the actual server, not a network/CORS/CSP failure and not a matching-logic miss. This is the first genuinely verified fact about this app's live MusicBrainz behaviour in this whole run of fixes (everything in the two entries above was reasoned from documentation, since this build environment's own network egress cannot reach `musicbrainz.org` at all).
+
+MusicBrainz's own public-API courtesy guidance is roughly 1 request per second, and this confirms it enforces that against real traffic with an actual `503`, not a soft warning. This app's shared request queue (`mbFetch()`'s `schedule()`, used by every MusicBrainz call in the app -- genre lookups and credits lookups alike) was spacing requests at 500ms, i.e. 2 requests per second, exactly double that guidance. The comment on that constant already flagged this as "a deliberately chosen compromise... not a value verified against MusicBrainz's actual enforcement in this environment" -- now verified, in the least convenient possible way: it was too aggressive, and every fix in the two entries above this one was very plausibly fighting a symptom of this the whole time (a confident match found, then rejected by the server before its own credits/genre data could even be fetched, indistinguishable from behind the same silent "not found" copy this file's own earlier entry only partially addressed).
+
+Fixed two ways, together:
+
+- **`MIN_REQUEST_SPACING_MS` raised from 500 to 1000** -- the actual guidance, not a compromise against it. Every MusicBrainz request in the app, credits or genre, still shares this one queue (so a credits lookup can still queue briefly behind a background genre batch for a newly-mounted Wall pool), but now at the rate MusicBrainz's own courtesy guidance actually asks for.
+- **`mbFetch()` now retries a `503` or `429` specifically**, up to twice, honouring a `Retry-After` header when MusicBrainz sends one -- the exact same bounded, `Retry-After`-respecting pattern `spotify.js`'s own 429 handling already uses, for the same reason (this app's own `Docs/CLAUDE.md` convention: "Network retries are BOUNDED... honouring Retry-After"). Retried in place, inside the one request that hit the limit, rather than letting other queued requests jump ahead in the meantime -- a 503/429 is the server telling every caller to slow down, not just that one call, so the whole queue backing off together is the correct response.
+
+Verified functionally: a mocked genre lookup that returns a `503` with `Retry-After` on its first attempt and succeeds on the retry resolves correctly rather than permanently failing, and the credits/matching fixes from the two entries above still behave correctly against the (now correctly-paced) queue. Not verified against MusicBrainz's real server behaviour beyond what the listener's own console already confirmed, for the same environment-level reason stated in both entries above.
+
 ## Media Session (Bluetooth/lock screen shows real metadata now), and a second pass at credits (2026-08-08)
 
 ### Bluetooth/car head unit/lock screen showed "Longplayur", not the track

@@ -75,23 +75,32 @@ function normalize(s) {
 }
 
 // MusicBrainz's own public-API courtesy guidance is roughly 1 request per
-// second; bounding how many callers can be *in flight* at once (the
-// concurrency limits in flip.js/runout.js) does not by itself cap the
-// *rate* of completed requests, and going through this in practice
-// (concurrency 2, each artist costing up to 2 requests) burst well past
-// that guidance and got a real chunk of a wall pool's worth of artists
-// rate-limited -- which then got silently, permanently mis-cached as "no
-// genre" (see getPrimaryGenre() in ceremony.js's fix for the caching half
-// of this; this is the request-pacing half). Every MusicBrainz request in
-// this app, credits or genre, goes through this same queue, so a single
-// on-demand credits lookup can occasionally queue briefly behind an
-// in-progress background genre batch -- judged an acceptable trade-off
-// against actually respecting the rate limit; 500ms (roughly 2 req/s) is a
-// deliberately chosen compromise between the 1 req/s guidance and not
-// making that occasional wait too long, not a value verified against
-// MusicBrainz's actual enforcement in this environment (no network access
-// to it here).
-const MIN_REQUEST_SPACING_MS = 500;
+// second, and it enforces this against real client traffic with an
+// actual 503 -- confirmed live (a genre lookup returning
+// "503 Service Unavailable" straight from musicbrainz.org, both the
+// request and the response fully real, unlike everything else in this
+// file that could only be reasoned about from documentation given this
+// build environment's own network egress cannot reach musicbrainz.org at
+// all -- see KNOWN-DEVIATIONS.md). The previous 500ms (2 req/s) spacing
+// was an explicitly-flagged, unverified compromise between that guidance
+// and not making an occasional wait too long; now verified, in the worst
+// possible way, to have been genuinely too aggressive. 1000ms is the
+// actual guidance, not a compromise against it. Every MusicBrainz
+// request in this app, credits or genre, goes through this one shared
+// queue, so a single on-demand credits lookup can still queue briefly
+// behind an in-progress background genre batch (a newly-mounted Wall
+// pool's worth of artists) -- but at the *correct* rate now, rather than
+// double it.
+const MIN_REQUEST_SPACING_MS = 1000;
+// Bounded retries on a 503/429 specifically (MusicBrainz's own rate-limit
+// signal, confirmed live), honouring Retry-After when sent -- the exact
+// same bounded, Retry-After-respecting pattern spotify.js's own 429
+// handling already uses for the same reason. Retried in place, inside
+// the scheduled call, rather than moving on to the next queued request
+// and coming back later: a 503/429 is the server telling every caller to
+// slow down, not just this one, so the whole queue backing off together
+// is the correct response, not working around it.
+const MAX_RETRIES = 2;
 let requestQueue = Promise.resolve();
 
 function schedule(fn) {
@@ -108,12 +117,22 @@ function schedule(fn) {
   return run;
 }
 
+async function fetchWithRetry(url, retriesLeft = MAX_RETRIES) {
+  const res = await fetch(url);
+  if (res.status === 503 || res.status === 429) {
+    if (retriesLeft <= 0) throw new Error(`musicbrainz_${res.status}`);
+    const retryAfter = Number(res.headers.get('Retry-After')) || 2;
+    await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+    return fetchWithRetry(url, retriesLeft - 1);
+  }
+  if (!res.ok) throw new Error(`musicbrainz_${res.status}`);
+  return res.json();
+}
+
 async function mbFetch(path) {
-  return schedule(async () => {
+  return schedule(() => {
     const url = `${MB_BASE}${path}${path.includes('?') ? '&' : '?'}fmt=json`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`musicbrainz_${res.status}`);
-    return res.json();
+    return fetchWithRetry(url);
   });
 }
 
