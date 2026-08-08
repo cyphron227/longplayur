@@ -254,11 +254,23 @@
       <div class="flip-find-row">
         <input id="flip-search" class="text-input" type="search" placeholder="Find in your crate&hellip;" autocomplete="off" aria-label="Find in your crate">
       </div>
+      <!-- Two separate controls, deliberately: how the list is ordered
+           (Sort) and what's included in it (Show) used to be one row of
+           chips, which meant "Recently played" looked like a filter but
+           was actually only ever a sort -- every album stayed in the
+           list, unplayed ones just sank to the bottom. Reported live; see
+           KNOWN-DEVIATIONS.md. -->
+      <span class="deadwax flip-chip-label">Sort</span>
       <div class="sort-chips" id="flip-sort-chips" role="group" aria-label="Sort">
         <button class="chip" type="button" data-sort="alpha" aria-pressed="true">Artist A to Z</button>
         <button class="chip" type="button" data-sort="genre" aria-pressed="false">Genre</button>
         <button class="chip" type="button" data-sort="recent" aria-pressed="false">Recently played</button>
-        <button class="chip" type="button" data-sort="unplayed" aria-pressed="false">Unplayed only</button>
+      </div>
+      <span class="deadwax flip-chip-label">Show</span>
+      <div class="sort-chips" id="flip-show-chips" role="group" aria-label="Show">
+        <button class="chip" type="button" data-show="all" aria-pressed="true">All</button>
+        <button class="chip" type="button" data-show="unplayed" aria-pressed="false">Unplayed only</button>
+        <button class="chip" type="button" data-show="listened" aria-pressed="false">Listened only</button>
       </div>
       <div id="flip-list" class="flip-list"></div>
     </section>
@@ -351,6 +363,25 @@
         <div id="crate-playlists-grid" class="crate-shelf-scroll"></div>
       </section>
     </div>
+
+    <!-- Bag detail: opening a record bag or playlist lands here first
+         rather than straight on the Wall, so a curated list (like the two
+         Cool Guide charts) reads as something to work through, not just
+         load and forget. The amber ring on a played cover, and the 70%
+         dim on an unplayed one, are the Wall's own zoom-out language
+         (Docs/DESIGN-SPEC.md ss2), reused verbatim here rather than a new
+         progress-bar/badge vocabulary -- see KNOWN-DEVIATIONS.md. -->
+    <section id="bag-detail-view" class="bag-detail-view" hidden aria-label="Bag detail">
+      <button id="bag-detail-back" class="link-btn" type="button">Back to record bags</button>
+      <div class="bag-detail-head">
+        <h2 id="bag-detail-title" class="bag-detail-title"></h2>
+        <p id="bag-detail-blurb" class="bag-detail-blurb"></p>
+        <span id="bag-detail-count" class="deadwax bag-detail-count"></span>
+      </div>
+      <button id="bag-detail-play" class="btn-primary bag-detail-play" type="button">Play this bag</button>
+      <p id="bag-detail-status" class="crate-status"></p>
+      <div id="bag-detail-grid" class="bag-detail-grid"></div>
+    </section>
   </section>
 
   <!-- Runout groove (INCREMENT-03 Phase 3): reached only from end-of-album,
@@ -391,7 +422,29 @@
         </button>
       </div>
     </header>
+    <!-- By session (the existing chronological log) vs By album (every
+         album ever played through Longplayur, deduplicated, sortable) --
+         same toggle pattern as Spin/Flip on the Now Playing screen: one
+         screen, two lenses on the same underlying journal, not a new tab. -->
+    <div class="mode-toggle" id="sessions-mode-toggle" role="group" aria-label="View">
+      <button id="btn-sessions-mode-log" class="mode-toggle-btn" type="button" aria-pressed="true">By session</button>
+      <button id="btn-sessions-mode-albums" class="mode-toggle-btn" type="button" aria-pressed="false">By album</button>
+    </div>
+
     <div id="past-sessions-list" class="past-sessions-list"></div>
+
+    <section id="sessions-albums-view" class="sessions-albums-view" hidden aria-label="Every album played, by album">
+      <div class="flip-find-row">
+        <input id="sessions-album-search" class="text-input" type="search" placeholder="Find in what you've played&hellip;" autocomplete="off" aria-label="Find in what you've played">
+      </div>
+      <span class="deadwax flip-chip-label">Sort</span>
+      <div class="sort-chips" id="sessions-album-sort-chips" role="group" aria-label="Sort">
+        <button class="chip" type="button" data-sort="recent" aria-pressed="true">Most recent</button>
+        <button class="chip" type="button" data-sort="alpha" aria-pressed="false">Artist A to Z</button>
+        <button class="chip" type="button" data-sort="most-played" aria-pressed="false">Most played</button>
+      </div>
+      <div id="sessions-album-list" class="flip-list"></div>
+    </section>
   </section>
 
   <!-- Device picker modal (Spotify Connect fallback) -->

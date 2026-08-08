@@ -76,17 +76,27 @@ where you choose what's on the Wall, grouped into shelves like a real
 shop: a "Your Record Bag" button always returns to your own pool; below
 it, "Your record bags", "By mood", and "By decade" each scroll
 horizontally, then New arrivals (if you follow any artists) and your own
-Spotify playlists. A search field lets you pull in an artist's discography
-or a whole genre. Selecting anything crossfades the Wall and takes you
-straight to Now Playing.
+Spotify playlists. A search field lets you pull in an artist's discography.
+
+Opening a record bag or playlist card lands on a **bag detail** view first,
+rather than committing straight to the Wall: every album in it as a small
+cover, amber-ringed and full brightness if you've played it, dimmed if not
+(the same look the Wall's own zoomed-out view already uses for played
+covers), with an "X of N played" count. "Play this bag" loads the whole
+thing onto the Wall exactly as a card click used to; tapping any individual
+cover does the same and starts playing that one directly. New arrivals,
+search results, and Your Record Bag itself skip this and crossfade straight
+to Now Playing, the same as before -- none of them is a fixed, named list
+of albums the way a bag or playlist is.
 
 **Record bags** ship with Longplayur (`bags/*.json`) -- six original seed
 bags (90s US rap, soul essentials, Motown, trip hop, Britpop, late-night
-jazz), plus four mood bags (Sunday morning, Headphones on, Driving, Rainy
-day) and four decade bags (the 60s, 70s, 90s, and 2020s), a first draft not
-yet vetted the way the original six were. Each is an original 15-to-25
-album curation; albums resolve to real Spotify album IDs via search the
-first time you open that bag, then stay cached.
+jazz) and two chart bags (Cool Guide Top Albums 1-25 and 26-50, transcribed
+from a fan-made ranking), plus four mood bags (Sunday morning, Headphones
+on, Driving, Rainy day) and seven decade bags (the 60s through the 2020s),
+a first draft not yet vetted the way the original six were. Each is an
+original 15-to-25 album curation; albums resolve to real Spotify album IDs
+via search the first time you open that bag, then stay cached.
 
 **New arrivals** is a fourth source: the latest album or EP from each
 artist you follow on Spotify, refreshed every few hours. It needs the
@@ -110,10 +120,14 @@ it came from.
 
 The dome (Spin) is for browsing by feel. Flip, a toggle at the top of Now
 Playing, swaps it for a real, searchable, sortable list over the same
-pool: a text search, and sort chips for artist A-to-Z, genre, recently
-played, or unplayed only, with sticky group headers. Tapping a row plays
-it exactly like tapping a cover on the dome. Your last-used mode and sort
-choice are remembered.
+pool: a text search, a **Sort** row (artist A-to-Z, genre, or recently
+played -- how the list is ordered) and a separate **Show** row (all, unplayed
+only, or listened only -- what's actually in it), with sticky group headers
+under alpha/genre sort. Sort and Show used to be one row of chips, which
+made "Recently played" read as a filter it never was (sorting alone never
+removes anything); they're deliberately two controls now. Tapping a row
+plays it exactly like tapping a cover on the dome. Your last-used mode,
+sort, and show choices are all remembered.
 
 Genre resolves automatically in the background as soon as a pool is
 mounted, from Spotify's own artist data first and MusicBrainz second
@@ -134,7 +148,7 @@ can be honestly filled for a given album, the grid simply shows fewer --
 never a duplicate or invented pick. "Browse the full wall instead" is
 still there if you'd rather zoom out yourself.
 
-## Past sessions: tags, streaks, and credits
+## Past sessions: tags, streaks, credits, and By album
 
 Each played album in an expanded session can be marked keeper, spin again,
 or pass; a keeper nudges that album to resurface a little more often on
@@ -145,6 +159,12 @@ collapsed "Credits" line, closed by default, looks up producer/engineer/
 performer credits from MusicBrainz -- a second, free, keyless source, since
 Spotify's own API has none. Not every release has this data; when it
 doesn't, the line simply says so.
+
+A second toggle, "By album", swaps the chronological session-by-session log
+for a flat, deduplicated list of every album you've ever played through
+Longplayur, searchable and sortable (most recent, artist A-to-Z, or most
+played). Tapping a row plays it directly, exactly like anywhere else in the
+app.
 
 ## Records nearby
 

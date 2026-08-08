@@ -44,7 +44,18 @@ export const SORT_MODES = Object.freeze({
   ALPHA: 'alpha',
   GENRE: 'genre',
   RECENT: 'recent',
+});
+
+// Separate from SORT_MODES on purpose (INCREMENT-03 Phase 1 originally
+// folded "unplayed" in as a fourth sort mode; live use reported that
+// "Recently played" then read as a filter it never was, since sorting
+// never actually removes anything -- see KNOWN-DEVIATIONS.md). Ordering
+// and inclusion are now two separate, separately-labelled controls,
+// everywhere Flip is used.
+export const SHOW_MODES = Object.freeze({
+  ALL: 'all',
   UNPLAYED: 'unplayed',
+  LISTENED: 'listened',
 });
 
 // A pool entry with no resolved genre is grouped/matched under this literal
@@ -76,13 +87,17 @@ export function filterPool(pool, query) {
 }
 
 /**
+ * Reorders a pool; never removes anything from it (see filterByPlayed()
+ * for that). 'recent' still needs playedAt to know what "recent" means,
+ * but an album with no play at all simply sorts as if played at time 0 --
+ * last, not absent.
  * @param {Array} pool
- * @param {'alpha'|'genre'|'recent'|'unplayed'} mode
+ * @param {'alpha'|'genre'|'recent'} mode
  * @param {{playedAt?: Map<string, number>}} [context] playedAt: albumId ->
  *   most recent startedAt timestamp, from journal.js's lastPlayedAtByAlbum()
  *   -- the existing played/session data store, not a new one (per explicit
- *   instruction). Required for 'recent' and 'unplayed'; 'alpha'/'genre'
- *   ignore it, so callers not using either mode may omit it.
+ *   instruction). Required for 'recent'; 'alpha'/'genre' ignore it, so
+ *   callers not using it may omit it.
  * @returns {Array} a new array; `pool` itself is never mutated.
  */
 export function sortPool(pool, mode, context = {}) {
@@ -101,16 +116,29 @@ export function sortPool(pool, mode, context = {}) {
     return items.sort((a, b) => (playedAt.get(b.id) || 0) - (playedAt.get(a.id) || 0));
   }
 
-  if (mode === SORT_MODES.UNPLAYED) {
-    return items.filter((entry) => !playedAt.has(entry.id));
-  }
-
   // Default / 'alpha': artist, then title.
   return items.sort((a, b) => (a.artist || '').localeCompare(b.artist || '') || (a.name || '').localeCompare(b.name || ''));
 }
 
+/**
+ * Removes entries from a pool by played state; never reorders anything
+ * (see sortPool() for that). SHOW_MODES.ALL is a no-op copy, so callers
+ * can always run this unconditionally rather than special-casing it.
+ * @param {Array} pool
+ * @param {'all'|'unplayed'|'listened'} show
+ * @param {{playedAt?: Map<string, number>}} [context] same playedAt map
+ *   sortPool() takes; required for 'unplayed'/'listened', ignored for 'all'.
+ * @returns {Array} a new array; `pool` itself is never mutated.
+ */
+export function filterByPlayed(pool, show, context = {}) {
+  const playedAt = context.playedAt || new Map();
+  if (show === SHOW_MODES.UNPLAYED) return pool.filter((entry) => !playedAt.has(entry.id));
+  if (show === SHOW_MODES.LISTENED) return pool.filter((entry) => playedAt.has(entry.id));
+  return pool.slice();
+}
+
 /** The sticky group header key for one entry under a given sort mode, or
- * null for sort modes with no natural grouping ('recent', 'unplayed'). */
+ * null for sort modes with no natural grouping ('recent'). */
 export function groupKeyFor(entry, mode) {
   if (mode === SORT_MODES.ALPHA) return (entry.artist || '?').trim()[0]?.toUpperCase() || '?';
   if (mode === SORT_MODES.GENRE) return entry.genre || UNKNOWN_GENRE;

@@ -5,6 +5,32 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## From played to complete: Sort/Show split, By album, Bag detail (2026-08-08)
+
+Three phases from a proposed plan (an artifact shared for review, then approved), in one pass, per explicit request ("go ahead"). All three are built entirely on `journal.js`'s existing lifetime history -- no second played/unplayed store anywhere.
+
+### Phase 1: Flip's "Recently played" was a sort, not a filter
+
+Reported live as a bug ("if you click show recently played it shows all the albums"). It was working exactly as built: `flip.js`'s `RECENT` was one of four *sort* modes, and sorting never removes anything -- unplayed albums simply sank to the bottom of the list. `UNPLAYED` was the only real filter, folded in as if it were a fifth sort mode, which is what made `RECENT` read as broken by association: one chip row was doing two unrelated jobs.
+
+Fixed by actually separating them, not by relabelling: `SORT_MODES` is now `{ALPHA, GENRE, RECENT}` only (`sortPool()` only ever reorders); a new `SHOW_MODES` (`{ALL, UNPLAYED, LISTENED}`) and `filterByPlayed()` handle inclusion (only ever removes, never reorders). `LISTENED` is new -- there was previously no way to see only what you've played at all. Flip's markup is now two chip rows ("Sort" / "Show"), each with its own small deadwax label so which is which is never ambiguous again. Empty-state copy is specific to why the list is empty (a search with no match, vs. genuinely nothing listened to yet, vs. everything already listened to).
+
+### Phase 2: Past sessions gains a second lens, By album
+
+A mode toggle (same pattern as Spin/Flip) adds "By album" alongside the existing chronological "By session" log: every album ever played through Longplayur, deduplicated, searchable, and sortable (most recent, artist A-Z, most played). Built almost entirely on data that already existed: `journal.playedEntriesNewestFirst()` was already written (for Runout groove's "Played before" direction) and simply had no screen of its own; `lastPlayedAtByAlbum()` is reused as-is; the only new journal export is `playCountsByAlbum()` (a per-album tally across the whole lifetime journal, for the "Most played" sort). Rows reuse Flip's own `.flip-row`/`.flip-letter-head`/`.flip-empty` styling verbatim rather than a new component -- it is the same kind of list, just a different source.
+
+**A real bug found and fixed along the way, not part of the original ask:** `playedEntriesNewestFirst()`/`keeperEntriesNewestFirst()` returned entries with no `uri` field (the journal only ever stored `albumId`, never the Spotify URI), while `commitPlayback()` requires `currentContext.entry.uri` to actually start playback. Tapping a row here would have called Spotify's play endpoint with an undefined `context_uri`. This also means Runout groove's existing "Played before" and "From your crate" directions (INCREMENT-03 Phase 3) very likely had the same bug already, silently, since they consume the same two functions -- not verified live, since it was caught by inspection while building this feature rather than reported, but the code path is identical. Fixed at the source: `recordNeedleDrop()` now stores `uri` on every new entry (purely additive, no migration, same treatment `bagId`/`playlistId`/`source` already got), and both functions fall back to `spotify:album:{id}` for entries recorded before this shipped -- not a guess, Spotify's actual deterministic URI format, so every entry either function returns is now genuinely playable regardless of when it was recorded.
+
+### Phase 3: Bag detail, a completion view
+
+Opening a record bag or playlist card on the Record bags screen now opens a detail view first, instead of committing straight to the Wall. Every album in that bag/playlist renders as a small cover: amber-ringed and full opacity if played, dimmed to 70% if not (the exact values already used by the Wall's own zoom-out, `.item__image.is-played` / `body.wall-zoomed-out .item__image`, copied rather than reinvented), with a `deadwax` "X of N played" count in moss (this app's existing colour for a quiet positive status, e.g. the device note and the streak badge). "Play this bag" commits the whole thing to the Wall exactly as a card click used to; tapping any individual cover does the same and then needle-drops that specific album directly (calling the pre-existing `selectBag()`/`selectPlaylist()`, a new entry point into them, not new commit logic).
+
+Deliberately does **not** cover New arrivals, search results, or Your Record Bag itself: none of those is a stable, named list of albums the way a bag or playlist is (New arrivals changes as new releases appear; a search result and Your Record Bag are not really "collections to complete" in the sense a curated bag or a chart, like the two Cool Guide bags, is).
+
+**Scope note:** the proposed plan's Phase 4 (the same "X of N played" count as a badge on the card itself, before opening detail) and Phase 5 (grouping By album by genre/source) were both explicitly deferred as optional -- Phases 1 to 3 alone were judged to be the complete original ask (fix the bug, one list of everything played, one completion view per bag), and shipped as one pass; 4 and 5 remain available on request.
+
+Verified functionally throughout (mocked Spotify network responses via Playwright, real `resolveBag()`/journal calls, real DOM interaction) rather than against a live account, per this file's own repeated caveat.
+
 ## Two "Cool Guide" chart bags, transcribed from a screenshotted ranking (2026-08-08)
 
 `bags/cool-guide-top-1-25.json` and `bags/cool-guide-top-26-50.json` (25

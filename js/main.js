@@ -212,6 +212,19 @@ const crateNewArrivalsSection = document.getElementById('crate-newarrivals-secti
 const crateNewArrivalsGrid = document.getElementById('crate-newarrivals-grid');
 const cratePlaylistsGrid = document.getElementById('crate-playlists-grid');
 const cratePlaylistsStatus = document.getElementById('crate-playlists-status');
+const cratesBody = document.querySelector('.crates-body');
+// Bag detail (a completion view, opened before a bag/playlist commits to
+// the Wall): see KNOWN-DEVIATIONS.md for why bags and playlists get one
+// and New arrivals/search/Your Record Bag do not -- those are not a
+// stable, named list of albums in the same sense.
+const bagDetailView = document.getElementById('bag-detail-view');
+const bagDetailBack = document.getElementById('bag-detail-back');
+const bagDetailTitle = document.getElementById('bag-detail-title');
+const bagDetailBlurb = document.getElementById('bag-detail-blurb');
+const bagDetailCount = document.getElementById('bag-detail-count');
+const bagDetailPlayBtn = document.getElementById('bag-detail-play');
+const bagDetailStatus = document.getElementById('bag-detail-status');
+const bagDetailGrid = document.getElementById('bag-detail-grid');
 const nearbyShelf = document.getElementById('nearby-shelf');
 const playerBarEl = document.getElementById('player-bar');
 const wakeConfirmation = document.getElementById('wake-confirmation');
@@ -258,6 +271,11 @@ let activePlaylistId = null;
 let activeSearchQuery = null; // { query } | null
 let activeNewArrivals = false;
 let bagSwitchBusy = false;
+// The bag/playlist currently open in bag detail (not necessarily the same
+// as activeBagId/activePlaylistId -- browsing a bag's detail view does not
+// itself commit it to the Wall, only "Play this bag" or tapping one of its
+// covers does). { kind: 'bag'|'playlist', id, name, blurb } | null.
+let bagDetailSource = null;
 let bagManifestCache = null;
 let playlistManifestCache = null; // null until the Crates screen has been opened at least once
 let newArrivalsPool = null; // last resolved New arrivals pool, kept for selectNewArrivals()
@@ -440,7 +458,7 @@ function renderBagCards() {
       title: bag.blurb,
       images: cached,
       pressed: !activeSearchQuery && !activePlaylistId && !activeNewArrivals && activeBagId === bag.id,
-      onClick: () => selectBag(bag.id),
+      onClick: () => openBagDetail({ kind: 'bag', id: bag.id, name: bag.name, blurb: bag.blurb }),
     });
     BAG_SHELVES[category].grid().appendChild(card);
     counts[category] += 1;
@@ -490,7 +508,7 @@ function renderPlaylistCards() {
       sublabel: `${playlist.trackCount} tracks`,
       image: playlist.image,
       pressed: !activeSearchQuery && !activeBagId && activePlaylistId === playlist.id,
-      onClick: () => selectPlaylist(playlist.id),
+      onClick: () => openBagDetail({ kind: 'playlist', id: playlist.id, name: playlist.name, blurb: null }),
     }));
   }
 }
@@ -634,7 +652,113 @@ async function selectPlaylist(playlistId) {
   showScreen('app');
 }
 
+// ---------------------------------------------------------------------
+// Bag detail: opening a record bag or playlist card lands here first,
+// rather than committing straight to the Wall the way it used to -- a
+// completion view over that one bag/playlist's own albums (amber ring on
+// played, dimmed on unplayed, same visual as the Wall's own zoom-out; a
+// "X of N played" count in deadwax mono). "Play this bag" and tapping any
+// individual cover both still end up calling the existing
+// selectBag()/selectPlaylist() (no new commit-to-Wall logic, a new entry
+// point into it), the same rule this app has followed since Flip and
+// Runout groove's own cell clicks. New arrivals, search results, and
+// Your Record Bag itself do not get a detail view: none of them is a
+// stable, named list of albums in the way a bag/playlist is -- see
+// KNOWN-DEVIATIONS.md.
+// ---------------------------------------------------------------------
+
+async function resolveBagDetailPool(source) {
+  if (source.kind === 'bag') {
+    const bag = (bagManifestCache || []).find((b) => b.id === source.id);
+    return bag ? resolveBag(bag) : [];
+  }
+  const playlist = (playlistManifestCache || []).find((p) => p.id === source.id);
+  return playlist ? resolvePlaylist(playlist) : [];
+}
+
+function renderBagDetailGrid(pool, source) {
+  const playedAt = journal.lastPlayedAtByAlbum();
+  const played = pool.filter((entry) => playedAt.has(entry.id)).length;
+  bagDetailCount.textContent = `${played} of ${pool.length} played`;
+
+  bagDetailGrid.innerHTML = '';
+  for (const entry of pool) {
+    const isPlayed = playedAt.has(entry.id);
+    const cover = document.createElement('button');
+    cover.type = 'button';
+    cover.className = 'bag-detail-cover' + (isPlayed ? ' is-played' : '');
+    const label = `${entry.name} by ${entry.artist}, ${isPlayed ? 'played' : 'not yet played'}`;
+    cover.setAttribute('aria-label', label);
+    cover.title = label;
+
+    const img = document.createElement('img');
+    img.alt = '';
+    if (entry.image) img.src = entry.image;
+    cover.appendChild(img);
+
+    cover.addEventListener('click', () => playBagDetailAlbum(source, entry));
+    bagDetailGrid.appendChild(cover);
+  }
+}
+
+async function openBagDetail(source) {
+  bagDetailSource = source;
+  hide(cratesBody);
+  show(bagDetailView);
+
+  bagDetailTitle.textContent = source.name;
+  if (source.blurb) {
+    bagDetailBlurb.textContent = source.blurb;
+    show(bagDetailBlurb);
+  } else {
+    hide(bagDetailBlurb);
+  }
+  bagDetailCount.textContent = '';
+  bagDetailGrid.innerHTML = '';
+  bagDetailPlayBtn.disabled = true;
+  bagDetailStatus.textContent = 'Pulling records from the shelf.';
+
+  const pool = await resolveBagDetailPool(source);
+  if (bagDetailSource !== source) return; // navigated away, or opened something else, while this was resolving.
+
+  if (pool.length === 0) {
+    bagDetailStatus.textContent = `Could not resolve any records in ${source.name} right now.`;
+    return;
+  }
+  bagDetailStatus.textContent = '';
+  bagDetailPlayBtn.disabled = false;
+  renderBagDetailGrid(pool, source);
+}
+
+function closeBagDetail() {
+  bagDetailSource = null;
+  hide(bagDetailView);
+  show(cratesBody);
+}
+bagDetailBack?.addEventListener('click', closeBagDetail);
+
+bagDetailPlayBtn?.addEventListener('click', () => {
+  if (!bagDetailSource) return;
+  if (bagDetailSource.kind === 'bag') selectBag(bagDetailSource.id);
+  else selectPlaylist(bagDetailSource.id);
+});
+
+/** Tapping one cover in the detail grid commits the whole bag/playlist to
+ * the Wall (exactly what "Play this bag" does) and then needle-drops that
+ * specific album, rather than only the one cover -- needling an album not
+ * actually mounted on the Wall would have nowhere real to pan the camera
+ * to. setFlipMode('spin') for the same reason Flip's own rows need it: the
+ * ceremony animates into the Wall's own container, which Flip mode hides. */
+async function playBagDetailAlbum(source, entry) {
+  if (bagSwitchBusy) return;
+  if (source.kind === 'bag') await selectBag(source.id);
+  else await selectPlaylist(source.id);
+  setFlipMode('spin');
+  handleSelectAlbum(entry);
+}
+
 function openCrates() {
+  closeBagDetail(); // always land on the shelf overview, not wherever a previous visit left off.
   showScreen('crates');
   renderCratesScreen();
 }
@@ -698,13 +822,16 @@ const btnModeFlip = document.getElementById('btn-mode-flip');
 const flipView = document.getElementById('flip-view');
 const flipSearchInput = document.getElementById('flip-search');
 const flipSortChips = document.getElementById('flip-sort-chips');
+const flipShowChips = document.getElementById('flip-show-chips');
 const flipListEl = document.getElementById('flip-list');
 
 const LS_FLIP_MODE = 'lp_flip_mode';
 const LS_FLIP_SORT = 'lp_flip_sort';
+const LS_FLIP_SHOW = 'lp_flip_show';
 
 let flipMode = localStorage.getItem(LS_FLIP_MODE) === 'flip' ? 'flip' : 'spin';
 let flipSort = Object.values(flip.SORT_MODES).includes(localStorage.getItem(LS_FLIP_SORT)) ? localStorage.getItem(LS_FLIP_SORT) : flip.SORT_MODES.ALPHA;
+let flipShow = Object.values(flip.SHOW_MODES).includes(localStorage.getItem(LS_FLIP_SHOW)) ? localStorage.getItem(LS_FLIP_SHOW) : flip.SHOW_MODES.ALL;
 let flipQuery = '';
 let flipGenrePool = null; // currentWallPool, augmented with .genre, once resolved; null until resolveGenres() finishes for this pool.
 let flipGenrePoolFor = null; // which pool (by reference) flipGenrePool was resolved from, so a pool switch invalidates it.
@@ -773,20 +900,36 @@ flipSortChips?.addEventListener('click', (e) => {
   if (chip) setFlipSort(chip.dataset.sort);
 });
 
+function setFlipShow(show) {
+  flipShow = show;
+  localStorage.setItem(LS_FLIP_SHOW, show);
+  flipShowChips?.querySelectorAll('.chip').forEach((chip) => {
+    chip.setAttribute('aria-pressed', String(chip.dataset.show === show));
+  });
+  renderFlipList();
+}
+flipShowChips?.addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-show]');
+  if (chip) setFlipShow(chip.dataset.show);
+});
+
 flipSearchInput?.addEventListener('input', () => {
   flipQuery = flipSearchInput.value;
   renderFlipList();
 });
 
-// Restore the persisted display preference immediately: harmless before
+// Restore the persisted display preferences immediately: harmless before
 // enterApp() ever mounts a pool (#screen-app itself stays hidden until
 // then), and means a listener who left the app in Flip mode sees Flip
 // again on their next visit rather than always starting on Spin. Only the
-// sort chips' own aria-pressed state needs a manual sync here; flipSort
-// itself was already read from localStorage above and renderFlipList()
-// (called by setFlipMode() when applicable) already sorts by it.
+// chips' own aria-pressed state needs a manual sync here; flipSort/flipShow
+// themselves were already read from localStorage above and renderFlipList()
+// (called by setFlipMode() when applicable) already sorts/filters by them.
 flipSortChips?.querySelectorAll('.chip').forEach((chip) => {
   chip.setAttribute('aria-pressed', String(chip.dataset.sort === flipSort));
+});
+flipShowChips?.querySelectorAll('.chip').forEach((chip) => {
+  chip.setAttribute('aria-pressed', String(chip.dataset.show === flipShow));
 });
 setFlipMode(flipMode);
 
@@ -855,16 +998,25 @@ async function renderFlipList() {
   ensurePoolGenresResolving(currentWallPool);
 
   const pool = flipGenrePool || currentWallPool;
-  const filtered = flip.filterPool(pool, flipQuery);
   const playedAt = journal.lastPlayedAtByAlbum();
-  const sorted = flip.sortPool(filtered, flipSort, { playedAt });
+  // Search, then Show (what's included), then Sort (how it's ordered) --
+  // three independent steps now, not one chip row standing in for two of
+  // them. filterByPlayed() only ever removes entries; sortPool() only
+  // ever reorders them (see flip.js's own comments on each).
+  const searched = flip.filterPool(pool, flipQuery);
+  const shown = flip.filterByPlayed(searched, flipShow, { playedAt });
+  const sorted = flip.sortPool(shown, flipSort, { playedAt });
 
   flipListEl.innerHTML = '';
 
   if (sorted.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'flip-empty';
-    empty.textContent = flipQuery.trim() ? 'Nothing in the crate matches that.' : 'Nothing here yet.';
+    let message = 'Nothing here yet.';
+    if (flipQuery.trim()) message = 'Nothing in the crate matches that.';
+    else if (flipShow === flip.SHOW_MODES.LISTENED) message = "You haven't listened to anything here yet.";
+    else if (flipShow === flip.SHOW_MODES.UNPLAYED) message = "You've listened to everything here.";
+    empty.textContent = message;
     flipListEl.appendChild(empty);
     return;
   }
@@ -1177,8 +1329,27 @@ const pastSessionsStreak = document.getElementById('past-sessions-streak');
 const btnClosePastSessions = document.getElementById('btn-close-past-sessions');
 const btnNewSession = document.getElementById('btn-new-session');
 
+// By session (the chronological log above) vs By album (every album ever
+// played, deduplicated, sortable) -- same toggle pattern as Spin/Flip:
+// two lenses on one screen, not a second tab. See KNOWN-DEVIATIONS.md.
+const btnSessionsModeLog = document.getElementById('btn-sessions-mode-log');
+const btnSessionsModeAlbums = document.getElementById('btn-sessions-mode-albums');
+const sessionsAlbumsView = document.getElementById('sessions-albums-view');
+const sessionsAlbumSearch = document.getElementById('sessions-album-search');
+const sessionsAlbumSortChips = document.getElementById('sessions-album-sort-chips');
+const sessionsAlbumListEl = document.getElementById('sessions-album-list');
+
+const LS_SESSIONS_MODE = 'lp_sessions_mode';
+const LS_SESSIONS_ALBUM_SORT = 'lp_sessions_album_sort';
+const SESSIONS_ALBUM_SORT_MODES = ['recent', 'alpha', 'most-played'];
+
+let sessionsMode = localStorage.getItem(LS_SESSIONS_MODE) === 'albums' ? 'albums' : 'log';
+let sessionsAlbumSort = SESSIONS_ALBUM_SORT_MODES.includes(localStorage.getItem(LS_SESSIONS_ALBUM_SORT)) ? localStorage.getItem(LS_SESSIONS_ALBUM_SORT) : 'recent';
+let sessionsAlbumQuery = '';
+
 function openPastSessions() {
   renderPastSessions();
+  if (sessionsMode === 'albums') renderSessionAlbums();
   showScreen('pastSessions');
 }
 
@@ -1245,6 +1416,156 @@ function renderPastSessions() {
     const ordinal = lifetimeCount - indexFromNewest;
     pastSessionsList.appendChild(renderSessionRow(session, ordinal));
   });
+}
+
+// ---------------------------------------------------------------------
+// By album: every album ever played through Longplayur, deduplicated,
+// searchable and sortable, built entirely on journal.js's existing
+// lifetime history (playedEntriesNewestFirst()/lastPlayedAtByAlbum()/
+// playCountsByAlbum()) -- no second played-state store, same rule Flip's
+// own build already set. Rows reuse Flip's row/letter-head/empty-state
+// classes verbatim (.flip-row, .flip-letter-head, .flip-list, .flip-empty):
+// this is the same kind of list, just fed from what you've played rather
+// than whatever pool is currently on the Wall.
+// ---------------------------------------------------------------------
+
+function setSessionsMode(mode) {
+  sessionsMode = mode;
+  localStorage.setItem(LS_SESSIONS_MODE, mode);
+  btnSessionsModeLog?.setAttribute('aria-pressed', String(mode === 'log'));
+  btnSessionsModeAlbums?.setAttribute('aria-pressed', String(mode === 'albums'));
+  if (mode === 'albums') {
+    hide(pastSessionsList);
+    show(sessionsAlbumsView);
+    renderSessionAlbums();
+  } else {
+    show(pastSessionsList);
+    hide(sessionsAlbumsView);
+  }
+}
+btnSessionsModeLog?.addEventListener('click', () => setSessionsMode('log'));
+btnSessionsModeAlbums?.addEventListener('click', () => setSessionsMode('albums'));
+// Restored immediately, same reasoning as Flip's own mode/sort restore
+// below: harmless before enterApp() ever mounts anything, and a listener
+// who left this screen on By album sees By album again next time.
+setSessionsMode(sessionsMode);
+
+function setSessionsAlbumSort(mode) {
+  sessionsAlbumSort = mode;
+  localStorage.setItem(LS_SESSIONS_ALBUM_SORT, mode);
+  sessionsAlbumSortChips?.querySelectorAll('.chip').forEach((chip) => {
+    chip.setAttribute('aria-pressed', String(chip.dataset.sort === mode));
+  });
+  renderSessionAlbums();
+}
+sessionsAlbumSortChips?.addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-sort]');
+  if (chip) setSessionsAlbumSort(chip.dataset.sort);
+});
+sessionsAlbumSortChips?.querySelectorAll('.chip').forEach((chip) => {
+  chip.setAttribute('aria-pressed', String(chip.dataset.sort === sessionsAlbumSort));
+});
+
+sessionsAlbumSearch?.addEventListener('input', () => {
+  sessionsAlbumQuery = sessionsAlbumSearch.value;
+  renderSessionAlbums();
+});
+
+/** 'recent'/'alpha' delegate straight to flip.js's own sortPool() (the
+ * data shape matches exactly); 'most-played' is local to this view --
+ * play frequency isn't a concept Flip's own pool sorting needs, so it
+ * doesn't belong in flip.js's exported SORT_MODES. */
+function sortSessionAlbums(entries, mode, context) {
+  if (mode === 'alpha') return flip.sortPool(entries, flip.SORT_MODES.ALPHA);
+  if (mode === 'most-played') {
+    return [...entries].sort((a, b) =>
+      (context.playCounts.get(b.id) || 0) - (context.playCounts.get(a.id) || 0) ||
+      (context.playedAt.get(b.id) || 0) - (context.playedAt.get(a.id) || 0)
+    );
+  }
+  return flip.sortPool(entries, flip.SORT_MODES.RECENT, context); // default 'recent'
+}
+
+function sessionAlbumDeadwax(entry, { playCounts, playedAt }) {
+  const count = playCounts.get(entry.id) || 0;
+  const plays = `${count} play${count === 1 ? '' : 's'}`;
+  const last = playedAt.get(entry.id);
+  return [plays, last ? `last ${formatDeadwaxDate(last)}` : null].filter(Boolean).join(' · ');
+}
+
+/** Tapping a row needle-drops it directly -- the same handler Wall/Flip
+ * rows already use, a new entry point into it rather than new interaction
+ * code. showScreen('app') and setFlipMode('spin') are both needed: this
+ * screen is not #screen-app at all, and the ceremony needs the Wall's own
+ * container visible to animate into (the exact failure Flip's own rows
+ * hit before that fix -- see KNOWN-DEVIATIONS.md). */
+function buildSessionAlbumRow(entry, context) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'flip-row';
+
+  const cover = document.createElement('img');
+  cover.className = 'flip-row-cover';
+  cover.alt = '';
+  if (entry.image) cover.src = entry.image;
+  row.appendChild(cover);
+
+  const meta = document.createElement('div');
+  meta.className = 'flip-meta';
+  const artist = document.createElement('div');
+  artist.className = 'flip-artist';
+  artist.textContent = entry.artist;
+  const title = document.createElement('div');
+  title.className = 'flip-album';
+  title.textContent = entry.name;
+  meta.append(artist, title);
+  row.appendChild(meta);
+
+  const dw = document.createElement('div');
+  dw.className = 'flip-deadwax';
+  dw.textContent = sessionAlbumDeadwax(entry, context);
+  row.appendChild(dw);
+
+  row.addEventListener('click', () => {
+    showScreen('app');
+    setFlipMode('spin');
+    handleSelectAlbum(entry);
+  });
+  return row;
+}
+
+function renderSessionAlbums() {
+  if (!sessionsAlbumListEl) return;
+
+  const all = journal.playedEntriesNewestFirst();
+  const context = { playedAt: journal.lastPlayedAtByAlbum(), playCounts: journal.playCountsByAlbum() };
+  const filtered = flip.filterPool(all, sessionsAlbumQuery);
+  const sorted = sortSessionAlbums(filtered, sessionsAlbumSort, context);
+
+  sessionsAlbumListEl.innerHTML = '';
+
+  if (sorted.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'flip-empty';
+    empty.textContent = sessionsAlbumQuery.trim()
+      ? 'Nothing you have played matches that.'
+      : 'Nothing here yet. Your first needle drop will show up here.';
+    sessionsAlbumListEl.appendChild(empty);
+    return;
+  }
+
+  let lastGroupKey;
+  for (const entry of sorted) {
+    const groupKey = sessionsAlbumSort === 'alpha' ? flip.groupKeyFor(entry, flip.SORT_MODES.ALPHA) : null;
+    if (groupKey !== null && groupKey !== lastGroupKey) {
+      const header = document.createElement('div');
+      header.className = 'flip-letter-head';
+      header.textContent = groupKey;
+      sessionsAlbumListEl.appendChild(header);
+      lastGroupKey = groupKey;
+    }
+    sessionsAlbumListEl.appendChild(buildSessionAlbumRow(entry, context));
+  }
 }
 
 function renderSessionRow(session, ordinal) {

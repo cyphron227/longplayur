@@ -19,7 +19,7 @@
 <script type="module">
 import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './js/ending.js';
 import { streakDays } from './js/journal.js';
-import { filterPool, sortPool, groupKeyFor, UNKNOWN_GENRE, SORT_MODES } from './js/flip.js';
+import { filterPool, sortPool, filterByPlayed, groupKeyFor, UNKNOWN_GENRE, SORT_MODES, SHOW_MODES } from './js/flip.js';
 import { buildRunoutGrid } from './js/runout.js';
 
 const results = document.getElementById('results');
@@ -277,16 +277,31 @@ assert(
   'a3 (300) then a1 (100) then the two never-played entries in their original order'
 );
 
-group('flip.sortPool: unplayed filters out anything present in the playedAt map');
+group('flip.filterByPlayed: unplayed keeps only entries absent from the playedAt map');
 assert(
-  eq(idsOf(sortPool(FLIP_POOL, SORT_MODES.UNPLAYED, { playedAt: new Map([['a3', 300], ['a1', 100]]) })), ['a2', 'a4']),
+  eq(idsOf(filterByPlayed(FLIP_POOL, SHOW_MODES.UNPLAYED, { playedAt: new Map([['a3', 300], ['a1', 100]]) })), ['a2', 'a4']),
   'only the two entries absent from playedAt remain'
+);
+
+group('flip.filterByPlayed: listened keeps only entries present in the playedAt map');
+assert(
+  eq(idsOf(filterByPlayed(FLIP_POOL, SHOW_MODES.LISTENED, { playedAt: new Map([['a3', 300], ['a1', 100]]) })), ['a1', 'a3']),
+  'only the two entries present in playedAt remain, in their original pool order'
+);
+
+group('flip.filterByPlayed: all is a no-op, with or without a playedAt map');
+assert(eq(idsOf(filterByPlayed(FLIP_POOL, SHOW_MODES.ALL)), ['a1', 'a2', 'a3', 'a4']), 'the whole pool, unchanged, even with no playedAt supplied');
+
+group('flip.sortPool: recent never removes anything, even entries with no play at all');
+assert(
+  eq(idsOf(sortPool(FLIP_POOL, SORT_MODES.RECENT, { playedAt: new Map([['a3', 300], ['a1', 100]]) })).length, 4),
+  'sorting is not filtering: all four entries are still present after a recent sort'
 );
 
 group('flip.groupKeyFor: alpha groups by the artist\'s first letter, genre by genre (or Unknown), others ungrouped');
 assert(groupKeyFor(FLIP_POOL[0], SORT_MODES.ALPHA) === 'F', 'Fleetwood Mac groups under F');
 assert(groupKeyFor(FLIP_POOL[3], SORT_MODES.GENRE) === UNKNOWN_GENRE, 'an entry with no resolved genre groups under Unknown, never invented');
-assert(groupKeyFor(FLIP_POOL[0], SORT_MODES.RECENT) === null, 'recent/unplayed have no natural sticky-header grouping');
+assert(groupKeyFor(FLIP_POOL[0], SORT_MODES.RECENT) === null, 'recent has no natural sticky-header grouping');
 
 // ---------- Runout groove: buildRunoutGrid (pure direction-selection logic) ----------
 const RUNOUT_FINISHED = {

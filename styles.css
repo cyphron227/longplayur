@@ -491,6 +491,10 @@ button { cursor: pointer; }
    at equal specificity, since author styles win ties over UA styles. */
 .flip-view[hidden] { display: none; }
 .flip-find-row { flex: 0 0 auto; margin-bottom: 10px; }
+/* Sort and Show are two separate chip rows (never one), each with its own
+   small label, so which is which is never ambiguous at a glance -- the
+   root cause of "Recently played" reading as a filter it never was. */
+.flip-chip-label { flex: 0 0 auto; display: block; margin-bottom: 6px; }
 .sort-chips { flex: 0 0 auto; display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .chip {
   background: none;
@@ -687,6 +691,44 @@ button { cursor: pointer; }
 .crate-card-art-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .crate-card-name { font-size: 13px; color: var(--bone); line-height: 1.3; }
 .crate-card-meta { font-size: 11px; color: var(--bone-dim); }
+
+/* Bag detail (a completion view for one bag/playlist, opened before it
+   commits to the Wall): same amber-ring/70%-opacity language as the
+   Wall's own zoom-out below (.item__image.is-played /
+   body.wall-zoomed-out .item__image), the values copied straight from
+   there rather than a new progress vocabulary invented for this screen. */
+.bag-detail-view {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 20px 32px;
+}
+.bag-detail-view[hidden] { display: none; }
+.bag-detail-head { margin: 6px 0 2px; }
+.bag-detail-title { font-family: var(--font-serif); font-size: 22px; color: var(--bone); margin-bottom: 6px; }
+.bag-detail-blurb { font-size: 14px; color: var(--bone-dim); max-width: 52ch; margin-bottom: 8px; }
+.bag-detail-count { display: block; color: var(--moss); }
+.bag-detail-play { align-self: flex-start; margin: 16px 0 20px; }
+
+.bag-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+}
+.bag-detail-cover { background: none; border: none; padding: 0; display: block; cursor: pointer; }
+.bag-detail-cover img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 2px;
+  display: block;
+  background: var(--obsidian-2);
+  opacity: 0.7;
+}
+.bag-detail-cover:hover img { filter: brightness(1.08); }
+.bag-detail-cover.is-played img { opacity: 1; box-shadow: 0 0 0 2px var(--amber); }
 
 .item__image.is-current { opacity: 1; }
 .item__image.is-played { box-shadow: 0 0 0 2px var(--amber); }
@@ -1065,6 +1107,18 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
 .entry-tag-btn[aria-pressed="true"] { color: var(--amber); border-color: var(--amber); }
 .session-actions { display: flex; gap: 8px; margin-top: 12px; }
 .empty-past-sessions { font-family: var(--font-serif); font-size: 18px; color: var(--bone-dim); text-align: center; padding: 64px 24px; }
+
+/* By album (a second lens on the same journal, alongside By session):
+   #screen-past-sessions itself already scrolls the whole screen, unlike
+   Flip's own view (a flex child of the separately-scrolling #screen-app),
+   so this is a plain block, not .flip-view's independent scroll region --
+   letting the outer screen's own scrollbar handle everything, one
+   scrollbar per screen, matching how the session list above it already
+   works. Row/letter-head/empty-state styling is still shared verbatim
+   with Flip (.flip-row, .flip-letter-head, .flip-list, .flip-empty, and
+   the .flip-chip-label/.sort-chips pair) -- same list, same look. */
+.sessions-albums-view { margin-top: 16px; }
+.sessions-albums-view[hidden] { display: none; }
 
 /* -------------------- Modal -------------------- */
 

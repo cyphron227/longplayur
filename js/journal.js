@@ -105,6 +105,15 @@ export function recordNeedleDrop(entry, { durationMs = null } = {}) {
     name: entry.name,
     artist: entry.artist,
     image: entry.image,
+    // Not read anywhere in this file, only by playedEntriesNewestFirst()/
+    // keeperEntriesNewestFirst() below, which hand journal entries back
+    // out as directly-playable pool-shaped picks (Runout groove's "Played
+    // before"/"From your crate", and Past sessions' By album view) --
+    // those need a real Spotify URI to needle-drop, which a bare albumId
+    // is not. Stored here so a future play of the same album need not
+    // re-derive it, though it always could (see the deterministic
+    // fallback on those two functions, for entries recorded before this).
+    uri: entry.uri ?? null,
     startedAt: now,
     durationMs,
     bagId: entry.bagId ?? null,
@@ -267,14 +276,25 @@ export function hasEntryTagSupport() {
   return loadJournal().v >= 4;
 }
 
+// Spotify album URIs are deterministic from the id (spotify:album:{id}),
+// so an entry recorded before `uri` was stored on it (see
+// recordNeedleDrop()'s own comment) still resolves to a real, correct
+// one here -- not a guess, the actual URI format, just derived instead of
+// looked up. Every consumer of playedEntriesNewestFirst()/
+// keeperEntriesNewestFirst() can therefore always needle-drop what it gets
+// back, regardless of when the underlying play was recorded.
+function albumUri(entry) {
+  return entry.uri || `spotify:album:${entry.albumId}`;
+}
+
 /** Every album ever played, reconstructed as a lightweight pool-shaped
- * entry ({id, name, artist, image} -- a journal entry already carries
- * enough of an album's own data to stand in as a real, checkable pick
- * without that album needing to be present in whatever pool is currently
- * mounted), most recently played first, deduplicated by album (a replayed
- * album keeps only its latest occurrence). Used by runout.js's "Played
- * before" direction.
- * @returns {Array<{id: string, name: string, artist: string, image: string|null}>}
+ * entry ({id, uri, name, artist, image} -- a journal entry already carries
+ * enough of an album's own data to stand in as a real, checkable, directly
+ * playable pick without that album needing to be present in whatever pool
+ * is currently mounted), most recently played first, deduplicated by
+ * album (a replayed album keeps only its latest occurrence). Used by
+ * runout.js's "Played before" direction and Past sessions' By album view.
+ * @returns {Array<{id: string, uri: string, name: string, artist: string, image: string|null}>}
  */
 export function playedEntriesNewestFirst() {
   const journal = loadJournal();
@@ -286,7 +306,7 @@ export function playedEntriesNewestFirst() {
   }
   return Array.from(byAlbum.values())
     .sort((a, b) => b.startedAt - a.startedAt)
-    .map((e) => ({ id: e.albumId, name: e.name, artist: e.artist, image: e.image }));
+    .map((e) => ({ id: e.albumId, uri: albumUri(e), name: e.name, artist: e.artist, image: e.image }));
 }
 
 /** Same shape and ordering as playedEntriesNewestFirst(), filtered to
@@ -303,7 +323,25 @@ export function keeperEntriesNewestFirst() {
   }
   return Array.from(byAlbum.values())
     .sort((a, b) => b.startedAt - a.startedAt)
-    .map((e) => ({ id: e.albumId, name: e.name, artist: e.artist, image: e.image }));
+    .map((e) => ({ id: e.albumId, uri: albumUri(e), name: e.name, artist: e.artist, image: e.image }));
+}
+
+/**
+ * How many times each album has been played, across the whole lifetime
+ * journal (every recorded needle drop, not deduplicated the way
+ * playedEntriesNewestFirst() is). Feeds Past sessions' By album view's
+ * "Most played" sort.
+ * @returns {Map<string, number>} albumId -> play count
+ */
+export function playCountsByAlbum() {
+  const journal = loadJournal();
+  const map = new Map();
+  for (const session of journal.sessions) {
+    for (const entry of session.entries) {
+      map.set(entry.albumId, (map.get(entry.albumId) || 0) + 1);
+    }
+  }
+  return map;
 }
 
 /**
