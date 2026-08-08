@@ -5,6 +5,12 @@ differs from the letter of `Docs/PRD.md` / `Docs/DESIGN-SPEC.md`, and any
 assumptions made without the ability to verify against Spotify's live
 behaviour.
 
+## "Your playlists" says none found: reconnect forced to show a real consent screen (2026-08-08)
+
+Under live investigation. `startAuthorization()` never set Spotify's `show_dialog` parameter, which per Spotify's own documented behaviour means a user who has approved this app before can be silently redirected straight back without ever seeing the consent screen again -- Spotify is free to reuse whatever was approved the first time. This app has grown its scope list twice since launch (`playlist-read-private`/`playlist-read-collaborative` for the Crates screen's "Your playlists", `user-follow-read` for New arrivals), each time genuinely needing a listener to sign out and reconnect to pick up the new permission -- and without `show_dialog`, there was never a way to be certain a "reconnect" actually re-requested (and a listener actually re-approved) the current scope list rather than Spotify quietly honouring the original, narrower one.
+
+Added `show_dialog: 'true'` to the authorize request. This does not, on its own, confirm or fix the live "No playlists found" report -- it removes one source of doubt (whether reconnecting ever meaningfully changed anything) while that report is still being diagnosed live with the listener's own DevTools output, not yet reproducible from here.
+
 ## The search query itself was searching for words that don't exist (2026-08-08)
 
 The plain-text diagnostic (see the two entries below) paid off again, immediately: `"no confident release-group match for \"Nothing (Deluxe Explicit Version)\" by \"N.E.R.D\": MusicBrainz returned zero candidates for this search"`. Zero candidates, not "found some, none confident" -- a materially different signal from every previous fix in this run, and the actual bug.

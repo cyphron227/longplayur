@@ -85,6 +85,19 @@ export async function startAuthorization() {
     code_challenge: challenge,
     state,
     scope: SCOPES,
+    // Without this, Spotify's documented default behaviour is free to
+    // silently skip the consent screen and redirect straight back for a
+    // user who has approved this app before -- normally fine, but this
+    // app has grown SCOPES more than once since launch (playlists,
+    // New arrivals), each time needing a listener to "sign out and
+    // reconnect" to actually pick up the new permission. Forcing the
+    // dialog every time removes any doubt about whether a reconnect
+    // genuinely re-requested (and the listener genuinely re-approved)
+    // the current scope list, rather than trusting Spotify's own
+    // incremental-consent behaviour to have done the right thing --
+    // reported live as "reconnected, still doesn't work", not otherwise
+    // verifiable from here (see KNOWN-DEVIATIONS.md).
+    show_dialog: 'true',
   });
 
   window.location.assign(`${AUTH_URL}?${params.toString()}`);
