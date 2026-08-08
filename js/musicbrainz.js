@@ -22,7 +22,13 @@
 // its own throttle.
 
 const MB_BASE = 'https://musicbrainz.org/ws/2';
-const LS_CACHE_PREFIX = 'lp_mbcredits_';
+// v2: bumped after fixing the multi-artist-string query bug and the
+// overly-strict exact-title match below (see KNOWN-DEVIATIONS.md) --
+// without this, every album already tried before the fix would keep
+// serving its stale, incorrectly-cached "no credits found" miss for the
+// rest of the 30-day TTL, masking the fix for exactly the albums a
+// listener had already noticed it on.
+const LS_CACHE_PREFIX = 'lp_mbcredits_v2_';
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // credit data for a specific release essentially never changes; 30 days is a generous, low-cost guess.
 
 // MusicBrainz's own search relevance score (0-100) plus a normalised title
@@ -111,16 +117,47 @@ async function mbFetch(path) {
   });
 }
 
+// Spotify titles very commonly carry an edition/remaster qualifier a
+// MusicBrainz release-group's own canonical title does not (or the other
+// way round) -- "Rumours (Remastered)" vs "Rumours", "OK Computer
+// (Deluxe Edition)" vs "OK Computer". A bare `normalize()` (punctuation/
+// case only) does not account for that, so an exact-title requirement
+// alone rejected a large share of genuine matches: reported live as
+// "credits are never found", for effectively every album tried, not a
+// handful of edge cases. Stripping this class of qualifier for the
+// comparison (not from the search query text itself, which still helps
+// MusicBrainz's own relevance scoring) recovers those without weakening
+// the actual confidence check -- MIN_CONFIDENCE_SCORE still has to be met
+// either way, this only widens what counts as "the same title".
+const TITLE_QUALIFIER_PATTERN = /[([][^()[\]]*\b(remaster(ed)?|deluxe|expanded|anniversary|edition|version|bonus|reissue|remix(ed)?|special|collector'?s?|mono|stereo)\b[^()[\]]*[)\]]/gi;
+
+function coreTitle(title) {
+  return normalize((title || '').replace(TITLE_QUALIFIER_PATTERN, ' '));
+}
+
 /** The best release-group match for artist+title, or null if nothing meets
- * MIN_CONFIDENCE_SCORE plus a normalised title match -- an unconfident
- * match is not returned at all, rather than guessed at. */
+ * MIN_CONFIDENCE_SCORE plus a title match (exact, or exact once a common
+ * edition/remaster qualifier is stripped from both sides) -- an
+ * unconfident match is not returned at all, rather than guessed at. */
 async function findReleaseGroup(artist, title) {
   const q = encodeURIComponent(`releasegroup:"${title}" AND artist:"${artist}"`);
   const data = await mbFetch(`/release-group/?query=${q}&limit=5`);
   const candidates = data?.['release-groups'] || [];
   const wantedTitle = normalize(title);
+  const wantedCore = coreTitle(title);
 
-  const best = candidates.find((rg) => (rg.score ?? 0) >= MIN_CONFIDENCE_SCORE && normalize(rg.title) === wantedTitle);
+  const best = candidates.find((rg) => {
+    if ((rg.score ?? 0) < MIN_CONFIDENCE_SCORE) return false;
+    return normalize(rg.title) === wantedTitle || coreTitle(rg.title) === wantedCore;
+  });
+  if (!best && candidates.length > 0) {
+    // Diagnostic only (fires on a miss, which is expected and common --
+    // see getAlbumCredits()'s own doc): the actual top candidate and its
+    // score, so a real "why didn't this match" question is answerable
+    // from the console rather than a total black box. Never surfaced in
+    // the UI, which shows the same quiet "No credits found" either way.
+    console.info('[musicbrainz] no confident release-group match', { artist, title, topCandidate: candidates[0]?.title, topScore: candidates[0]?.score });
+  }
   return best || null;
 }
 
@@ -132,22 +169,44 @@ async function findRelease(releaseGroupId) {
   return releases.find((r) => r.status === 'Official') || releases[0];
 }
 
-/** Release-level artist relationships (producer, engineer, etc.). Track/
- * recording-level credits (MusicBrainz often attaches "producer" to an
- * individual recording rather than the release as a whole) are out of
- * scope for this pass -- a deliberate simplification, not an oversight;
- * see KNOWN-DEVIATIONS.md. */
-async function findRelationCredits(releaseId) {
-  const data = await mbFetch(`/release/${releaseId}?inc=artist-rels`);
-  const relations = data?.relations || [];
-
-  const byRole = new Map();
-  for (const rel of relations) {
+function ingestRelations(byRole, relations) {
+  for (const rel of relations || []) {
     const label = ROLE_LABELS[rel.type];
     const name = rel.artist?.name;
     if (!label || !name) continue;
     if (!byRole.has(label)) byRole.set(label, new Set());
     byRole.get(label).add(name);
+  }
+}
+
+/** Release-level artist relationships (producer, engineer, etc.), plus a
+ * second, best-effort pass over each track's own recording-level
+ * relationships. Real MusicBrainz data attaches most production credits
+ * (producer, engineer, mixing) to individual recordings, not the release
+ * as a whole -- release-level relationships alone came back essentially
+ * always empty in live use, which is what "credits are never found"
+ * actually was for most albums, not a MusicBrainz coverage gap. The
+ * second request is wrapped in its own try/catch: if it fails (or the
+ * include token turns out to behave differently than expected -- this
+ * could not be verified against a live MusicBrainz account in this build
+ * environment, see KNOWN-DEVIATIONS.md), whatever release-level credits
+ * the first request already found still stand rather than the whole
+ * lookup failing. */
+async function findRelationCredits(releaseId) {
+  const byRole = new Map();
+
+  const releaseData = await mbFetch(`/release/${releaseId}?inc=artist-rels`);
+  ingestRelations(byRole, releaseData?.relations);
+
+  try {
+    const recordingData = await mbFetch(`/release/${releaseId}?inc=recordings+recording-level-rels`);
+    for (const medium of recordingData?.media || []) {
+      for (const track of medium.tracks || []) {
+        ingestRelations(byRole, track.recording?.relations);
+      }
+    }
+  } catch (err) {
+    console.error('[musicbrainz] recording-level credit lookup failed (release-level credits, if any, are unaffected):', err);
   }
 
   if (byRole.size === 0) return null;

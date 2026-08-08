@@ -619,7 +619,17 @@ function buildCreditsDisclosure(entry) {
     // but artist names come straight from MusicBrainz) is untrusted the
     // same way Spotify's own strings are -- built via textContent, never
     // interpolated into innerHTML.
-    const { credits } = await getAlbumCredits({ artist: entry.artist, title: entry.name });
+    //
+    // entry.artist is every credited artist joined with ", " (pool
+    // entries build it as `(album.artists || []).map(a => a.name).join(', ')`);
+    // sending that whole string as MusicBrainz's `artist:"..."` search
+    // term looks for one artist literally named "A, B", which essentially
+    // never matches. First-artist-only is the same fix genre lookups
+    // already needed for the same reason (see flip.js/runout.js's own
+    // `.split(',')[0].trim()`), and reported live as "credits are never
+    // found" -- see KNOWN-DEVIATIONS.md.
+    const primaryArtist = (entry.artist || '').split(',')[0].trim();
+    const { credits } = await getAlbumCredits({ artist: primaryArtist, title: entry.name });
     body.textContent = '';
     if (!credits || credits.length === 0) {
       body.textContent = 'No credits found.';
