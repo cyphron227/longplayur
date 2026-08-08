@@ -180,19 +180,28 @@ async function findReleaseGroup(artist, title) {
     if (!titleMatches) return false;
     return artistCreditMatches(rg, wantedArtist) || (rg.score ?? 0) >= MIN_CONFIDENCE_SCORE;
   });
-  if (!best && candidates.length > 0) {
+  if (!best) {
     // Diagnostic only (fires on a miss, which is expected and common --
-    // see getAlbumCredits()'s own doc): the actual top candidate, its
-    // credited artist(s), and its score, so a real "why didn't this
-    // match" question is answerable from the console rather than a
-    // total black box.  Never surfaced in the UI, which shows the same
-    // quiet "No credits found" either way.
-    console.info('[musicbrainz] no confident release-group match', {
-      artist, title,
-      topCandidate: candidates[0]?.title,
-      topCandidateArtist: (candidates[0]?.['artist-credit'] || []).map((c) => c.name).join(', '),
-      topScore: candidates[0]?.score,
-    });
+    // see getAlbumCredits()'s own doc): a real "why didn't this match"
+    // question is answerable from the console rather than a total black
+    // box. Never surfaced in the UI, which shows the same quiet "No
+    // credits found" either way.
+    //
+    // A single flat template-string message, not a logged object: Chrome
+    // (and most consoles) render an object argument collapsed as the
+    // literal word "Object" until a developer clicks to expand it, and a
+    // quick copy-paste of the console (exactly what happened live, see
+    // KNOWN-DEVIATIONS.md) grabs that collapsed placeholder, not the
+    // actual data inside it -- silently losing the one piece of
+    // information this diagnostic exists to capture. Every candidate is
+    // listed too, not just the top one (and "zero candidates" is its own
+    // distinct, more telling message): if the true match is candidate #3
+    // and it's visible right here, that's a completely different bug
+    // from the search itself returning nothing relevant at all.
+    const summary = candidates.length === 0
+      ? 'MusicBrainz returned zero candidates for this search'
+      : candidates.map((rg, i) => `#${i + 1} "${rg.title}" by ${(rg['artist-credit'] || []).map((c) => c.name).join(', ') || '(unknown artist)'} score=${rg.score ?? '?'}`).join(' | ');
+    console.info(`[musicbrainz] no confident release-group match for "${title}" by "${artist}": ${summary}`);
   }
   return best || null;
 }
@@ -242,7 +251,7 @@ async function findRelationCredits(releaseId) {
       }
     }
   } catch (err) {
-    console.error('[musicbrainz] recording-level credit lookup failed (release-level credits, if any, are unaffected):', err);
+    console.error(`[musicbrainz] recording-level credit lookup failed (release-level credits, if any, are unaffected): ${err?.message || err}`);
   }
 
   if (byRole.size === 0) return null;
@@ -304,7 +313,7 @@ export async function getAlbumCredits({ artist, title }) {
     setCached(artist, title, credits);
     return { credits, failed: false };
   } catch (err) {
-    console.error('[musicbrainz] credit lookup failed:', err);
+    console.error(`[musicbrainz] credit lookup failed for "${title}" by "${artist}": ${err?.message || err}`);
     return { credits: null, failed: true };
   }
 }
@@ -403,7 +412,7 @@ export async function getArtistGenre(artistName) {
     setCachedGenre(artistName, genre);
     return { genre, failed: false };
   } catch (err) {
-    console.error('[musicbrainz] artist genre lookup failed:', err);
+    console.error(`[musicbrainz] artist genre lookup failed for "${artistName}": ${err?.message || err}`);
     return { genre: null, failed: true }; // not cached here: the caller must not treat this the same as a confirmed miss.
   }
 }
