@@ -16,6 +16,7 @@ import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './ending.
 import * as journal from './journal.js';
 import * as exporter from './exporter.js';
 import { loadBagManifest, resolveBag } from './bags.js';
+import { loadCustomBags, createCustomBag, deleteCustomBag, searchCatalog } from './bagbuilder.js';
 import { loadMyPlaylists, resolvePlaylist } from './playlists.js';
 import { getNewArrivals } from './newarrivals.js';
 import { getRecordsNearby } from './nearby.js';
@@ -200,6 +201,12 @@ const cratesBtnLabel = document.getElementById('crates-btn-label');
 const cratesYourBagBtn = document.getElementById('crates-your-bag-btn');
 // Shelves (INCREMENT-03 Phase 2): record bags are grouped by their own
 // `category` field into three shelf rows rather than one flat grid.
+// Bag builder (custom record bags, js/bagbuilder.js): a "Bags you've made"
+// shelf sits alongside the seed/mood/decade ones, reusing BAG_SHELVES below
+// (grid()/count()/section()) the same way; its own count element is
+// deliberately absent -- see BAG_SHELVES.custom.
+const crateBagsCustomGrid = document.getElementById('crate-bags-custom-grid');
+const crateCreateBagBtn = document.getElementById('crate-create-bag-btn');
 const crateBagsSeedGrid = document.getElementById('crate-bags-seed-grid');
 const crateBagsSeedCountEl = document.getElementById('crate-bags-seed-count');
 const crateBagsMoodSection = document.getElementById('crate-bags-mood-section');
@@ -223,8 +230,26 @@ const bagDetailTitle = document.getElementById('bag-detail-title');
 const bagDetailBlurb = document.getElementById('bag-detail-blurb');
 const bagDetailCount = document.getElementById('bag-detail-count');
 const bagDetailPlayBtn = document.getElementById('bag-detail-play');
+const bagDetailDeleteBtn = document.getElementById('bag-detail-delete');
 const bagDetailStatus = document.getElementById('bag-detail-status');
 const bagDetailGrid = document.getElementById('bag-detail-grid');
+
+// Bag builder: creating a new custom record bag (js/bagbuilder.js) -- name
+// it, then search Spotify by album or artist name and tap covers to add
+// them. A second in-place view over cratesBody, the same pattern
+// bagDetailView already uses (hide the shelf overview, show this instead;
+// "Back" reverses it), rather than a whole new screen/tab.
+const bagBuilderView = document.getElementById('bagbuilder-view');
+const bagBuilderBack = document.getElementById('bagbuilder-back');
+const bagBuilderNameInput = document.getElementById('bagbuilder-name');
+const bagBuilderBlurbInput = document.getElementById('bagbuilder-blurb');
+const bagBuilderSearchForm = document.getElementById('bagbuilder-search-form');
+const bagBuilderSearchInput = document.getElementById('bagbuilder-search-input');
+const bagBuilderSearchStatus = document.getElementById('bagbuilder-search-status');
+const bagBuilderResultsGrid = document.getElementById('bagbuilder-results-grid');
+const bagBuilderSelectedCountEl = document.getElementById('bagbuilder-selected-count');
+const bagBuilderSaveBtn = document.getElementById('bagbuilder-save');
+
 const nearbyShelf = document.getElementById('nearby-shelf');
 const playerBarEl = document.getElementById('player-bar');
 const wakeConfirmation = document.getElementById('wake-confirmation');
@@ -438,17 +463,28 @@ function updateCrateCardArt(card, images) {
 // possible if a bag JSON fails to load) can be hidden, the same
 // no-empty-state convention used elsewhere in this app.
 const BAG_SHELVES = {
+  custom: { grid: () => crateBagsCustomGrid, count: () => null, section: () => null },
   seed: { grid: () => crateBagsSeedGrid, count: () => crateBagsSeedCountEl, section: () => null },
   mood: { grid: () => crateBagsMoodGrid, count: () => crateBagsMoodCountEl, section: () => crateBagsMoodSection },
   decade: { grid: () => crateBagsDecadeGrid, count: () => crateBagsDecadeCountEl, section: () => crateBagsDecadeSection },
 };
 
+/** A bag's own playable pool: seed/mood/decade bags resolve their
+ * {title, artist} pairs against Spotify lazily (bags.js's resolveBag(),
+ * cached there); a custom bag (js/bagbuilder.js) already stores real,
+ * previously-selected Spotify album entries directly on `.pool`, so there
+ * is nothing to resolve. */
+function bagPoolFor(bag) {
+  return bag.category === 'custom' ? Promise.resolve(bag.pool) : resolveBag(bag);
+}
+
 function renderBagCards() {
+  crateBagsCustomGrid.innerHTML = '';
   crateBagsSeedGrid.innerHTML = '';
   crateBagsMoodGrid.innerHTML = '';
   crateBagsDecadeGrid.innerHTML = '';
   const cards = new Map();
-  const counts = { seed: 0, mood: 0, decade: 0 };
+  const counts = { custom: 0, seed: 0, mood: 0, decade: 0 };
 
   for (const bag of bagManifestCache || []) {
     const category = BAG_SHELVES[bag.category] ? bag.category : 'seed';
@@ -490,7 +526,7 @@ async function loadBagPreviews(bagsToLoad, cardsById) {
     if (!card) continue;
     let pool;
     try {
-      pool = await resolveBag(bag);
+      pool = await bagPoolFor(bag);
     } catch {
       continue; // leave this card's blank placeholder; resolveBag() already handles per-album failures silently.
     }
@@ -521,11 +557,20 @@ async function renderCratesScreen() {
   cratesYourBagBtn.setAttribute('aria-pressed', String(!activeBagId && !activePlaylistId && !activeSearchQuery && !activeNewArrivals));
 
   if (!bagManifestCache) {
+    let seedBags;
     try {
-      bagManifestCache = await loadBagManifest();
+      seedBags = await loadBagManifest();
     } catch {
-      bagManifestCache = [];
+      seedBags = [];
     }
+    // Custom bags (js/bagbuilder.js) load first: they're already fully
+    // resolved (no network round trip, see bagPoolFor() above), and this is
+    // the listener's own work, so it leads the shelf order. Kept in sync by
+    // hand (not re-read from storage) once this screen has loaded it once --
+    // saveBagBuilder() and the bag-detail-delete handler below both splice
+    // bagManifestCache directly, the same "load once, then mutate in place"
+    // pattern this cache already used for seed bags.
+    bagManifestCache = [...loadCustomBags(), ...seedBags];
   }
   const cardsNeedingPreview = renderBagCards();
   if (cardsNeedingPreview.size > 0) {
@@ -616,7 +661,7 @@ async function selectBag(bagId) {
   if (!bag) return;
 
   cratesStatus.textContent = `${bag.name}. Pulling records from the shelf.`;
-  const pool = await resolveBag(bag);
+  const pool = await bagPoolFor(bag);
   if (pool.length === 0) {
     cratesStatus.textContent = `Could not resolve any records in ${bag.name} right now.`;
     return;
@@ -670,7 +715,7 @@ async function selectPlaylist(playlistId) {
 async function resolveBagDetailPool(source) {
   if (source.kind === 'bag') {
     const bag = (bagManifestCache || []).find((b) => b.id === source.id);
-    return bag ? resolveBag(bag) : [];
+    return bag ? bagPoolFor(bag) : [];
   }
   const playlist = (playlistManifestCache || []).find((p) => p.id === source.id);
   return playlist ? resolvePlaylist(playlist) : [];
@@ -705,6 +750,12 @@ async function openBagDetail(source) {
   bagDetailSource = source;
   hide(cratesBody);
   show(bagDetailView);
+
+  // Only a custom bag (js/bagbuilder.js) can be deleted here -- the six
+  // seed bags and mood/decade sets ship as static JSON, and playlists live
+  // on Spotify itself, so neither has anything for this app to delete.
+  const bagRecord = source.kind === 'bag' ? (bagManifestCache || []).find((b) => b.id === source.id) : null;
+  if (bagDetailDeleteBtn) bagDetailDeleteBtn.hidden = bagRecord?.category !== 'custom';
 
   bagDetailTitle.textContent = source.name;
   if (source.blurb) {
@@ -743,6 +794,30 @@ bagDetailPlayBtn?.addEventListener('click', () => {
   else selectPlaylist(bagDetailSource.id);
 });
 
+bagDetailDeleteBtn?.addEventListener('click', () => {
+  if (!bagDetailSource || bagDetailSource.kind !== 'bag') return;
+  const bag = (bagManifestCache || []).find((b) => b.id === bagDetailSource.id);
+  if (!bag) return;
+  if (!window.confirm(`Delete "${bag.name}"? This cannot be undone.`)) return;
+
+  deleteCustomBag(bag.id);
+  bagManifestCache = (bagManifestCache || []).filter((b) => b.id !== bag.id);
+  bagPreviewCache.delete(bag.id);
+  // Leave the Wall itself untouched even if this bag is the one currently
+  // mounted there (activeBagId === bag.id) -- deleting a bag from this
+  // list is not the same action as choosing to leave it (selectBag(null)),
+  // and forcing a crossfade away from whatever might still be playing
+  // would be a surprising side effect of a delete. Only the "currently
+  // selected" highlighting on the shelf itself needs to catch up, and it
+  // already degrades gracefully (currentSourceLabel() falls back to a
+  // generic label once activeBagId no longer resolves to a real bag).
+  if (activeBagId === bag.id) activeBagId = null;
+
+  closeBagDetail();
+  cratesStatus.textContent = `${bag.name} deleted.`;
+  renderBagCards();
+});
+
 /** Tapping one cover in the detail grid commits the whole bag/playlist to
  * the Wall (exactly what "Play this bag" does) and then needle-drops that
  * specific album, rather than only the one cover -- needling an album not
@@ -759,12 +834,138 @@ async function playBagDetailAlbum(source, entry) {
 
 function openCrates() {
   closeBagDetail(); // always land on the shelf overview, not wherever a previous visit left off.
+  hide(bagBuilderView);
+  show(cratesBody);
   showScreen('crates');
   renderCratesScreen();
 }
 cratesBtn?.addEventListener('click', openCrates);
 tabCrates.addEventListener('click', openCrates);
 cratesYourBagBtn?.addEventListener('click', () => selectBag(null));
+
+// ---------------------------------------------------------------------
+// Bag builder (js/bagbuilder.js): creating a custom record bag by hand.
+// Name it, search Spotify by album or artist name (one free-text query
+// matches both, see bagbuilder.js's own header comment), and tap covers to
+// add or remove them from the bag, across as many searches as needed --
+// selections persist in bagBuilderSelected across a fresh search rather
+// than being cleared by it. Saving stores the picked albums' pool entries
+// directly (already real, resolved Spotify albums, nothing left to
+// resolve) and drops the new bag straight onto the "Bags you've made"
+// shelf, the same shape as a seed bag from bagManifestCache's point of
+// view (see bagPoolFor() above).
+// ---------------------------------------------------------------------
+
+let bagBuilderSelected = new Map(); // id -> pool entry, insertion order preserved (a Map, not a Set of ids, since the entry itself is needed again at save time).
+
+function updateBagBuilderCoverState(cover, entry) {
+  const selected = bagBuilderSelected.has(entry.id);
+  cover.classList.toggle('is-selected', selected);
+  cover.setAttribute('aria-pressed', String(selected));
+  const label = `${entry.name} by ${entry.artist}, ${selected ? 'added to this bag' : 'not added'}`;
+  cover.setAttribute('aria-label', label);
+  cover.title = label;
+}
+
+function updateBagBuilderSaveState() {
+  const n = bagBuilderSelected.size;
+  bagBuilderSelectedCountEl.textContent = n === 1 ? '1 album selected' : `${n} albums selected`;
+  bagBuilderSaveBtn.disabled = n === 0 || !bagBuilderNameInput.value.trim();
+}
+
+function toggleBagBuilderSelection(entry, cover) {
+  if (bagBuilderSelected.has(entry.id)) bagBuilderSelected.delete(entry.id);
+  else bagBuilderSelected.set(entry.id, entry);
+  updateBagBuilderCoverState(cover, entry);
+  updateBagBuilderSaveState();
+}
+
+/** One result cover: a toggle button (aria-pressed), not a play button --
+ * tapping it adds/removes the album from the bag being built, the same
+ * "act on tap, no separate confirm step" interaction bag-detail-cover
+ * already uses for a different action. Reuses bag-detail-cover's own CSS
+ * (art, img, hover) rather than a new component; `.is-selected` shares
+ * `.is-played`'s amber-ring treatment (styles.css) since both mean "this
+ * one is already accounted for". */
+function buildBagBuilderCover(entry) {
+  const cover = document.createElement('button');
+  cover.type = 'button';
+  cover.className = 'bag-detail-cover';
+
+  const img = document.createElement('img');
+  img.alt = '';
+  if (entry.image) img.src = entry.image;
+  cover.appendChild(img);
+
+  updateBagBuilderCoverState(cover, entry);
+  cover.addEventListener('click', () => toggleBagBuilderSelection(entry, cover));
+  return cover;
+}
+
+async function performBagBuilderSearch(query) {
+  const trimmed = query.trim();
+  if (!trimmed) return;
+
+  bagBuilderSearchStatus.textContent = `Searching for "${trimmed}".`;
+  bagBuilderResultsGrid.innerHTML = '';
+  const { items, failed } = await searchCatalog(trimmed);
+  if (items.length === 0) {
+    bagBuilderSearchStatus.textContent = failed
+      ? 'Search failed. Check your connection and try again.'
+      : `No albums found for "${trimmed}". Only full albums and EPs of 6 or more tracks are shown.`;
+    return;
+  }
+  bagBuilderSearchStatus.textContent = '';
+  for (const entry of items) {
+    bagBuilderResultsGrid.appendChild(buildBagBuilderCover(entry));
+  }
+}
+
+bagBuilderSearchForm?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  performBagBuilderSearch(bagBuilderSearchInput.value);
+  bagBuilderSearchInput.blur();
+});
+
+bagBuilderNameInput?.addEventListener('input', updateBagBuilderSaveState);
+
+function openBagBuilder() {
+  bagBuilderSelected = new Map();
+  bagBuilderNameInput.value = '';
+  bagBuilderBlurbInput.value = '';
+  bagBuilderSearchInput.value = '';
+  bagBuilderResultsGrid.innerHTML = '';
+  bagBuilderSearchStatus.textContent = '';
+  updateBagBuilderSaveState();
+  hide(cratesBody);
+  show(bagBuilderView);
+  bagBuilderNameInput.focus();
+}
+crateCreateBagBtn?.addEventListener('click', openBagBuilder);
+
+function closeBagBuilder() {
+  const hasWork = bagBuilderSelected.size > 0 || bagBuilderNameInput.value.trim();
+  if (hasWork && !window.confirm('Discard this record bag? Your selections will be lost.')) return;
+  hide(bagBuilderView);
+  show(cratesBody);
+}
+bagBuilderBack?.addEventListener('click', closeBagBuilder);
+
+function saveBagBuilder() {
+  const name = bagBuilderNameInput.value.trim();
+  if (!name || bagBuilderSelected.size === 0) return; // save is disabled in this case; defensive only.
+
+  const bag = createCustomBag({ name, blurb: bagBuilderBlurbInput.value, albums: Array.from(bagBuilderSelected.values()) });
+  bagManifestCache = [bag, ...(bagManifestCache || [])];
+  bagPreviewCache.set(bag.id, bag.pool.map((entry) => entry.image).filter(Boolean).slice(0, BAG_PREVIEW_COUNT));
+
+  hide(bagBuilderView);
+  show(cratesBody);
+  cratesStatus.textContent = `${name} saved to your record bags.`;
+  announce(`${name} saved to your record bags.`);
+  renderBagCards();
+}
+bagBuilderSaveBtn?.addEventListener('click', saveBagBuilder);
 
 // ---------------------------------------------------------------------
 // Search: by artist only. Genre search was removed entirely (it used to

@@ -313,6 +313,19 @@
 
       <p id="crates-status" class="crate-status" aria-live="polite"></p>
 
+      <!-- Bags you've made: custom record bags (js/bagbuilder.js) built by
+           hand from search results, kept apart from the six shipped seed
+           bags below. Always visible (never hidden when empty) since its
+           "Create a record bag" button is the only entry point into the
+           bag builder view further down this screen. -->
+      <section class="crate-shelf">
+        <div class="crate-shelf-head">
+          <h2 class="crate-shelf-title">Bags you've made</h2>
+          <button id="crate-create-bag-btn" class="link-btn" type="button">+ Create a record bag</button>
+        </div>
+        <div id="crate-bags-custom-grid" class="crate-shelf-scroll"></div>
+      </section>
+
       <!-- Shelves (INCREMENT-03 Phase 2): grouped like a real shop instead
            of one flat list. Each shelf reuses the same bag-card / 9-cover
            preview grid component (buildCrateCard() in main.js), unchanged;
@@ -379,8 +392,47 @@
         <span id="bag-detail-count" class="deadwax bag-detail-count"></span>
       </div>
       <button id="bag-detail-play" class="btn-primary bag-detail-play" type="button">Play this bag</button>
+      <!-- Delete: shown only for a custom bag (js/bagbuilder.js) -- the
+           seed/mood/decade bags ship as static JSON and Spotify playlists
+           live on Spotify itself, so neither is this app's to delete. -->
+      <button id="bag-detail-delete" class="link-btn bag-detail-delete" type="button" hidden>Delete this record bag</button>
       <p id="bag-detail-status" class="crate-status"></p>
       <div id="bag-detail-grid" class="bag-detail-grid"></div>
+    </section>
+
+    <!-- Bag builder: creating a new custom record bag by hand -- name it,
+         then search Spotify by album or artist name and tap covers to add
+         them (js/bagbuilder.js). A second in-place view over cratesBody,
+         the same "replace, don't navigate away" pattern bag-detail-view
+         above already uses; saving returns to the shelf overview with the
+         new bag already on "Bags you've made". -->
+    <section id="bagbuilder-view" class="bag-detail-view" hidden aria-label="Create a record bag">
+      <button id="bagbuilder-back" class="link-btn" type="button">Back to record bags</button>
+      <div class="bag-detail-head">
+        <h2 class="bag-detail-title">Create a record bag</h2>
+      </div>
+
+      <div class="bagbuilder-fields">
+        <input id="bagbuilder-name" class="text-input" type="text" placeholder="Name this record bag" aria-label="Record bag name" maxlength="60" autocomplete="off">
+        <input id="bagbuilder-blurb" class="text-input" type="text" placeholder="A short description (optional)" aria-label="Record bag description" maxlength="120" autocomplete="off">
+      </div>
+
+      <form id="bagbuilder-search-form" class="search-form" aria-label="Search for an album or artist">
+        <div class="search-input-row">
+          <input id="bagbuilder-search-input" type="search" class="search-input" placeholder="Search by album or artist" aria-label="Search term" autocomplete="off">
+          <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
+            <svg class="icon"><use href="#icon-search"/></svg>
+          </button>
+        </div>
+      </form>
+
+      <p id="bagbuilder-search-status" class="crate-status" aria-live="polite"></p>
+      <div id="bagbuilder-results-grid" class="bag-detail-grid"></div>
+
+      <div class="bagbuilder-footer">
+        <span id="bagbuilder-selected-count" class="deadwax bag-detail-count">0 albums selected</span>
+        <button id="bagbuilder-save" class="btn-primary" type="button" disabled>Save record bag</button>
+      </div>
     </section>
   </section>
 
