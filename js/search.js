@@ -60,10 +60,12 @@ function toEntry(album, rank) {
   };
 }
 
-/** @returns {Promise<{items: Array, failed: boolean}>} failed distinguishes
- * "the request itself broke" from "it succeeded and legitimately found
- * nothing" -- these used to look identical, with no way to tell a real bug
- * apart from an honest empty result. */
+/** @returns {Promise<{items: Array, failed: boolean, error: Error|null}>}
+ * failed distinguishes "the request itself broke" from "it succeeded and
+ * legitimately found nothing" -- these used to look identical, with no way
+ * to tell a real bug apart from an honest empty result. `error` is the
+ * actual caught error (still also logged here), so a caller can describe
+ * *why* it failed instead of guessing -- see main.js's describeSpotifyError(). */
 async function albumsForArtist(artistId) {
   try {
     // No market param: market=from_token needs the user-read-private scope
@@ -77,20 +79,20 @@ async function albumsForArtist(artistId) {
         apiFetch(`/artists/${artistId}/albums?include_groups=album,single&limit=${ALBUMS_PAGE_LIMIT}&offset=${i * ALBUMS_PAGE_LIMIT}`)
       )
     );
-    return { items: pages.flatMap((data) => data?.items || []), failed: false };
+    return { items: pages.flatMap((data) => data?.items || []), failed: false, error: null };
   } catch (err) {
     console.error('[search] GET /artists/{id}/albums failed:', err);
-    return { items: [], failed: true };
+    return { items: [], failed: true, error: err };
   }
 }
 
 async function searchArtists(q, limit) {
   try {
     const data = await apiFetch(`/search?q=${encodeURIComponent(q)}&type=artist&limit=${limit}`);
-    return { items: data?.artists?.items || [], failed: false };
+    return { items: data?.artists?.items || [], failed: false, error: null };
   } catch (err) {
     console.error('[search] GET /search (type=artist) failed:', err);
-    return { items: [], failed: true };
+    return { items: [], failed: true, error: err };
   }
 }
 
@@ -108,19 +110,21 @@ function poolFromAlbumLists(albumLists) {
 
 /**
  * @param {string} query free-text artist name
- * @returns {Promise<{pool: Array, failed: boolean}>} pool is pool-shaped
- *   entries (same shape as albums.js/bags.js produce). failed means every
- *   underlying request broke (check the browser console for the logged
- *   error) -- distinct from a genuine, successful zero-result search.
+ * @returns {Promise<{pool: Array, failed: boolean, error: Error|null}>}
+ *   pool is pool-shaped entries (same shape as albums.js/bags.js produce).
+ *   failed means the underlying request broke -- distinct from a genuine,
+ *   successful zero-result search. `error` lets a caller describe why
+ *   (see main.js's describeSpotifyError()) instead of a blanket message
+ *   that used to say "check your connection" even for, say, a 403.
  */
 export async function searchAlbums(query) {
   const trimmed = query.trim();
-  if (!trimmed) return { pool: [], failed: false };
+  if (!trimmed) return { pool: [], failed: false, error: null };
 
   const artists = await searchArtists(trimmed, 1);
-  if (artists.failed) return { pool: [], failed: true };
-  if (artists.items.length === 0) return { pool: [], failed: false };
+  if (artists.failed) return { pool: [], failed: true, error: artists.error };
+  if (artists.items.length === 0) return { pool: [], failed: false, error: null };
 
   const albums = await albumsForArtist(artists.items[0].id);
-  return { pool: poolFromAlbumLists([albums.items]), failed: albums.failed };
+  return { pool: poolFromAlbumLists([albums.items]), failed: albums.failed, error: albums.error };
 }

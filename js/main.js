@@ -1029,10 +1029,14 @@ async function performBagBuilderSearch(query) {
   bagBuilderSearchStatus.textContent = `Searching for "${trimmed}".`;
   bagBuilderResultsGrid.innerHTML = '';
   bagBuilderResultCovers.clear();
-  const { items, failed } = await searchCatalog(trimmed);
+  const { items, failed, error } = await searchCatalog(trimmed);
   if (items.length === 0) {
+    // describeSpotifyError() names the actual cause instead of a blanket
+    // "check your connection" that used to show for any failure at all,
+    // network or not -- reported live as this search always saying "no
+    // connection" regardless of what actually broke.
     bagBuilderSearchStatus.textContent = failed
-      ? 'Search failed. Check your connection and try again.'
+      ? `Search failed. ${describeSpotifyError(error)}`
       : `No albums found for "${trimmed}". Only full albums and EPs of 6 or more tracks are shown.`;
     return;
   }
@@ -1141,10 +1145,13 @@ async function performSearch(query) {
   if (!trimmed) return;
 
   cratesStatus.textContent = `Searching for "${trimmed}".`;
-  const { pool, failed } = await searchAlbums(trimmed);
+  const { pool, failed, error } = await searchAlbums(trimmed);
   if (pool.length === 0) {
+    // describeSpotifyError() names the actual cause (a 403, a rate limit, a
+    // genuine network failure...) instead of a blanket "check your
+    // connection" that used to show for any failure at all, network or not.
     cratesStatus.textContent = failed
-      ? `Search failed. Check your connection and try again.`
+      ? `Search failed. ${describeSpotifyError(error)}`
       : `No albums found for "${trimmed}". Only full albums and EPs of 6 or more tracks are shown.`;
     return;
   }

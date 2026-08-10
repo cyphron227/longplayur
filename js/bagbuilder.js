@@ -61,19 +61,23 @@ function toEntry(album, rank) {
  * a bag by hand needs -- browsing a set of candidates across possibly
  * several artists, rather than committing up front to one artist's entire
  * back catalogue.
- * @returns {Promise<{items: Array, failed: boolean}>} pool-shaped entries;
- *   failed distinguishes a broken request from an honest zero-result search.
+ * @returns {Promise<{items: Array, failed: boolean, error: Error|null}>}
+ *   pool-shaped entries; failed distinguishes a broken request from an
+ *   honest zero-result search. `error` is the actual caught error (also
+ *   logged here), so a caller can describe *why* it failed -- see
+ *   main.js's describeSpotifyError() -- instead of a blanket "check your
+ *   connection" message even when, say, Spotify itself returned a 400.
  */
 export async function searchCatalog(query) {
   const trimmed = query.trim();
-  if (!trimmed) return { items: [], failed: false };
+  if (!trimmed) return { items: [], failed: false, error: null };
   try {
     const data = await apiFetch(`/search?q=${encodeURIComponent(trimmed)}&type=album&limit=${RESULTS_LIMIT}`);
     const items = (data?.albums?.items || []).filter(isWantedRelease).map((album, i) => toEntry(album, i));
-    return { items, failed: false };
+    return { items, failed: false, error: null };
   } catch (err) {
     console.error('[bagbuilder] GET /search (type=album) failed:', err);
-    return { items: [], failed: true };
+    return { items: [], failed: true, error: err };
   }
 }
 
