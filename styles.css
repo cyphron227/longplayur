@@ -127,6 +127,13 @@ button { cursor: pointer; }
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
 }
+/* Missing companion rule (see the longer comment above
+   .past-sessions-list[hidden] for why one is needed at all): this element
+   ships `hidden` directly in index.html and main.js only ever un-hides it
+   once a session exists (enterApp()'s show(appTabs)) -- without this, the
+   full tab bar rendered on the very first paint of the Setup screen, before
+   anyone had connected anything, over content that assumed it wasn't there. */
+.app-tabs[hidden] { display: none; }
 .mark--tabs { width: 22px; height: 22px; flex: 0 0 auto; }
 .tab-btn {
   background: none;
@@ -352,6 +359,12 @@ button { cursor: pointer; }
   gap: 16px;
   margin-bottom: 8px;
 }
+/* Missing companion rule: syncSetupPanels() toggles setup-connect-panel and
+   setup-connected-panel opposite each other (main.js), but both share this
+   one class, so without this override both panels rendered at once on
+   every load -- "Connect Spotify" and "CONNECTED / Sign out" stacked
+   together regardless of whether a session actually existed yet. */
+.setup-actions[hidden] { display: none; }
 
 .diagnostics {
   margin-top: 20px;
@@ -461,6 +474,12 @@ button { cursor: pointer; }
   overflow: hidden;
   flex: 0 0 auto;
 }
+/* Never hidden via JS until now playing panel needed to (main.js's
+   updateAppContentVisibility()) -- same missing-companion-rule bug as
+   .crates-body/.app-tabs/.setup-actions, caught here before it shipped
+   rather than after, by checking every element this session newly calls
+   hide()/show() on against this file's own established rule. */
+.mode-toggle[hidden] { display: none; }
 .mode-toggle-btn {
   background: none;
   border: none;
@@ -560,6 +579,70 @@ button { cursor: pointer; }
   .mode-toggle-btn { padding: 6px 10px; min-height: 32px; font-size: 12px; }
 }
 
+/* Now playing (main.js's nowPlayingPanelOpen): the focused view of what's
+   actually playing, replacing wall-viewport/flip-view the same way Flip
+   replaces Spin -- one content area, one thing in it. Structured like
+   .flip-view (a fixed head, then a scrolling list filling the rest) since
+   it is, functionally, the same shape: a header plus a list, not a
+   free-floating layout. */
+.nowplaying-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 4px 20px 0;
+}
+.nowplaying-view[hidden] { display: none; }
+.nowplaying-head { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; padding: 8px 0 18px; }
+.nowplaying-art { width: 76px; height: 76px; border-radius: 3px; object-fit: cover; flex: 0 0 auto; background: var(--vinyl); }
+.nowplaying-meta { min-width: 0; flex: 1 1 auto; }
+.nowplaying-album { font-family: var(--font-serif); font-size: 19px; color: var(--bone); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.nowplaying-artist { font-size: 14px; color: var(--bone-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nowplaying-deadwax { margin-top: 6px; }
+
+/* Its own scroll region, not (as first shipped) relying on .nowplaying-view
+   to scroll the whole column: with flex: 1 1 auto; min-height: 0 alone and
+   no overflow of its own, an overflowing tracklist doesn't get clipped or
+   scrolled -- it paints straight past this box's own (height-constrained)
+   bottom edge and over whatever sits below it in flow, which was
+   .nowplaying-browse. Caught visually (a Playwright screenshot showing
+   "Browse the wall instead" printed on top of a mid-list track row), not
+   guessed at -- see KNOWN-DEVIATIONS.md. Scrolling only this element (not
+   the outer view) also keeps the head and the browse footer both always
+   on screen, never scrolled away with the list. */
+.nowplaying-tracklist { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
+.nowplaying-track {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+  min-height: 44px;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.nowplaying-track:hover { background: var(--obsidian-2); }
+.nowplaying-track-num { flex: 0 0 20px; font-family: var(--font-mono); font-size: 12px; color: var(--bone-dim); text-align: right; }
+.nowplaying-track-name { flex: 1 1 auto; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nowplaying-track-duration { flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px; color: var(--bone-dim); }
+/* The track actually playing right now, kept in step with the player bar's
+   own progress (main.js's updateNowPlayingCurrentTrack(), called on every
+   tick) -- amber text rather than the Wall's own amber-ring language,
+   since a track row has no cover to ring. */
+.nowplaying-track.is-current .nowplaying-track-num,
+.nowplaying-track.is-current .nowplaying-track-name { color: var(--amber); }
+.nowplaying-track.is-current .nowplaying-track-name { font-weight: 500; }
+/* Always visible, not scrolled away with a long tracklist -- a pinned
+   footer, the same role .bagbuilder-footer plays for Save. */
+.nowplaying-browse { flex: 0 0 auto; align-self: flex-start; padding-top: 10px; border-top: 1px solid var(--line); margin-bottom: 16px; }
+
 /* -------------------- Crates screen -------------------- */
 
 /* Wall-screen entry point: a single pill showing what's currently loaded
@@ -590,6 +673,18 @@ button { cursor: pointer; }
   gap: 24px;
   padding-bottom: 32px;
 }
+/* Missing companion rule -- the actual cause of the reported "opening a
+   record bag shows it on the bottom half of the page": openBagBuilder()/
+   openBagDetail() (main.js) call hide(cratesBody) expecting it to actually
+   disappear, but without this override it stayed rendered at full
+   display: flex, so the tab line/search/grid kept occupying the top share
+   of #screen-crates's own flex column while bag-detail-view or
+   bagbuilder-view rendered in whatever was left underneath -- two views
+   stacked, not one replacing the other. Same bug class already documented
+   above .past-sessions-list[hidden] (that one hit "By album" the same way);
+   see KNOWN-DEVIATIONS.md for the full audit that found this instance and
+   two others (.app-tabs, .setup-actions) at the same time. */
+.crates-body[hidden] { display: none; }
 
 /* One line along the top, replacing what used to be a "Your Record Bag"
    button plus three separately-titled, always-visible shelves (seed,
@@ -1316,6 +1411,13 @@ body.wall-zoomed-out .item__image.is-played { opacity: 1; }
      .crackle-hint's positioning below. */
   .wall-viewport {
     margin-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+  }
+  /* .nowplaying-browse (not .nowplaying-view, which no longer scrolls
+     itself -- .nowplaying-tracklist does) is the element that actually
+     sits at the bottom of the column on a phone; it needs to clear the
+     fixed player bar the same way .wall-viewport's own margin does. */
+  .nowplaying-browse {
+    margin-bottom: calc(16px + 140px + env(safe-area-inset-bottom, 0px));
   }
   .crackle-hint {
     position: fixed;

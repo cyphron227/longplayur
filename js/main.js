@@ -392,6 +392,14 @@ async function switchWallPool(pool) {
     // once the fade-out has actually finished, not mid-fade.
     await delay(prefersReducedMotion() ? 150 : 600);
     if (wallApi) wallApi.destroy();
+    // Choosing a bag/playlist/search result is a request to browse it, the
+    // same "Spin/Flip wins over Now Playing" rule setFlipMode() already
+    // applies -- and must happen before renderWallDom() below, not after:
+    // DomeGallery measures wallViewport's own visible size at mount time,
+    // so it needs to already be display: flex (not hidden behind the
+    // now-playing panel) the moment initWall() runs.
+    nowPlayingPanelOpen = false;
+    updateAppContentVisibility();
     renderWallDom(pool);
     setWallPrompt(pool);
     requestAnimationFrame(() => wallContainer.classList.remove('is-fading'));
@@ -1173,6 +1181,19 @@ const flipSortChips = document.getElementById('flip-sort-chips');
 const flipShowChips = document.getElementById('flip-show-chips');
 const flipListEl = document.getElementById('flip-list');
 
+// Now playing (the focused tracklist view, see its own section further
+// down): a third content area alongside wall-viewport/flip-view, opened
+// automatically on a needle drop rather than chosen via the Spin/Flip
+// toggle -- see openNowPlayingPanel()'s own comment for why it isn't a
+// third mode-toggle button.
+const nowPlayingView = document.getElementById('nowplaying-view');
+const nowPlayingArt = document.getElementById('nowplaying-art');
+const nowPlayingAlbum = document.getElementById('nowplaying-album');
+const nowPlayingArtist = document.getElementById('nowplaying-artist');
+const nowPlayingDeadwax = document.getElementById('nowplaying-deadwax');
+const nowPlayingTracklist = document.getElementById('nowplaying-tracklist');
+const nowPlayingBrowseBtn = document.getElementById('nowplaying-browse');
+
 const LS_FLIP_MODE = 'lp_flip_mode';
 const LS_FLIP_SORT = 'lp_flip_sort';
 const LS_FLIP_SHOW = 'lp_flip_show';
@@ -1183,6 +1204,13 @@ let flipShow = Object.values(flip.SHOW_MODES).includes(localStorage.getItem(LS_F
 let flipQuery = '';
 let flipGenrePool = null; // currentWallPool, augmented with .genre, once resolved; null until resolveGenres() finishes for this pool.
 let flipGenrePoolFor = null; // which pool (by reference) flipGenrePool was resolved from, so a pool switch invalidates it.
+
+// Not persisted (unlike flipMode): resets to closed every fresh visit to
+// Now Playing, then reopens itself the moment the next needle drop
+// commits -- "what's playing" is a fact about the current moment, not a
+// display preference worth remembering across sessions the way Spin/Flip is.
+let nowPlayingPanelOpen = false;
+let nowPlayingRenderedForAlbumId = null; // which album's tracklist rows are currently built, so a progress tick (updateNowPlayingCurrentTrack()) never needs to rebuild them, only re-highlight one.
 
 /**
  * Kicks off flip.resolveGenres() for `pool` if it isn't already resolved
@@ -1218,22 +1246,158 @@ function onWallPoolChanged() {
   if (flipMode === 'flip') renderFlipList();
 }
 
-function setFlipMode(mode) {
-  flipMode = mode;
-  localStorage.setItem(LS_FLIP_MODE, mode);
-  btnModeSpin.setAttribute('aria-pressed', String(mode === 'spin'));
-  btnModeFlip.setAttribute('aria-pressed', String(mode === 'flip'));
-  if (mode === 'flip') {
+/** Shows exactly one of the three #screen-app content areas -- Now
+ * Playing, Spin (the dome) or Flip (the searchable list) -- never more
+ * than one, the same "hide(x); show(y)" pairing bag-detail-view/cratesBody
+ * already use, just with a third option. Also toggles the mode-toggle and
+ * wall-prompt, both of which are about *choosing* an album (Spin/Flip is a
+ * browsing preference, wall-prompt narrates the pool you're browsing) and
+ * so have nothing useful to say while Now Playing owns the screen instead. */
+function updateAppContentVisibility() {
+  if (nowPlayingPanelOpen) {
+    hide(wallViewport);
+    hide(flipView);
+    show(nowPlayingView);
+    hide(modeToggle);
+    hide(wallPrompt);
+    return;
+  }
+  show(modeToggle);
+  show(wallPrompt);
+  hide(nowPlayingView);
+  if (flipMode === 'flip') {
     hide(wallViewport);
     show(flipView);
-    renderFlipList();
   } else {
     show(wallViewport);
     hide(flipView);
   }
 }
+
+function setFlipMode(mode) {
+  flipMode = mode;
+  localStorage.setItem(LS_FLIP_MODE, mode);
+  btnModeSpin.setAttribute('aria-pressed', String(mode === 'spin'));
+  btnModeFlip.setAttribute('aria-pressed', String(mode === 'flip'));
+  // Explicitly choosing Spin or Flip is a request to browse, which always
+  // wins over Now Playing still being open from the last needle drop --
+  // playback itself is untouched, only which content area is on screen.
+  nowPlayingPanelOpen = false;
+  updateAppContentVisibility();
+  if (mode === 'flip') renderFlipList();
+}
 btnModeSpin?.addEventListener('click', () => setFlipMode('spin'));
 btnModeFlip?.addEventListener('click', () => setFlipMode('flip'));
+
+// ---------------------------------------------------------------------
+// Now playing: the focused view of what's actually playing -- cover,
+// album/artist, and its full tracklist -- opened automatically the moment
+// a needle drop commits (handleNeedleDrop()/handleSelectAlbum() call
+// openNowPlayingPanel() in their own success path) rather than offered as
+// a third Spin/Flip choice: Spin and Flip are both ways to *browse* the
+// same mounted pool, a genuinely comparable pair: Now Playing isn't a way
+// of browsing at all, so it isn't in that toggle group, and "Browse the
+// wall instead" (nowPlayingBrowseBtn below) is the one way back out of it,
+// deliberately reusing Runout groove's own escape-hatch copy.
+// ---------------------------------------------------------------------
+
+function openNowPlayingPanel() {
+  nowPlayingPanelOpen = true;
+  updateAppContentVisibility();
+  renderNowPlayingPanel();
+}
+nowPlayingBrowseBtn?.addEventListener('click', () => setFlipMode('spin'));
+
+function nowPlayingDeadwaxLine(entry, context) {
+  const year = (entry.releaseDate || '').slice(0, 4);
+  const trackCount = context?.tracks?.length ?? entry.totalTracks ?? null;
+  return [entry.artist, year, trackCount ? `${trackCount} tracks` : null].filter(Boolean).join(' · ');
+}
+
+/** One tracklist row. A toggle-free button (not aria-pressed -- tapping it
+ * always means "play this track", never "deselect it"), matching how a
+ * real tracklist behaves rather than reusing the Wall's own selection-
+ * preview interaction, which needs a whole album to needle-drop onto. */
+function buildNowPlayingTrackRow(track, index) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'nowplaying-track';
+  row.dataset.index = String(index);
+
+  const num = document.createElement('span');
+  num.className = 'nowplaying-track-num';
+  num.textContent = String(track.track_number ?? index + 1);
+
+  const name = document.createElement('span');
+  name.className = 'nowplaying-track-name';
+  name.textContent = track.name || `Track ${index + 1}`;
+
+  const duration = document.createElement('span');
+  duration.className = 'nowplaying-track-duration';
+  duration.textContent = formatDuration(track.duration_ms || 0);
+
+  row.append(num, name, duration);
+  row.addEventListener('click', () => {
+    playback.playTrackAtIndex(index).catch((err) => {
+      wallPrompt.textContent = describeSpotifyError(err); // wallPrompt is hidden while this panel is open, but is exactly the existing "something went wrong" surface once the listener browses back to Spin/Flip.
+    });
+  });
+  return row;
+}
+
+/** Rebuilds the header and tracklist for whatever's currently playing
+ * (currentPlayingEntry/playback.getCurrentContext()) -- only when the
+ * album has actually changed (nowPlayingRenderedForAlbumId), never on a
+ * plain progress tick; updateNowPlayingCurrentTrack() (called every tick,
+ * from updatePlayerBar()) does the cheap part of that on its own. */
+function renderNowPlayingPanel() {
+  const entry = currentPlayingEntry;
+  if (!entry) return;
+  const context = playback.getCurrentContext();
+
+  nowPlayingArt.src = entry.image || '';
+  nowPlayingAlbum.textContent = entry.name;
+  nowPlayingArtist.textContent = entry.artist;
+  nowPlayingDeadwax.textContent = nowPlayingDeadwaxLine(entry, context);
+
+  nowPlayingTracklist.innerHTML = '';
+  const tracks = context?.tracks || [];
+  if (tracks.length === 0) {
+    // Not expected in the normal flow (the ceremony always awaits
+    // prepareAlbum() before a needle drop can commit), but a genuine
+    // fetch failure there degrades to an empty tracks array rather than
+    // throwing -- this is the honest fallback for that case, not a
+    // "loading" message that would never resolve.
+    const empty = document.createElement('p');
+    empty.className = 'crate-status';
+    empty.textContent = 'Could not load the tracklist for this album.';
+    nowPlayingTracklist.appendChild(empty);
+  } else {
+    tracks.forEach((track, index) => nowPlayingTracklist.appendChild(buildNowPlayingTrackRow(track, index)));
+  }
+  nowPlayingRenderedForAlbumId = entry.id;
+  updateNowPlayingCurrentTrack();
+}
+
+/** The cheap per-tick update: re-highlight whichever row matches the
+ * player bar's own current track (latestViewModel.trackId), scrolling it
+ * into view so the listener never has to hunt for where playback actually
+ * is in a long tracklist. A no-op whenever the panel isn't the visible
+ * content area, or its rows don't match the album actually playing (a
+ * progress tick arriving mid-transition between two albums). */
+function updateNowPlayingCurrentTrack() {
+  if (!nowPlayingPanelOpen || !currentPlayingEntry || nowPlayingRenderedForAlbumId !== currentPlayingEntry.id) return;
+  nowPlayingTracklist.querySelectorAll('.nowplaying-track.is-current').forEach((row) => row.classList.remove('is-current'));
+  const trackId = latestViewModel?.trackId;
+  if (!trackId) return;
+  const index = (playback.getCurrentContext()?.tracks || []).findIndex((t) => t.id === trackId);
+  if (index === -1) return;
+  const row = nowPlayingTracklist.querySelector(`.nowplaying-track[data-index="${index}"]`);
+  if (row) {
+    row.classList.add('is-current');
+    row.scrollIntoView({ block: 'nearest' });
+  }
+}
 
 function setFlipSort(mode) {
   flipSort = mode;
@@ -1412,6 +1576,7 @@ async function handleNeedleDrop(entry) {
     const { session, sessionOrdinal } = journal.recordNeedleDrop(entry, { durationMs });
     currentSessionId = session.id;
     wallPrompt.textContent = `Session ${sessionOrdinal} · now playing`;
+    openNowPlayingPanel(); // the ceremony's own animation has already fully settled by this point (needleDrop() only resolves once it has), so this is never competing with it for the screen.
   } catch (err) {
     if (err instanceof SpotifyApiError && err.status === 403) {
       wallApi.markUnavailable(entry.id);
@@ -1458,6 +1623,7 @@ async function handleSelectAlbum(entry) {
     const { session, sessionOrdinal } = journal.recordNeedleDrop(entry, { durationMs });
     currentSessionId = session.id;
     wallPrompt.textContent = `Session ${sessionOrdinal} · now playing`;
+    openNowPlayingPanel(); // see handleNeedleDrop()'s own identical call for why this is safe to do right here.
   } catch (err) {
     if (err instanceof SpotifyApiError && err.status === 403) {
       wallApi.markUnavailable(entry.id);
@@ -1638,6 +1804,7 @@ function updatePlayerBar(viewModel) {
   transportApi.update(viewModel);
   updateMediaSessionMetadata(viewModel);
   updateMiniNowPlaying();
+  updateNowPlayingCurrentTrack();
 
   if (currentAlbumId) updateTonearmProgress(currentAlbumId, viewModel.elapsedMs || 0, viewModel.totalMs || 0);
 

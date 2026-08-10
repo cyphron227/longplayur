@@ -101,6 +101,8 @@ The direct, no-preview version of this choreography (recede straight into disc/c
 
 First needle drop ever shows a one-time deadwax hint under the player bar: `CRACKLE ON · TOGGLE IN THE HEADER`.
 
+**After the ceremony settles:** the moment a needle drop commits, the Now Playing tab's content area switches from the Wall (Spin) or Flip to a focused Now Playing panel -- cover, album/artist, and the full tracklist, current track highlighted -- rather than leaving the listener still looking at the browsable dome around the hero cover. This never interrupts the choreography above, which has already fully finished by the time it happens. "Browse the wall instead" is the one way back to Spin.
+
 ### Runout groove (album end)
 | t | What |
 |---|---|

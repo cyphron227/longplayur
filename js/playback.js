@@ -142,6 +142,7 @@ function publishViewModelFromSdk(state) {
   const track = state.track_window?.current_track;
   if (!track) return;
   handlers.onPlayerBarUpdate?.({
+    trackId: track.id ?? null,
     trackName: track.name,
     albumName: track.album?.name ?? currentContext?.entry?.name ?? '',
     artistName: (track.artists || []).map((a) => a.name).join(', '),
@@ -157,6 +158,7 @@ function publishViewModelFromSdk(state) {
 function publishViewModelFromConnect(state, snapshot) {
   if (!state?.item) return;
   handlers.onPlayerBarUpdate?.({
+    trackId: state.item.id ?? null,
     trackName: state.item.name,
     albumName: state.item.album?.name ?? currentContext?.entry?.name ?? '',
     artistName: (state.item.artists || []).map((a) => a.name).join(', '),
@@ -235,7 +237,7 @@ export function getMode() {
  */
 export async function prepareAlbum(entry) {
   const album = await api.getAlbum(entry.id);
-  const tracks = (album.tracks?.items || []).map((t) => ({ id: t.id, duration_ms: t.duration_ms, track_number: t.track_number }));
+  const tracks = (album.tracks?.items || []).map((t) => ({ id: t.id, name: t.name, duration_ms: t.duration_ms, track_number: t.track_number }));
   const totalDurationMs = tracks.reduce((sum, t) => sum + t.duration_ms, 0);
   currentContext = {
     entry,
@@ -273,6 +275,15 @@ export async function commitPlayback() {
 export async function playAlbum(entry) {
   await prepareAlbum(entry);
   return commitPlayback();
+}
+
+/** Jumps straight to one track of the already-committed album (the Now
+ * Playing tracklist's own "tap a track to play it" interaction) -- same
+ * underlying call as commitPlayback(), just with a non-zero offset into
+ * the same context, so it works identically on both SDK and Connect. */
+export async function playTrackAtIndex(index) {
+  if (!currentContext) throw new Error('No album prepared.');
+  await api.playContext(deviceId, currentContext.entry.uri, index);
 }
 
 export function getCurrentContext() {

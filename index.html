@@ -275,6 +275,29 @@
       <div id="flip-list" class="flip-list"></div>
     </section>
 
+    <!-- Now playing: the focused view of whatever is actually playing --
+         cover, album/artist, and its full tracklist -- rather than the
+         Wall's own browse-and-choose dome sitting behind it. Opens
+         automatically the moment a needle drop commits (handleNeedleDrop()/
+         handleSelectAlbum() in main.js) and replaces wall-viewport/flip-view
+         entirely rather than layering over them; "Browse the wall instead"
+         (the same copy Runout groove's own escape hatch already uses)
+         is the one way back to Spin/Flip, mirroring that screen's own
+         "you chose to look, not to keep listening" framing. Tapping a
+         track jumps straight to it (playback.playTrackAtIndex()). -->
+    <section id="nowplaying-view" class="nowplaying-view" hidden aria-label="Now playing">
+      <div class="nowplaying-head">
+        <img id="nowplaying-art" class="nowplaying-art" alt="">
+        <div class="nowplaying-meta">
+          <div id="nowplaying-album" class="nowplaying-album"></div>
+          <div id="nowplaying-artist" class="nowplaying-artist"></div>
+          <div id="nowplaying-deadwax" class="nowplaying-deadwax deadwax"></div>
+        </div>
+      </div>
+      <div id="nowplaying-tracklist" class="nowplaying-tracklist" role="list" aria-label="Tracklist"></div>
+      <button id="nowplaying-browse" class="link-btn nowplaying-browse" type="button">Browse the wall instead</button>
+    </section>
+
     <!-- The transport: mounted by js/transport.bundle.js (react-h5-audio-player's
          shell, driven entirely by our own playback state -- see
          transport/src/Transport.tsx for why: Spotify's SDK renders audio
