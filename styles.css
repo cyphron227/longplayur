@@ -591,20 +591,37 @@ button { cursor: pointer; }
   padding-bottom: 32px;
 }
 
-.crates-your-bag-btn {
+/* One line along the top, replacing what used to be a "Your Record Bag"
+   button plus three separately-titled, always-visible shelves (seed,
+   mood, decade) stacked underneath each other: a tab picks which set of
+   bags fills the one .crate-grid below, so the screen's height no longer
+   grows with how many categories happen to be shipped, leaving more of a
+   short viewport (and, on screens other than Now Playing, .mini-now-playing
+   further down #app) actually visible without scrolling. */
+.crates-tabs-row {
   flex: 0 0 auto;
-  align-self: flex-start;
-  margin: 16px 20px 0;
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  color: var(--bone-dim);
-  padding: 8px 14px;
-  min-height: 40px;
-  transition: color var(--dur-touch) var(--ease), border-color var(--dur-touch) var(--ease), background var(--dur-touch) var(--ease);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 16px 20px 0;
 }
-.crates-your-bag-btn:hover { color: var(--bone); border-color: var(--bone-dim); }
-.crates-your-bag-btn[aria-pressed="true"] { color: var(--obsidian); background: var(--amber); border-color: var(--amber); }
+.crates-tabs { display: flex; gap: 4px 18px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.crates-tab {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--bone-dim);
+  font-size: 14px;
+  white-space: nowrap;
+  padding: 10px 2px;
+  min-height: 44px;
+  transition: color var(--dur-touch) var(--ease), border-color var(--dur-touch) var(--ease);
+}
+.crates-tab:hover { color: var(--bone); }
+.crates-tab[aria-pressed="true"] { color: var(--bone); border-bottom-color: var(--amber); }
+.crates-create-btn { flex: 0 0 auto; margin-left: auto; white-space: nowrap; }
 
 .search-form { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 20px 0; }
 .search-input-row { display: flex; gap: 8px; }
@@ -623,37 +640,22 @@ button { cursor: pointer; }
 .search-submit-btn { flex: 0 0 auto; min-height: 40px; }
 
 .crate-status { font-size: 13px; color: var(--bone-dim); margin: 0 0 10px; padding: 0 20px; }
-/* #crate-playlists-status already sits inside a .crate-shelf, which supplies
-   its own 20px horizontal padding -- without this, it would double up. */
-.crate-shelf .crate-status { padding: 0; }
 
-/* Shelves (INCREMENT-03 Phase 2): a heading, a small count/label in mono
-   caps, then a horizontally scrolling row -- per the mockup's .shelf
-   pattern, grouping the same bag-card component instead of one flat grid. */
-.crate-shelf { flex: 0 0 auto; padding: 0 20px; }
-.crate-shelf[hidden] { display: none; }
-.crate-shelf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.crate-shelf-title {
-  font-family: var(--font-serif);
-  font-size: 16px;
-  color: var(--bone);
-  margin: 0;
+/* Replaces the old per-category .crate-shelf-scroll (a horizontally
+   scrolling row, one per shelf): a single wrapping grid for whichever tab
+   is active. auto-fill/minmax already scales column count with viewport
+   width on its own -- a phone gets 2 to 3 columns, a wide desktop window
+   many more -- with no separate breakpoint needed for this piece. */
+.crate-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+  padding: 4px 20px 24px;
+  align-content: start;
 }
-.crate-shelf-count { flex: 0 0 auto; }
-.crate-shelf-scroll {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-  scroll-snap-type: x proximity;
-}
-.crate-shelf-scroll::-webkit-scrollbar { height: 4px; }
-.crate-shelf-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
-
 .crate-card {
-  flex: 0 0 148px;
-  width: 148px;
-  scroll-snap-align: start;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -733,27 +735,105 @@ button { cursor: pointer; }
    than a new one -- both mean "this one is already accounted for". */
 .bag-detail-cover.is-played img, .bag-detail-cover.is-selected img { opacity: 1; box-shadow: 0 0 0 2px var(--amber); }
 
-.bag-detail-delete { color: var(--ember); align-self: flex-start; margin: 4px 0 8px; }
+/* Edit/Delete (custom bags only, main.js's openBagDetail()): a row below
+   Play, not stacked, so this view's own height doesn't grow just because
+   an owned bag has two extra actions a shipped one doesn't. */
+.bag-detail-owner-actions { display: flex; align-items: center; gap: 4px 20px; flex-wrap: wrap; margin: -6px 0 4px; }
+.bag-detail-owner-actions[hidden] { display: none; }
+.bag-detail-delete { color: var(--ember); }
 
-/* Bag builder (js/bagbuilder.js): name/blurb fields, then the same
-   .search-form/.bag-detail-grid components bag-detail-view and the Crates
-   screen's own search already use, so only the parts genuinely new to this
-   view -- the fields and the save footer -- need their own rules. */
+/* Bag builder (js/bagbuilder.js): name/blurb fields, an "In this bag" grid
+   of what's already picked (so it stays visible, and removable, across as
+   many further searches as it takes -- not just a running count), then
+   "Add albums" (the same .search-form/.bag-detail-grid components
+   bag-detail-view and the Crates screen's own search already use). Wider
+   than the narrow single-column phone layout from tablet width up: the
+   fields sit side by side, freeing vertical room for the two album grids,
+   which is where this view actually needs the space. */
+.bagbuilder-view { gap: 4px; }
 .bagbuilder-fields { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
+@media (min-width: 640px) {
+  .bagbuilder-fields { flex-direction: row; }
+  .bagbuilder-fields > input:first-child { flex: 1 1 40%; }
+  .bagbuilder-fields > input:last-child { flex: 1 1 60%; }
+}
+.bagbuilder-section { margin-top: 14px; }
+/* "Add albums" is the section actually worth growing: on a tall viewport
+   (or once "In this bag" is short, the common case early on) it takes
+   whatever vertical room is left in the scrolling view instead of the
+   fields/heading block eating a fixed share of it. */
+.bagbuilder-section-grow { flex: 1 1 auto; }
+.bagbuilder-section-title {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  color: var(--bone);
+  margin: 0 0 8px;
+}
 /* .search-form and .crate-status both assume a container with no
-   horizontal padding of its own (the Crates screen's shelves each add
-   their own 20px, see .crate-shelf's own comment above); .bag-detail-view
-   already supplies 20px here, so both need it zeroed to avoid a doubled
-   indent, the same fix .crate-shelf .crate-status already applies. */
+   horizontal padding of its own (the Crates screen's shelves used to each
+   add their own 20px); .bag-detail-view already supplies 20px here, so
+   both need it zeroed to avoid a doubled indent. */
 .bagbuilder-view .search-form { padding: 10px 0 0; }
 .bagbuilder-view .crate-status { padding: 0; }
+#bagbuilder-selected-grid.bag-detail-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+/* .bag-detail-grid sets display: grid unconditionally, which (per this
+   file's own established rule -- see the comment above .flip-view[hidden]
+   and its siblings) outranks the plain UA [hidden] rule once an author
+   stylesheet sets any display value at all; #bagbuilder-selected-grid is
+   the one .bag-detail-grid actually toggled hidden (empty until the first
+   album is added), so it alone needs the companion override. */
+#bagbuilder-selected-grid[hidden] { display: none; }
+/* Pinned to the bottom of the scrolling view rather than sitting in
+   ordinary flow after a potentially long "Add albums" results grid --
+   Save should never require scrolling all the way down to reach, on any
+   viewport height. Its own background stops scrolled-past covers showing
+   through underneath it. */
 .bagbuilder-footer {
+  position: sticky;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 16px;
+  margin: 16px -20px 0;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--obsidian);
+  border-top: 1px solid var(--line);
 }
+
+/* Mini now playing (index.html, a persistent flex child of #app rather
+   than living inside any one .screen): visible on every screen except Now
+   Playing itself. An ordinary flex row, not position: fixed like the
+   transport bar's own mobile layout -- the currently visible .screen
+   already shrinks to make room for it for free (flex: 1 1 auto; min-height:
+   0), no magic-number margin needed. */
+.mini-now-playing {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: var(--obsidian-2);
+  border: none;
+  border-top: 1px solid var(--line);
+  padding: 8px 20px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  text-align: left;
+  transition: background var(--dur-touch) var(--ease);
+}
+.mini-now-playing:hover { background: var(--obsidian); }
+.mini-now-playing[hidden] { display: none; }
+.mini-now-playing-art {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 2px;
+  object-fit: cover;
+  background: var(--vinyl);
+}
+.mini-now-playing-text { min-width: 0; flex: 1 1 auto; }
+.mini-now-playing-track { font-size: 13px; color: var(--bone); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-now-playing-artist { font-size: 12px; color: var(--bone-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .item__image.is-current { opacity: 1; }
 .item__image.is-played { box-shadow: 0 0 0 2px var(--amber); }

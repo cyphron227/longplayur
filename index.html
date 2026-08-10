@@ -296,7 +296,26 @@
        have room to breathe; selecting anything here returns to Now playing. -->
   <section id="screen-crates" class="screen" hidden>
     <div class="crates-body">
-      <button id="crates-your-bag-btn" class="crates-your-bag-btn deadwax" type="button">Your Record Bag</button>
+      <!-- One line along the top, not a stack of shelves: "Your record
+           bags" (Your Record Bag itself is the first card in it, see
+           main.js's buildYourRecordBagCard()), "By mood" and "By decade"
+           switch which set of bags fills the one grid below, and
+           "Playlists" folds in what used to be its own always-visible
+           shelf. Trades the old horizontally-scrolling shelf-per-category
+           layout for a single wrapping grid, so the space a browsed
+           category needs no longer depends on how many *other* categories
+           happen to be shipped -- and leaves room below for what's
+           actually playing (js/main.js's mini-now-playing strip) on
+           screens other than Now Playing itself. -->
+      <div class="crates-tabs-row">
+        <div id="crates-tabs" class="crates-tabs" role="group" aria-label="Record bag set">
+          <button class="crates-tab" type="button" data-tab="yours" aria-pressed="true">Your record bags</button>
+          <button class="crates-tab" type="button" data-tab="mood" aria-pressed="false">By mood</button>
+          <button class="crates-tab" type="button" data-tab="decade" aria-pressed="false">By decade</button>
+          <button class="crates-tab" type="button" data-tab="playlists" aria-pressed="false">Playlists</button>
+        </div>
+        <button id="crate-create-bag-btn" class="link-btn crates-create-btn" type="button">+ Create a record bag</button>
+      </div>
 
       <!-- Genre search removed entirely: live testing found it returning
            wrong results for real genre terms ("African music", "Brazilian"
@@ -312,69 +331,13 @@
       </form>
 
       <p id="crates-status" class="crate-status" aria-live="polite"></p>
+      <!-- Playlists only: loaded lazily the first time this tab is opened
+           (a live API call, unlike the record bags above), so it needs its
+           own loading/empty/error line rather than sharing crates-status,
+           which performSearch()/selectBag() etc. also write to. -->
+      <p id="crate-playlists-status" class="crate-status" hidden></p>
 
-      <!-- Bags you've made: custom record bags (js/bagbuilder.js) built by
-           hand from search results, kept apart from the six shipped seed
-           bags below. Always visible (never hidden when empty) since its
-           "Create a record bag" button is the only entry point into the
-           bag builder view further down this screen. -->
-      <section class="crate-shelf">
-        <div class="crate-shelf-head">
-          <h2 class="crate-shelf-title">Bags you've made</h2>
-          <button id="crate-create-bag-btn" class="link-btn" type="button">+ Create a record bag</button>
-        </div>
-        <div id="crate-bags-custom-grid" class="crate-shelf-scroll"></div>
-      </section>
-
-      <!-- Shelves (INCREMENT-03 Phase 2): grouped like a real shop instead
-           of one flat list. Each shelf reuses the same bag-card / 9-cover
-           preview grid component (buildCrateCard() in main.js), unchanged;
-           only the grouping and the grid's own layout (a horizontally
-           scrolling row here, not a CSS grid) are new. -->
-      <section class="crate-shelf">
-        <div class="crate-shelf-head">
-          <h2 class="crate-shelf-title">Your record bags</h2>
-          <span id="crate-bags-seed-count" class="crate-shelf-count deadwax"></span>
-        </div>
-        <div id="crate-bags-seed-grid" class="crate-shelf-scroll"></div>
-      </section>
-
-      <section id="crate-bags-mood-section" class="crate-shelf">
-        <div class="crate-shelf-head">
-          <h2 class="crate-shelf-title">By mood</h2>
-          <span id="crate-bags-mood-count" class="crate-shelf-count deadwax"></span>
-        </div>
-        <div id="crate-bags-mood-grid" class="crate-shelf-scroll"></div>
-      </section>
-
-      <section id="crate-bags-decade-section" class="crate-shelf">
-        <div class="crate-shelf-head">
-          <h2 class="crate-shelf-title">By decade</h2>
-          <span id="crate-bags-decade-count" class="crate-shelf-count deadwax"></span>
-        </div>
-        <div id="crate-bags-decade-grid" class="crate-shelf-scroll"></div>
-      </section>
-
-      <!-- New arrivals (INCREMENT-02 Phase 1): latest releases from artists
-           the user follows. Hidden entirely (not shown empty/broken) if
-           GET /me/following fails or the user follows nobody, matching
-           Records nearby's own silent-hide convention -- also the
-           feature-detection case INCREMENT-03 Phase 2 asks for: this shelf
-           simply never un-hides itself if INCREMENT-02 Phase 1 is not present. -->
-      <section id="crate-newarrivals-section" class="crate-shelf" hidden>
-        <div class="crate-shelf-head">
-          <h2 class="crate-shelf-title">New arrivals</h2>
-        </div>
-        <div id="crate-newarrivals-grid" class="crate-shelf-scroll"></div>
-      </section>
-
-      <section class="crate-shelf">
-        <div class="crate-shelf-head">
-          <h2 class="crate-shelf-title">Your playlists</h2>
-        </div>
-        <p id="crate-playlists-status" class="crate-status"></p>
-        <div id="crate-playlists-grid" class="crate-shelf-scroll"></div>
-      </section>
+      <div id="crate-grid" class="crate-grid"></div>
     </div>
 
     <!-- Bag detail: opening a record bag or playlist lands here first
@@ -392,24 +355,32 @@
         <span id="bag-detail-count" class="deadwax bag-detail-count"></span>
       </div>
       <button id="bag-detail-play" class="btn-primary bag-detail-play" type="button">Play this bag</button>
-      <!-- Delete: shown only for a custom bag (js/bagbuilder.js) -- the
+      <!-- Edit/Delete: shown only for a custom bag (js/bagbuilder.js) -- the
            seed/mood/decade bags ship as static JSON and Spotify playlists
-           live on Spotify itself, so neither is this app's to delete. -->
-      <button id="bag-detail-delete" class="link-btn bag-detail-delete" type="button" hidden>Delete this record bag</button>
+           live on Spotify itself, so neither is this app's to change. -->
+      <div id="bag-detail-owner-actions" class="bag-detail-owner-actions" hidden>
+        <button id="bag-detail-edit" class="link-btn" type="button">Add or remove albums</button>
+        <button id="bag-detail-delete" class="link-btn bag-detail-delete" type="button">Delete this record bag</button>
+      </div>
       <p id="bag-detail-status" class="crate-status"></p>
       <div id="bag-detail-grid" class="bag-detail-grid"></div>
     </section>
 
-    <!-- Bag builder: creating a new custom record bag by hand -- name it,
-         then search Spotify by album or artist name and tap covers to add
-         them (js/bagbuilder.js). A second in-place view over cratesBody,
-         the same "replace, don't navigate away" pattern bag-detail-view
-         above already uses; saving returns to the shelf overview with the
-         new bag already on "Bags you've made". -->
-    <section id="bagbuilder-view" class="bag-detail-view" hidden aria-label="Create a record bag">
+    <!-- Bag builder: creating a new custom record bag, or editing an
+         existing one's albums, by hand (js/bagbuilder.js). A second
+         in-place view over cratesBody, the same "replace, don't navigate
+         away" pattern bag-detail-view above already uses; saving returns
+         to the shelf overview with the bag's card already up to date.
+         Wider than a single narrow column would allow (see .bagbuilder-view
+         in styles.css): the name/blurb fields sit side by side from tablet
+         width up, and "In this bag"/"Add albums" are two distinct grids
+         rather than one, so what's already picked stays visible (and
+         removable) across as many further searches as it takes, instead of
+         only a running count. -->
+    <section id="bagbuilder-view" class="bag-detail-view bagbuilder-view" hidden aria-label="Create a record bag">
       <button id="bagbuilder-back" class="link-btn" type="button">Back to record bags</button>
       <div class="bag-detail-head">
-        <h2 class="bag-detail-title">Create a record bag</h2>
+        <h2 id="bagbuilder-title" class="bag-detail-title">Create a record bag</h2>
       </div>
 
       <div class="bagbuilder-fields">
@@ -417,17 +388,25 @@
         <input id="bagbuilder-blurb" class="text-input" type="text" placeholder="A short description (optional)" aria-label="Record bag description" maxlength="120" autocomplete="off">
       </div>
 
-      <form id="bagbuilder-search-form" class="search-form" aria-label="Search for an album or artist">
-        <div class="search-input-row">
-          <input id="bagbuilder-search-input" type="search" class="search-input" placeholder="Search by album or artist" aria-label="Search term" autocomplete="off">
-          <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
-            <svg class="icon"><use href="#icon-search"/></svg>
-          </button>
-        </div>
-      </form>
+      <div class="bagbuilder-section">
+        <h3 class="bagbuilder-section-title">In this bag</h3>
+        <p id="bagbuilder-selected-empty" class="crate-status">Nothing added yet. Search below to find albums.</p>
+        <div id="bagbuilder-selected-grid" class="bag-detail-grid" hidden></div>
+      </div>
 
-      <p id="bagbuilder-search-status" class="crate-status" aria-live="polite"></p>
-      <div id="bagbuilder-results-grid" class="bag-detail-grid"></div>
+      <div class="bagbuilder-section bagbuilder-section-grow">
+        <h3 class="bagbuilder-section-title">Add albums</h3>
+        <form id="bagbuilder-search-form" class="search-form" aria-label="Search for an album or artist">
+          <div class="search-input-row">
+            <input id="bagbuilder-search-input" type="search" class="search-input" placeholder="Search by album or artist" aria-label="Search term" autocomplete="off">
+            <button type="submit" class="icon-btn search-submit-btn" aria-label="Search" title="Search">
+              <svg class="icon"><use href="#icon-search"/></svg>
+            </button>
+          </div>
+        </form>
+        <p id="bagbuilder-search-status" class="crate-status" aria-live="polite"></p>
+        <div id="bagbuilder-results-grid" class="bag-detail-grid"></div>
+      </div>
 
       <div class="bagbuilder-footer">
         <span id="bagbuilder-selected-count" class="deadwax bag-detail-count">0 albums selected</span>
@@ -499,6 +478,26 @@
       <div id="sessions-album-list" class="flip-list"></div>
     </section>
   </section>
+
+  <!-- Mini now playing: a persistent strip, visible on every screen except
+       Now Playing itself (which already shows the big transport and hero
+       cover), so browsing record bags or past sessions doesn't lose track
+       of what's actually playing. A plain flex child of #app, sibling to
+       every .screen -- not position: fixed, unlike the transport bar's own
+       mobile layout (js/transport.bundle.css) -- so the currently visible
+       screen simply shrinks to make room for it (flex: 1 1 auto; min-height:
+       0 on .screen already does this for free) rather than needing a
+       margin-matches-a-fixed-height-magic-number trick. Tapping it reuses
+       handleResurfaceNowPlaying() -- the exact same "bring the hero cover
+       back" behaviour the transport's own small album art already triggers,
+       not new interaction code. -->
+  <button id="mini-now-playing" class="mini-now-playing" type="button" hidden aria-label="Back to Now playing">
+    <img id="mini-now-playing-art" class="mini-now-playing-art" alt="">
+    <div class="mini-now-playing-text">
+      <div id="mini-now-playing-track" class="mini-now-playing-track"></div>
+      <div id="mini-now-playing-artist" class="mini-now-playing-artist"></div>
+    </div>
+  </button>
 
   <!-- Device picker modal (Spotify Connect fallback) -->
   <div id="modal-device" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-device-title">

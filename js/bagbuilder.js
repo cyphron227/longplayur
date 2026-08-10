@@ -139,3 +139,30 @@ export function createCustomBag({ name, blurb, albums }) {
 export function deleteCustomBag(id) {
   writeCustomBags(readCustomBags().filter((bag) => bag.id !== id));
 }
+
+/**
+ * Updates an existing custom bag's name, blurb and album list in place --
+ * the "Add or remove albums" flow (main.js's bag builder in edit mode).
+ * The id and createdAt stay the same: a previously-played album's journal
+ * entry can carry this bag's id as its own `bagId` (see F14 in PRD.md), so
+ * changing it here would silently orphan that history's "which bag did
+ * this come from" link, not just rename a card on a shelf.
+ * @param {string} id existing bag id (unchanged by this call)
+ * @param {{name: string, blurb?: string, albums: Array}} input albums are
+ *   pool-shaped entries, in the order the listener wants them saved --
+ *   entirely replaces the previous album list, not merged with it (the
+ *   caller already started from the existing selection and added/removed
+ *   from there, so this is meant to be the final, complete list).
+ * @returns {{id, name, blurb, pool, createdAt, category: 'custom'}|null}
+ *   null if `id` no longer exists (deleted from elsewhere in the meantime).
+ */
+export function updateCustomBag(id, { name, blurb, albums }) {
+  const bags = readCustomBags();
+  const index = bags.findIndex((bag) => bag.id === id);
+  if (index === -1) return null;
+  const pool = albums.map((entry, i) => ({ ...entry, rank: i, bagId: id }));
+  const updated = { ...bags[index], name: name.trim(), blurb: (blurb || '').trim(), pool };
+  bags[index] = updated;
+  writeCustomBags(bags);
+  return { ...updated, category: 'custom' };
+}

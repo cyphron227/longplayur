@@ -16,7 +16,7 @@ import { detectEndFromSdkStates, detectEndFromConnectSnapshots } from './ending.
 import * as journal from './journal.js';
 import * as exporter from './exporter.js';
 import { loadBagManifest, resolveBag } from './bags.js';
-import { loadCustomBags, createCustomBag, deleteCustomBag, searchCatalog } from './bagbuilder.js';
+import { loadCustomBags, createCustomBag, updateCustomBag, deleteCustomBag, searchCatalog } from './bagbuilder.js';
 import { loadMyPlaylists, resolvePlaylist } from './playlists.js';
 import { getNewArrivals } from './newarrivals.js';
 import { getRecordsNearby } from './nearby.js';
@@ -56,11 +56,18 @@ const screens = {
 // has no tab of its own and simply leaves the previous tab's state as-is.
 const tabsByScreen = { app: 'tab-wall', crates: 'tab-crates', pastSessions: 'tab-past-sessions', setup: 'tab-setup' };
 
+// Tracked so updateMiniNowPlaying() (defined much further down, alongside
+// the transport wiring it shares latestViewModel with) knows which screen
+// is current without needing its own separate call at every navigation
+// site -- showScreen() is already the one place that changes.
+let currentScreenName = null;
+
 function showScreen(name) {
   for (const [key, node] of Object.entries(screens)) {
     if (!node) continue;
     node.hidden = key !== name;
   }
+  currentScreenName = name;
   if (name === 'setup') syncSetupPanels();
   for (const [key, tabId] of Object.entries(tabsByScreen)) {
     const tabBtn = document.getElementById(tabId);
@@ -68,6 +75,7 @@ function showScreen(name) {
     if (key === name) tabBtn.setAttribute('aria-current', 'page');
     else tabBtn.removeAttribute('aria-current');
   }
+  updateMiniNowPlaying();
 }
 
 const redirectUriEl = document.getElementById('redirect-uri');
@@ -198,26 +206,15 @@ const wallContainer = document.getElementById('wall-container');
 const wallPrompt = document.getElementById('wall-prompt');
 const cratesBtn = document.getElementById('crates-btn');
 const cratesBtnLabel = document.getElementById('crates-btn-label');
-const cratesYourBagBtn = document.getElementById('crates-your-bag-btn');
-// Shelves (INCREMENT-03 Phase 2): record bags are grouped by their own
-// `category` field into three shelf rows rather than one flat grid.
-// Bag builder (custom record bags, js/bagbuilder.js): a "Bags you've made"
-// shelf sits alongside the seed/mood/decade ones, reusing BAG_SHELVES below
-// (grid()/count()/section()) the same way; its own count element is
-// deliberately absent -- see BAG_SHELVES.custom.
-const crateBagsCustomGrid = document.getElementById('crate-bags-custom-grid');
+// One tab line, not a stack of shelves (redesigned): "yours" folds Your
+// Record Bag (always the first card, see buildYourRecordBagCard()), New
+// arrivals, custom bags and the seed bags into one grid; "mood"/"decade"
+// filter the same grid to just that category; "playlists" is lazy-loaded
+// only when first opened (see loadCratesPlaylistsIfNeeded()). CATEGORY_TAB
+// (below) maps a bag's own `category` field to one of these.
+const cratesTabsEl = document.getElementById('crates-tabs');
 const crateCreateBagBtn = document.getElementById('crate-create-bag-btn');
-const crateBagsSeedGrid = document.getElementById('crate-bags-seed-grid');
-const crateBagsSeedCountEl = document.getElementById('crate-bags-seed-count');
-const crateBagsMoodSection = document.getElementById('crate-bags-mood-section');
-const crateBagsMoodGrid = document.getElementById('crate-bags-mood-grid');
-const crateBagsMoodCountEl = document.getElementById('crate-bags-mood-count');
-const crateBagsDecadeSection = document.getElementById('crate-bags-decade-section');
-const crateBagsDecadeGrid = document.getElementById('crate-bags-decade-grid');
-const crateBagsDecadeCountEl = document.getElementById('crate-bags-decade-count');
-const crateNewArrivalsSection = document.getElementById('crate-newarrivals-section');
-const crateNewArrivalsGrid = document.getElementById('crate-newarrivals-grid');
-const cratePlaylistsGrid = document.getElementById('crate-playlists-grid');
+const crateGrid = document.getElementById('crate-grid');
 const cratePlaylistsStatus = document.getElementById('crate-playlists-status');
 const cratesBody = document.querySelector('.crates-body');
 // Bag detail (a completion view, opened before a bag/playlist commits to
@@ -230,19 +227,25 @@ const bagDetailTitle = document.getElementById('bag-detail-title');
 const bagDetailBlurb = document.getElementById('bag-detail-blurb');
 const bagDetailCount = document.getElementById('bag-detail-count');
 const bagDetailPlayBtn = document.getElementById('bag-detail-play');
+const bagDetailOwnerActions = document.getElementById('bag-detail-owner-actions');
+const bagDetailEditBtn = document.getElementById('bag-detail-edit');
 const bagDetailDeleteBtn = document.getElementById('bag-detail-delete');
 const bagDetailStatus = document.getElementById('bag-detail-status');
 const bagDetailGrid = document.getElementById('bag-detail-grid');
 
-// Bag builder: creating a new custom record bag (js/bagbuilder.js) -- name
-// it, then search Spotify by album or artist name and tap covers to add
-// them. A second in-place view over cratesBody, the same pattern
-// bagDetailView already uses (hide the shelf overview, show this instead;
-// "Back" reverses it), rather than a whole new screen/tab.
+// Bag builder: creating a new custom record bag, or editing an existing
+// one's albums (js/bagbuilder.js) -- name it, then search Spotify by album
+// or artist name and tap covers to add or remove them. A second in-place
+// view over cratesBody, the same pattern bagDetailView already uses (hide
+// the shelf overview, show this instead; "Back" reverses it), rather than
+// a whole new screen/tab.
 const bagBuilderView = document.getElementById('bagbuilder-view');
 const bagBuilderBack = document.getElementById('bagbuilder-back');
+const bagBuilderTitleEl = document.getElementById('bagbuilder-title');
 const bagBuilderNameInput = document.getElementById('bagbuilder-name');
 const bagBuilderBlurbInput = document.getElementById('bagbuilder-blurb');
+const bagBuilderSelectedGrid = document.getElementById('bagbuilder-selected-grid');
+const bagBuilderSelectedEmpty = document.getElementById('bagbuilder-selected-empty');
 const bagBuilderSearchForm = document.getElementById('bagbuilder-search-form');
 const bagBuilderSearchInput = document.getElementById('bagbuilder-search-input');
 const bagBuilderSearchStatus = document.getElementById('bagbuilder-search-status');
@@ -253,6 +256,13 @@ const bagBuilderSaveBtn = document.getElementById('bagbuilder-save');
 const nearbyShelf = document.getElementById('nearby-shelf');
 const playerBarEl = document.getElementById('player-bar');
 const wakeConfirmation = document.getElementById('wake-confirmation');
+// Mini now playing (index.html): a persistent strip shown on every screen
+// except Now Playing itself, so browsing record bags or past sessions
+// doesn't lose track of what's actually playing -- see updateMiniNowPlaying().
+const miniNowPlayingBtn = document.getElementById('mini-now-playing');
+const miniNowPlayingArt = document.getElementById('mini-now-playing-art');
+const miniNowPlayingTrack = document.getElementById('mini-now-playing-track');
+const miniNowPlayingArtist = document.getElementById('mini-now-playing-artist');
 
 const modalDevice = document.getElementById('modal-device');
 const modalDeviceCopy = document.getElementById('modal-device-copy');
@@ -457,17 +467,23 @@ function updateCrateCardArt(card, images) {
 }
 
 // A bag's own `category` (bags.js's loadBagManifest(), falls back to
-// 'seed' for anything missing/unrecognised) picks which shelf it renders
-// into. Grid element and its shelf's own <section> (so an empty shelf --
-// not expected in practice with 4 mood + 4 decade bags shipped, but
-// possible if a bag JSON fails to load) can be hidden, the same
-// no-empty-state convention used elsewhere in this app.
-const BAG_SHELVES = {
-  custom: { grid: () => crateBagsCustomGrid, count: () => null, section: () => null },
-  seed: { grid: () => crateBagsSeedGrid, count: () => crateBagsSeedCountEl, section: () => null },
-  mood: { grid: () => crateBagsMoodGrid, count: () => crateBagsMoodCountEl, section: () => crateBagsMoodSection },
-  decade: { grid: () => crateBagsDecadeGrid, count: () => crateBagsDecadeCountEl, section: () => crateBagsDecadeSection },
-};
+// 'seed' for anything missing/unrecognised) maps to one of the tabs on the
+// Crates screen's own tab line -- seed and custom (js/bagbuilder.js) bags
+// both land on "yours" alongside Your Record Bag and New arrivals, since
+// all four are "what you'd reach for first", not a mood or a decade.
+const CATEGORY_TAB = { custom: 'yours', seed: 'yours', mood: 'mood', decade: 'decade' };
+function tabForBag(bag) {
+  return CATEGORY_TAB[bag.category] || 'yours';
+}
+
+const LS_CRATES_TAB = 'lp_crates_tab';
+const CRATES_TABS = ['yours', 'mood', 'decade', 'playlists'];
+const storedCratesTab = localStorage.getItem(LS_CRATES_TAB);
+let activeCratesTab = CRATES_TABS.includes(storedCratesTab) ? storedCratesTab : 'yours';
+// Distinguishes "still loading" from "loading broke" once
+// playlistManifestCache is back to null after a failed attempt -- the two
+// used to be indistinguishable from renderCratesScreen()'s own point of view.
+let playlistLoadFailed = false;
 
 /** A bag's own playable pool: seed/mood/decade bags resolve their
  * {title, artist} pairs against Spotify lazily (bags.js's resolveBag(),
@@ -478,16 +494,74 @@ function bagPoolFor(bag) {
   return bag.category === 'custom' ? Promise.resolve(bag.pool) : resolveBag(bag);
 }
 
-function renderBagCards() {
-  crateBagsCustomGrid.innerHTML = '';
-  crateBagsSeedGrid.innerHTML = '';
-  crateBagsMoodGrid.innerHTML = '';
-  crateBagsDecadeGrid.innerHTML = '';
-  const cards = new Map();
-  const counts = { custom: 0, seed: 0, mood: 0, decade: 0 };
+/** Your Record Bag is no longer its own button above the shelves -- it's
+ * the first card on the "yours" tab, previewed the same 3x3-covers way a
+ * bag card is, just from whatever pool is currently mounted as the user's
+ * own rather than a resolved bag pool (it isn't one). */
+function buildYourRecordBagCard() {
+  const images = (userWallPool || []).map((entry) => entry.image).filter(Boolean).slice(0, BAG_PREVIEW_COUNT);
+  return buildCrateCard({
+    label: 'Your Record Bag',
+    images,
+    pressed: !activeBagId && !activePlaylistId && !activeSearchQuery && !activeNewArrivals,
+    onClick: () => selectBag(null),
+  });
+}
 
-  for (const bag of bagManifestCache || []) {
-    const category = BAG_SHELVES[bag.category] ? bag.category : 'seed';
+function buildNewArrivalsCard() {
+  const images = newArrivalsPool.map((entry) => entry.image).filter(Boolean).slice(0, BAG_PREVIEW_COUNT);
+  return buildCrateCard({
+    label: 'New arrivals',
+    sublabel: `${newArrivalsPool.length} latest releases`,
+    title: 'The latest release from each artist you follow',
+    images,
+    pressed: activeNewArrivals,
+    onClick: () => selectNewArrivals(),
+  });
+}
+
+function buildPlaylistCard(playlist) {
+  return buildCrateCard({
+    label: playlist.name,
+    sublabel: `${playlist.trackCount} tracks`,
+    image: playlist.image,
+    pressed: !activeSearchQuery && !activeBagId && activePlaylistId === playlist.id,
+    onClick: () => openBagDetail({ kind: 'playlist', id: playlist.id, name: playlist.name, blurb: null }),
+  });
+}
+
+function playlistsStatusText() {
+  if (playlistManifestCache === null) {
+    return playlistLoadFailed
+      ? 'Could not load your playlists. Check your connection, or check the browser console for a specific error, and try again.'
+      : 'Loading your playlists.';
+  }
+  return playlistManifestCache.length === 0 ? 'No playlists found.' : '';
+}
+
+/** Rebuilds #crate-grid for whichever tab is active. Returns a Map of
+ * bagId -> card element for any bag card shown that has no cached preview
+ * yet, so the caller can kick off warmBagPreviews() for exactly those. */
+function renderActiveCratesTab() {
+  crateGrid.innerHTML = '';
+  const cardsNeedingPreview = new Map();
+
+  if (activeCratesTab === 'playlists') {
+    show(cratePlaylistsStatus);
+    cratePlaylistsStatus.textContent = playlistsStatusText();
+    for (const playlist of playlistManifestCache || []) {
+      crateGrid.appendChild(buildPlaylistCard(playlist));
+    }
+    return cardsNeedingPreview;
+  }
+  hide(cratePlaylistsStatus);
+
+  if (activeCratesTab === 'yours') {
+    crateGrid.appendChild(buildYourRecordBagCard());
+    if (newArrivalsPool && newArrivalsPool.length > 0) crateGrid.appendChild(buildNewArrivalsCard());
+  }
+
+  for (const bag of (bagManifestCache || []).filter((b) => tabForBag(b) === activeCratesTab)) {
     const cached = bagPreviewCache.get(bag.id);
     const card = buildCrateCard({
       label: bag.name,
@@ -496,34 +570,26 @@ function renderBagCards() {
       pressed: !activeSearchQuery && !activePlaylistId && !activeNewArrivals && activeBagId === bag.id,
       onClick: () => openBagDetail({ kind: 'bag', id: bag.id, name: bag.name, blurb: bag.blurb }),
     });
-    BAG_SHELVES[category].grid().appendChild(card);
-    counts[category] += 1;
-    if (!cached) cards.set(bag.id, card);
+    crateGrid.appendChild(card);
+    if (!cached) cardsNeedingPreview.set(bag.id, card);
   }
-
-  for (const [category, { count, section }] of Object.entries(BAG_SHELVES)) {
-    const n = counts[category];
-    const countEl = count();
-    if (countEl) countEl.textContent = `${n} CRATE${n === 1 ? '' : 'S'}`;
-    const sectionEl = section();
-    if (sectionEl) sectionEl.hidden = n === 0;
-  }
-
-  return cards;
+  return cardsNeedingPreview;
 }
 
 /** Resolves each bag not already previewed, one at a time rather than all
  * at once -- each bag's own resolution is already throttled internally
- * (bags.js's mapWithConcurrency), but firing all six bags' resolutions in
+ * (bags.js's mapWithConcurrency), but firing every bag's resolution in
  * parallel on top of that would still stack into a much larger concurrent
  * burst than a single bag search ever needed, the same class of mistake
  * that caused a live Spotify 429 earlier. Bags already selected once (or
  * previewed in an earlier visit this tab session) resolve instantly from
- * cache, so this only actually waits on genuinely new bags. */
-async function loadBagPreviews(bagsToLoad, cardsById) {
+ * cache, so this only actually waits on genuinely new bags. A tab switch
+ * mid-resolution just leaves a later bag's `card` pointing at a node no
+ * longer in the visible grid (harmless, only wasted work), not something
+ * that needs cancelling. */
+async function warmBagPreviews(bagsToLoad, cardsById) {
   for (const bag of bagsToLoad) {
     const card = cardsById.get(bag.id);
-    if (!card) continue;
     let pool;
     try {
       pool = await bagPoolFor(bag);
@@ -532,30 +598,71 @@ async function loadBagPreviews(bagsToLoad, cardsById) {
     }
     const images = pool.map((entry) => entry.image).filter(Boolean).slice(0, BAG_PREVIEW_COUNT);
     bagPreviewCache.set(bag.id, images);
-    if (images.length > 0) updateCrateCardArt(card, images);
+    if (card && images.length > 0) updateCrateCardArt(card, images);
   }
 }
 
-function renderPlaylistCards() {
-  cratePlaylistsGrid.innerHTML = '';
-  for (const playlist of playlistManifestCache || []) {
-    cratePlaylistsGrid.appendChild(buildCrateCard({
-      label: playlist.name,
-      sublabel: `${playlist.trackCount} tracks`,
-      image: playlist.image,
-      pressed: !activeSearchQuery && !activeBagId && activePlaylistId === playlist.id,
-      onClick: () => openBagDetail({ kind: 'playlist', id: playlist.id, name: playlist.name, blurb: null }),
-    }));
+/** renderActiveCratesTab() plus kicking off previews for whatever it found
+ * uncached -- the two travel together at every call site except the very
+ * first render (renderCratesScreen()), which needs bagManifestCache loaded
+ * first. */
+function refreshActiveCratesTab() {
+  const cardsNeedingPreview = renderActiveCratesTab();
+  if (cardsNeedingPreview.size > 0) {
+    const bagsToLoad = (bagManifestCache || []).filter((bag) => cardsNeedingPreview.has(bag.id));
+    warmBagPreviews(bagsToLoad, cardsNeedingPreview); // not awaited: the screen shouldn't block on a cold cache resolving several bags.
   }
 }
 
-/** Populates the Crates screen. Record bags are cheap (small local JSON)
- * and loaded once and cached; the user's own Spotify playlists are a live
- * API call, so they're only fetched the first time this screen is opened,
- * not eagerly at boot. */
+/** Fetches the listener's own Spotify playlists the first time the
+ * Playlists tab is actually opened, not eagerly on every Crates screen
+ * visit the way it used to -- a live API call, unlike the record bags
+ * above, so a visit that never looks at that tab shouldn't spend it. */
+async function loadCratesPlaylistsIfNeeded() {
+  if (playlistManifestCache !== null) return;
+  if (activeCratesTab === 'playlists') renderActiveCratesTab(); // shows "Loading your playlists." immediately.
+  const { playlists, failed } = await loadMyPlaylists();
+  if (failed) {
+    // Not cached (loadMyPlaylists() itself resets on failure too): the
+    // next visit to this tab retries rather than repeating a stale failure
+    // until the page is reloaded, e.g. right after reconnecting.
+    playlistLoadFailed = true;
+    if (activeCratesTab === 'playlists') renderActiveCratesTab();
+    return;
+  }
+  playlistLoadFailed = false;
+  playlistManifestCache = playlists;
+  if (activeCratesTab === 'playlists') renderActiveCratesTab();
+}
+
+function setCratesTab(tab) {
+  if (!CRATES_TABS.includes(tab)) return;
+  activeCratesTab = tab;
+  localStorage.setItem(LS_CRATES_TAB, tab);
+  cratesTabsEl?.querySelectorAll('.crates-tab').forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.tab === tab));
+  });
+  refreshActiveCratesTab();
+  if (tab === 'playlists') loadCratesPlaylistsIfNeeded();
+}
+// Restored immediately (harmless before the Crates screen is ever opened):
+// a listener who left this screen on "By decade" sees "By decade" again
+// next visit, the same persisted-preference pattern Flip's own mode/sort
+// chips already use.
+cratesTabsEl?.querySelectorAll('.crates-tab').forEach((btn) => {
+  btn.setAttribute('aria-pressed', String(btn.dataset.tab === activeCratesTab));
+});
+cratesTabsEl?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tab]');
+  if (btn) setCratesTab(btn.dataset.tab);
+});
+
+/** Populates the Crates screen. Record bags (seed plus the listener's own
+ * custom ones) are cheap and loaded once and cached; the user's own
+ * Spotify playlists are a live API call, fetched lazily the first time the
+ * Playlists tab is actually opened (loadCratesPlaylistsIfNeeded()), not
+ * eagerly here. */
 async function renderCratesScreen() {
-  cratesYourBagBtn.setAttribute('aria-pressed', String(!activeBagId && !activePlaylistId && !activeSearchQuery && !activeNewArrivals));
-
   if (!bagManifestCache) {
     let seedBags;
     try {
@@ -565,68 +672,30 @@ async function renderCratesScreen() {
     }
     // Custom bags (js/bagbuilder.js) load first: they're already fully
     // resolved (no network round trip, see bagPoolFor() above), and this is
-    // the listener's own work, so it leads the shelf order. Kept in sync by
-    // hand (not re-read from storage) once this screen has loaded it once --
-    // saveBagBuilder() and the bag-detail-delete handler below both splice
-    // bagManifestCache directly, the same "load once, then mutate in place"
-    // pattern this cache already used for seed bags.
+    // the listener's own work, so it leads the "yours" tab's own order.
+    // Kept in sync by hand (not re-read from storage) once this screen has
+    // loaded it once -- saveBagBuilder() and the bag-detail-delete handler
+    // below both splice bagManifestCache directly, the same "load once,
+    // then mutate in place" pattern this cache already used for seed bags.
     bagManifestCache = [...loadCustomBags(), ...seedBags];
   }
-  const cardsNeedingPreview = renderBagCards();
-  if (cardsNeedingPreview.size > 0) {
-    const bagsToLoad = (bagManifestCache || []).filter((bag) => cardsNeedingPreview.has(bag.id));
-    loadBagPreviews(bagsToLoad, cardsNeedingPreview); // not awaited: the screen shouldn't block on a cold cache resolving several bags.
-  }
 
+  refreshActiveCratesTab();
   loadNewArrivalsCard(); // not awaited: the screen shouldn't block on a followed-artists fetch (may itself be stale-refreshing).
-
-  if (!playlistManifestCache) {
-    cratePlaylistsStatus.textContent = 'Loading your playlists.';
-    const { playlists, failed } = await loadMyPlaylists();
-    if (failed) {
-      // Not cached (loadMyPlaylists() itself resets on failure too): the
-      // next visit to this screen retries rather than repeating a stale
-      // failure until the page is reloaded, e.g. right after reconnecting.
-      cratePlaylistsStatus.textContent = 'Could not load your playlists. Check your connection, or check the browser console for a specific error, and try again.';
-      renderPlaylistCards();
-      return;
-    }
-    playlistManifestCache = playlists;
-  }
-  cratePlaylistsStatus.textContent = playlistManifestCache.length === 0 ? 'No playlists found.' : '';
-  renderPlaylistCards();
+  if (activeCratesTab === 'playlists') loadCratesPlaylistsIfNeeded();
 }
 
-/** Resolves (or retrieves the cached) New arrivals pool and shows/hides its
- * card accordingly -- hidden entirely, not shown empty or broken, if
- * GET /me/following failed or the user follows nobody with a recent
- * release (Records nearby's own convention, PRD edge case 10). Refreshes
- * itself on every visit to this screen if the cache has gone stale
- * (newarrivals.js's own 6h TTL), so this can simply be called unconditionally. */
+/** Resolves (or retrieves the cached) New arrivals pool -- absent entirely
+ * (not shown empty or broken) if GET /me/following failed or the user
+ * follows nobody with a recent release (Records nearby's own convention,
+ * PRD edge case 10), simply by never becoming a card, rather than the
+ * dedicated section this used to need to show/hide. Refreshes itself on
+ * every visit to this screen if the cache has gone stale (newarrivals.js's
+ * own 6h TTL), so this can simply be called unconditionally. */
 async function loadNewArrivalsCard() {
   const { pool } = await getNewArrivals();
-  if (pool.length === 0) {
-    newArrivalsPool = null;
-    if (crateNewArrivalsSection) crateNewArrivalsSection.hidden = true;
-    return;
-  }
-  newArrivalsPool = pool;
-  if (crateNewArrivalsSection) crateNewArrivalsSection.hidden = false;
-  renderNewArrivalsCard();
-}
-
-function renderNewArrivalsCard() {
-  if (!crateNewArrivalsGrid || !newArrivalsPool) return;
-  crateNewArrivalsGrid.innerHTML = '';
-  const images = newArrivalsPool.map((entry) => entry.image).filter(Boolean).slice(0, BAG_PREVIEW_COUNT);
-  crateNewArrivalsGrid.appendChild(buildCrateCard({
-    label: 'New arrivals',
-    sublabel: `${newArrivalsPool.length} latest releases`,
-    title: 'The latest release from each artist you follow',
-    images,
-    pressed: activeNewArrivals,
-    onClick: () => selectNewArrivals(),
-  }));
+  newArrivalsPool = pool.length > 0 ? pool : null;
+  if (activeCratesTab === 'yours') renderActiveCratesTab();
 }
 
 async function selectNewArrivals() {
@@ -751,11 +820,11 @@ async function openBagDetail(source) {
   hide(cratesBody);
   show(bagDetailView);
 
-  // Only a custom bag (js/bagbuilder.js) can be deleted here -- the six
+  // Add/Delete: shown only for a custom bag (js/bagbuilder.js) -- the six
   // seed bags and mood/decade sets ship as static JSON, and playlists live
-  // on Spotify itself, so neither has anything for this app to delete.
+  // on Spotify itself, so neither has anything for this app to change.
   const bagRecord = source.kind === 'bag' ? (bagManifestCache || []).find((b) => b.id === source.id) : null;
-  if (bagDetailDeleteBtn) bagDetailDeleteBtn.hidden = bagRecord?.category !== 'custom';
+  if (bagDetailOwnerActions) bagDetailOwnerActions.hidden = bagRecord?.category !== 'custom';
 
   bagDetailTitle.textContent = source.name;
   if (source.blurb) {
@@ -794,6 +863,12 @@ bagDetailPlayBtn?.addEventListener('click', () => {
   else selectPlaylist(bagDetailSource.id);
 });
 
+bagDetailEditBtn?.addEventListener('click', () => {
+  if (!bagDetailSource || bagDetailSource.kind !== 'bag') return;
+  const bag = (bagManifestCache || []).find((b) => b.id === bagDetailSource.id);
+  if (bag) openBagBuilder(bag);
+});
+
 bagDetailDeleteBtn?.addEventListener('click', () => {
   if (!bagDetailSource || bagDetailSource.kind !== 'bag') return;
   const bag = (bagManifestCache || []).find((b) => b.id === bagDetailSource.id);
@@ -815,7 +890,7 @@ bagDetailDeleteBtn?.addEventListener('click', () => {
 
   closeBagDetail();
   cratesStatus.textContent = `${bag.name} deleted.`;
-  renderBagCards();
+  renderActiveCratesTab();
 });
 
 /** Tapping one cover in the detail grid commits the whole bag/playlist to
@@ -841,24 +916,28 @@ function openCrates() {
 }
 cratesBtn?.addEventListener('click', openCrates);
 tabCrates.addEventListener('click', openCrates);
-cratesYourBagBtn?.addEventListener('click', () => selectBag(null));
 
 // ---------------------------------------------------------------------
-// Bag builder (js/bagbuilder.js): creating a custom record bag by hand.
-// Name it, search Spotify by album or artist name (one free-text query
-// matches both, see bagbuilder.js's own header comment), and tap covers to
-// add or remove them from the bag, across as many searches as needed --
-// selections persist in bagBuilderSelected across a fresh search rather
-// than being cleared by it. Saving stores the picked albums' pool entries
-// directly (already real, resolved Spotify albums, nothing left to
-// resolve) and drops the new bag straight onto the "Bags you've made"
-// shelf, the same shape as a seed bag from bagManifestCache's point of
-// view (see bagPoolFor() above).
+// Bag builder (js/bagbuilder.js): creating a custom record bag by hand, or
+// editing an existing one's albums. Name it, search Spotify by album or
+// artist name (one free-text query matches both, see bagbuilder.js's own
+// header comment), and tap covers to add or remove them from the bag,
+// across as many searches as needed -- what's already picked stays visible
+// (and removable) in its own "In this bag" grid throughout, not just a
+// running count, so a fresh search never loses track of earlier choices.
+// Saving stores the picked albums' pool entries directly (already real,
+// resolved Spotify albums, nothing left to resolve) and lands on the
+// "yours" tab with the bag's card already up to date.
 // ---------------------------------------------------------------------
 
 let bagBuilderSelected = new Map(); // id -> pool entry, insertion order preserved (a Map, not a Set of ids, since the entry itself is needed again at save time).
+let bagBuilderEditingId = null; // null while creating a new bag; an existing bag's id while editing one's albums.
+const bagBuilderResultCovers = new Map(); // id -> the "Add albums" cover currently showing it, so toggling from "In this bag" can keep that one in sync too.
 
-function updateBagBuilderCoverState(cover, entry) {
+/** "Add albums" cover state only -- "In this bag" covers (see
+ * buildBagBuilderSelectedCover()) are always shown selected by definition,
+ * so they don't need this. */
+function updateBagBuilderResultCoverState(cover, entry) {
   const selected = bagBuilderSelected.has(entry.id);
   cover.classList.toggle('is-selected', selected);
   cover.setAttribute('aria-pressed', String(selected));
@@ -873,20 +952,52 @@ function updateBagBuilderSaveState() {
   bagBuilderSaveBtn.disabled = n === 0 || !bagBuilderNameInput.value.trim();
 }
 
-function toggleBagBuilderSelection(entry, cover) {
+function buildBagBuilderSelectedCover(entry) {
+  const cover = document.createElement('button');
+  cover.type = 'button';
+  cover.className = 'bag-detail-cover is-selected';
+  const img = document.createElement('img');
+  img.alt = '';
+  if (entry.image) img.src = entry.image;
+  cover.appendChild(img);
+  const label = `${entry.name} by ${entry.artist}. Remove from this bag.`;
+  cover.setAttribute('aria-label', label);
+  cover.title = label;
+  cover.addEventListener('click', () => toggleBagBuilderSelection(entry));
+  return cover;
+}
+
+function renderBagBuilderSelectedGrid() {
+  bagBuilderSelectedGrid.innerHTML = '';
+  const entries = Array.from(bagBuilderSelected.values());
+  bagBuilderSelectedEmpty.hidden = entries.length > 0;
+  bagBuilderSelectedGrid.hidden = entries.length === 0;
+  for (const entry of entries) bagBuilderSelectedGrid.appendChild(buildBagBuilderSelectedCover(entry));
+}
+
+/** Adds or removes one album from the bag being built, from either grid --
+ * the "Add albums" search results (a toggle) or "In this bag" (always a
+ * removal, see buildBagBuilderSelectedCover()). Keeps both in sync: "In
+ * this bag" is small enough to just rebuild outright; the matching "Add
+ * albums" cover, if that same album still happens to be showing in the
+ * current search results, is updated in place via bagBuilderResultCovers
+ * rather than losing its position in a full rebuild. */
+function toggleBagBuilderSelection(entry) {
   if (bagBuilderSelected.has(entry.id)) bagBuilderSelected.delete(entry.id);
   else bagBuilderSelected.set(entry.id, entry);
-  updateBagBuilderCoverState(cover, entry);
+  const resultCover = bagBuilderResultCovers.get(entry.id);
+  if (resultCover) updateBagBuilderResultCoverState(resultCover, entry);
+  renderBagBuilderSelectedGrid();
   updateBagBuilderSaveState();
 }
 
-/** One result cover: a toggle button (aria-pressed), not a play button --
- * tapping it adds/removes the album from the bag being built, the same
- * "act on tap, no separate confirm step" interaction bag-detail-cover
- * already uses for a different action. Reuses bag-detail-cover's own CSS
- * (art, img, hover) rather than a new component; `.is-selected` shares
- * `.is-played`'s amber-ring treatment (styles.css) since both mean "this
- * one is already accounted for". */
+/** One "Add albums" result cover: a toggle button (aria-pressed), not a
+ * play button -- tapping it adds/removes the album from the bag being
+ * built, the same "act on tap, no separate confirm step" interaction
+ * bag-detail-cover already uses for a different action. Reuses
+ * bag-detail-cover's own CSS (art, img, hover) rather than a new
+ * component; `.is-selected` shares `.is-played`'s amber-ring treatment
+ * (styles.css) since both mean "this one is already accounted for". */
 function buildBagBuilderCover(entry) {
   const cover = document.createElement('button');
   cover.type = 'button';
@@ -897,8 +1008,9 @@ function buildBagBuilderCover(entry) {
   if (entry.image) img.src = entry.image;
   cover.appendChild(img);
 
-  updateBagBuilderCoverState(cover, entry);
-  cover.addEventListener('click', () => toggleBagBuilderSelection(entry, cover));
+  updateBagBuilderResultCoverState(cover, entry);
+  cover.addEventListener('click', () => toggleBagBuilderSelection(entry));
+  bagBuilderResultCovers.set(entry.id, cover);
   return cover;
 }
 
@@ -908,6 +1020,7 @@ async function performBagBuilderSearch(query) {
 
   bagBuilderSearchStatus.textContent = `Searching for "${trimmed}".`;
   bagBuilderResultsGrid.innerHTML = '';
+  bagBuilderResultCovers.clear();
   const { items, failed } = await searchCatalog(trimmed);
   if (items.length === 0) {
     bagBuilderSearchStatus.textContent = failed
@@ -929,23 +1042,41 @@ bagBuilderSearchForm?.addEventListener('submit', (e) => {
 
 bagBuilderNameInput?.addEventListener('input', updateBagBuilderSaveState);
 
-function openBagBuilder() {
-  bagBuilderSelected = new Map();
-  bagBuilderNameInput.value = '';
-  bagBuilderBlurbInput.value = '';
+/**
+ * Opens the bag builder. With no argument, starts a new, empty bag
+ * (crateCreateBagBtn's own handler, below). Passed an existing custom bag
+ * (bagDetailEditBtn's handler), starts pre-populated with its current
+ * name/blurb/albums instead -- editing is the same view and the same save
+ * path (saveBagBuilder() below branches on bagBuilderEditingId), not a
+ * separate flow.
+ */
+function openBagBuilder(editBag = null) {
+  bagBuilderEditingId = editBag ? editBag.id : null;
+  bagBuilderSelected = new Map((editBag ? editBag.pool : []).map((entry) => [entry.id, entry]));
+  bagBuilderNameInput.value = editBag ? editBag.name : '';
+  bagBuilderBlurbInput.value = editBag ? editBag.blurb : '';
   bagBuilderSearchInput.value = '';
   bagBuilderResultsGrid.innerHTML = '';
+  bagBuilderResultCovers.clear();
   bagBuilderSearchStatus.textContent = '';
+  bagBuilderTitleEl.textContent = editBag ? 'Add or remove albums' : 'Create a record bag';
+  bagBuilderSaveBtn.textContent = editBag ? 'Save changes' : 'Save record bag';
+  renderBagBuilderSelectedGrid();
   updateBagBuilderSaveState();
   hide(cratesBody);
+  hide(bagDetailView);
   show(bagBuilderView);
   bagBuilderNameInput.focus();
 }
-crateCreateBagBtn?.addEventListener('click', openBagBuilder);
+crateCreateBagBtn?.addEventListener('click', () => openBagBuilder());
 
+/** Always returns to the shelf overview, whether this was a fresh bag or
+ * an edit opened from bag detail -- simpler and more predictable than
+ * remembering which of the two the listener came from, and either way the
+ * bag's own card (now current) is one tap away again. */
 function closeBagBuilder() {
   const hasWork = bagBuilderSelected.size > 0 || bagBuilderNameInput.value.trim();
-  if (hasWork && !window.confirm('Discard this record bag? Your selections will be lost.')) return;
+  if (hasWork && !window.confirm('Discard this record bag? Your changes will be lost.')) return;
   hide(bagBuilderView);
   show(cratesBody);
 }
@@ -954,16 +1085,32 @@ bagBuilderBack?.addEventListener('click', closeBagBuilder);
 function saveBagBuilder() {
   const name = bagBuilderNameInput.value.trim();
   if (!name || bagBuilderSelected.size === 0) return; // save is disabled in this case; defensive only.
+  const albums = Array.from(bagBuilderSelected.values());
 
-  const bag = createCustomBag({ name, blurb: bagBuilderBlurbInput.value, albums: Array.from(bagBuilderSelected.values()) });
-  bagManifestCache = [bag, ...(bagManifestCache || [])];
+  let bag;
+  if (bagBuilderEditingId) {
+    bag = updateCustomBag(bagBuilderEditingId, { name, blurb: bagBuilderBlurbInput.value, albums });
+    if (!bag) { // deleted from elsewhere while this was open; nothing sensible left to save over.
+      hide(bagBuilderView);
+      show(cratesBody);
+      return;
+    }
+    bagManifestCache = (bagManifestCache || []).map((b) => (b.id === bag.id ? bag : b));
+  } else {
+    bag = createCustomBag({ name, blurb: bagBuilderBlurbInput.value, albums });
+    bagManifestCache = [bag, ...(bagManifestCache || [])];
+  }
   bagPreviewCache.set(bag.id, bag.pool.map((entry) => entry.image).filter(Boolean).slice(0, BAG_PREVIEW_COUNT));
 
   hide(bagBuilderView);
   show(cratesBody);
   cratesStatus.textContent = `${name} saved to your record bags.`;
   announce(`${name} saved to your record bags.`);
-  renderBagCards();
+  // Custom bags always live on "yours" -- switch there so the saved bag's
+  // card is actually visible, rather than leaving the listener on
+  // whichever tab they happened to open the builder from.
+  if (activeCratesTab === 'yours') renderActiveCratesTab();
+  else setCratesTab('yours');
 }
 bagBuilderSaveBtn?.addEventListener('click', saveBagBuilder);
 
@@ -1490,11 +1637,41 @@ function updatePlayerBar(viewModel) {
   show(playerBarEl);
   transportApi.update(viewModel);
   updateMediaSessionMetadata(viewModel);
+  updateMiniNowPlaying();
 
   if (currentAlbumId) updateTonearmProgress(currentAlbumId, viewModel.elapsedMs || 0, viewModel.totalMs || 0);
 
   announce(`Now playing ${viewModel.albumName} by ${viewModel.artistName}`);
 }
+
+// Screens the mini now-playing strip is allowed to show on: everywhere
+// except Now Playing itself (which already has the big transport and hero
+// cover) and the pre-connection/onboarding screens, where it would be
+// premature even if latestViewModel somehow existed from a previous
+// session's leftover state.
+const MINI_NOW_PLAYING_SCREENS = new Set(['crates', 'pastSessions', 'runout']);
+
+/** Shows or hides the mini now-playing strip (index.html, a persistent
+ * flex child of #app) and, when shown, keeps its small art/track/artist in
+ * step with the same viewModel the full transport bar already renders --
+ * called both here (every playback tick) and from showScreen() (every
+ * navigation), since either changing is enough to change what should be
+ * visible. */
+function updateMiniNowPlaying() {
+  if (!miniNowPlayingBtn) return;
+  if (!latestViewModel || !MINI_NOW_PLAYING_SCREENS.has(currentScreenName)) {
+    hide(miniNowPlayingBtn);
+    return;
+  }
+  miniNowPlayingArt.src = latestViewModel.albumArt || '';
+  miniNowPlayingTrack.textContent = latestViewModel.trackName || '';
+  miniNowPlayingArtist.textContent = latestViewModel.artistName || '';
+  show(miniNowPlayingBtn);
+}
+// handleResurfaceNowPlaying() is defined below, alongside the transport's
+// own small album art (which triggers the exact same behaviour) -- a
+// function declaration, so it's already available by the time this fires.
+miniNowPlayingBtn?.addEventListener('click', () => handleResurfaceNowPlaying());
 
 // Registered once, not per update: unlike metadata (which changes every
 // track), these handlers are the same function for the whole session.
